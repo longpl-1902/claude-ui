@@ -311,11 +311,14 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
             a.files.set(path, f)
           }
           if (!r.agentResult && !r.isError && !r.interrupted && info?.name === 'Agent') {
+            // Parallel launches: later result blocks carry no toolUseResult and often no
+            // run_in_background flag, but their text says the agent was launched async.
+            const asyncLaunch = info.background === true || /^\s*Async agent launched/i.test(r.summary)
             agentResults.set(r.toolUseId, {
               owner: src,
               agentId: '',
-              status: info.background ? 'async_launched' : 'completed',
-              ...(r.summary !== '' ? { text: r.summary } : {}),
+              status: asyncLaunch ? 'async_launched' : 'completed',
+              ...(r.summary !== '' && !asyncLaunch ? { text: r.summary } : {}),
               ms
             })
           }

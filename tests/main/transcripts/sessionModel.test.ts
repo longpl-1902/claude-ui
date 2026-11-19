@@ -820,4 +820,25 @@ describe('fix round 1: sub-agent realism (results without toolUseResult)', () =>
     expect(kid.runtime.background).toBe(true)
     expect(kid.runtime.finished).toBeUndefined()
   })
+
+  it('R-06 parallel launches: an "Async agent launched" result without run_in_background is not completed', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.setMeta('par', { agentType: 'general-purpose', description: 'Parent' })
+    m.setMeta('k1', { agentType: 'general-purpose', description: 'Kid one', toolUseId: 'toolu_K1' })
+    m.setMeta('k2', { agentType: 'general-purpose', description: 'Kid two', toolUseId: 'toolu_K2' })
+    const launched = 'Async agent launched successfully. agentId: k2 (internal metadata)'
+    m.ingest('par', recs([
+      ...agentUse('par', 1, 'toolu_K1', { description: 'Kid one' }),
+      ...agentUse('par', 2, 'toolu_K2', { description: 'Kid two' }),
+      subOkResult('toolu_K1', 'Async agent launched successfully. agentId: k1', { ts: at(3), agentId: 'par' }),
+      subOkResult('toolu_K2', launched, { ts: at(3), agentId: 'par' })
+    ]))
+    const snap = m.snapshot(NOW_MS)
+    for (const id of ['k1', 'k2']) {
+      const kid = agentOf(snap, id)
+      expect(kid.runtime.finished).toBeFalsy()
+      expect(kid.runtime.background).toBe(true)
+      expect(kid.messages.some((x: any) => x.direction === 'out' && /Async agent launched/.test(x.text ?? ''))).toBe(false)
+    }
+  })
 })
