@@ -135,7 +135,7 @@ export function createThemeController(host: ThemeHost): ThemeController {
       host.systemPreferences.on?.('accent-color-changed', push)
       host.ipc.handle(THEME_IPC.get, () => state())
       host.ipc.handle(THEME_IPC.setSource, (_e, source) => {
-        if (!isThemeSource(source)) throw new Error('invalid theme source')
+        if (!isThemeSource(source)) return { ok: false, reason: 'invalid-args' }
         return setSource(source)
       })
     }

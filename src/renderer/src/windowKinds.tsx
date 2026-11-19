@@ -37,7 +37,7 @@ export function ChatWindow({ spec }: { spec: Extract<WindowSpec, { kind: 'chat' 
     if (!known) return
     const st = useConsoleStore.getState()
     if (st.team.sessionId !== sessionId) void st.selectSession({ mode: 'session', accountId, sessionId })
-    // Select once per window; later changes of the shared selection are followed, not fought.
+    // Select once per window (selection is per window since T36); later changes in this window are followed, not fought.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [known])
   return (

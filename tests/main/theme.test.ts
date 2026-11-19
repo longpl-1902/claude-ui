@@ -166,10 +166,12 @@ describe('createThemeController', () => {
     expect(t.wins[0]!.webContents.send).toHaveBeenCalledWith(THEME_IPC.changed, expect.objectContaining({ mode: 'light' }))
   })
 
-  it('theme:set-source rejects anything but system/light/dark', () => {
+  it('theme:set-source rejects anything but system/light/dark', async () => {
     const t = makeHost()
     createThemeController(t.host).start()
-    for (const bad of ['blue', 1, null, undefined, {}]) expect(() => t.handlers.get(THEME_IPC.setSource)!({}, bad)).toThrow()
+    for (const bad of ['blue', 1, null, undefined, {}]) {
+      expect(await t.handlers.get(THEME_IPC.setSource)!({}, bad)).toEqual({ ok: false, reason: 'invalid-args' })
+    }
     expect(t.nativeTheme.themeSource).toBe('system')
   })
 

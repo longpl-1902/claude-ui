@@ -143,7 +143,7 @@ export interface DefaultPlacementOpts {
   anchorDisplayId?: number
   /** Drop point (DIP); the window opens on that display, centred on the point when it fits. */
   at?: { x: number; y: number }
-  /** Number of secondary windows already open, for a small cascade when everything shares one display. */
+  /** Number of secondary windows already open, for a small cascade (24 DIP steps, clamped) on whichever display the window lands on. */
   openCount?: number
 }
 
@@ -166,7 +166,7 @@ export function defaultPlacement(o: DefaultPlacementOpts): ResolvedPlacement {
   const target = other && o.anchorDisplayId !== undefined ? other : (displayFor(o.displays, o.anchorDisplayId ?? -1) ?? o.primary)
   const s = fitSize(wantSize, target.workArea, min)
   const c = centered(s, target.workArea)
-  const n = other ? 0 : (o.openCount ?? 0) % 6
-  const r = clampInto({ ...c, x: c.x + n * 32, y: c.y + n * 32 }, target.workArea)
+  const n = (o.openCount ?? 0) % 6
+  const r = clampInto({ ...c, x: c.x + n * 24, y: c.y + n * 24 }, target.workArea)
   return { bounds: r, displayId: target.id, maximized: false, zoom: 1 }
 }

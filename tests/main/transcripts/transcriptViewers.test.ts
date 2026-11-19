@@ -7,6 +7,9 @@ import { jsonl, userPrompt, at } from '../../fixtures/transcripts/builders'
 import { HOME, NOW_MS, PID_LIVE, ROOTS, S1, S4, buildTranscriptTree, utcDay } from '../../fixtures/transcripts/trees'
 import { createMemoryByteFs } from './memoryByteFs'
 
+// Real macrotask yield (the fake timers replace the global one): lets a test interleave with a long ingest.
+const realImmediate = globalThis.setImmediate.bind(globalThis)
+
 // Per-window selection (T36): every viewer has its own selection / auto pick; sessions are shared and refcounted.
 
 const norm = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
@@ -19,7 +22,7 @@ interface FakeWatcher {
   closed: boolean
 }
 
-function setup(opts: { pty?: () => PtyHint | null; execGit?: ExecFn } = {}) {
+function setup(opts: { pty?: () => PtyHint | null; execGit?: ExecFn; create?: typeof createTranscriptService } = {}) {
   const tree = buildTranscriptTree()
   const fs = createMemoryByteFs({ ...tree.files }, { mtimes: tree.mtimes, caseInsensitive: true })
   const watchers: FakeWatcher[] = []
@@ -31,7 +34,7 @@ function setup(opts: { pty?: () => PtyHint | null; execGit?: ExecFn } = {}) {
   const emit = (kind: 'add' | 'change' | 'unlink', p: string): void => {
     for (const w of watchers) if (!w.closed && norm(p).startsWith(norm(w.dir) + '/')) w.cb(kind, p)
   }
-  const svc = createTranscriptService({
+  const svc = (opts.create ?? createTranscriptService)({
     fs,
     host: { home: HOME, platform: 'win32', env: {} },
     roots: async () => ROOTS,
@@ -122,6 +125,32 @@ describe('T36 per-window selection', () => {
     emit('change', tree.paths.s4)
     await flush(1000)
     expect(reads(env) - after).toBe(single)
+  })
+
+  it('a public snapshot read mid-ingest does not swallow the push for the other viewers', async () => {
+    // a fresh copy of the service whose slice clock always reads "8 ms used", so every batch yields to a real macrotask
+    vi.resetModules()
+    let clock = 0
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => (clock += 10))
+    const mod = await import('../../../src/main/transcripts/transcriptService')
+    spy.mockRestore()
+    const env = track(await boot({ create: mod.createTranscriptService }))
+    const { svc, fs, emit, tree } = env
+    await svc.select(selectS4, V2)
+    await svc.select(selectS4, V3)
+    env.teams.length = 0
+    // a multiple of the ingest batch (400)
+    const count = 2400
+    fs.append(tree.paths.s4, Array.from({ length: count }, (_, i) => newLine(1000 + i)).join(''))
+    emit('change', tree.paths.s4)
+    for (let i = 0; i < 400; i++) {
+      await flush(5)
+      await new Promise<void>((r) => realImmediate(r))
+      svc.snapshot(V2)
+    }
+    await flush(2000)
+    const last = forViewer(env, V3).at(-1)
+    expect(JSON.stringify(last)).toContain(`neutral line ${1000 + count - 1}`)
   })
 
   it('releasing viewers drops the session with its last viewer', async () => {

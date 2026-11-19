@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
+import { CopyButton } from '../chat/CopyButton'
 import './ui.css'
 
 interface Props {
@@ -40,9 +41,17 @@ export class ErrorBoundary extends Component<Props, State> {
           <span className="ac-errorboundary__text" title={error.message}>
             {this.props.label ?? 'This view'} hit an error: {error.message || 'unknown error'}
           </span>
+          <CopyButton className="ac-copy--always" text={error.stack ? `${error.message}
+${error.stack}` : error.message} label="error" />
           <button type="button" className="ac-errorboundary__btn" onClick={this.reload}>
             Reload view
           </button>
+          {error.stack && (
+            <details className="ac-errorboundary__stack">
+              <summary>Details</summary>
+              <pre>{error.stack}</pre>
+            </details>
+          )}
         </div>
       )
     }

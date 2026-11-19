@@ -89,6 +89,16 @@ describe('displayMatching / defaultPlacement', () => {
   it('cascades on a single display', () => {
     const a = defaultPlacement({ spec: { kind: 'project', projectKey: 'acme' }, displays: [big], primary: big, anchorDisplayId: 1, openCount: 0 })
     const b = defaultPlacement({ spec: { kind: 'project', projectKey: 'acme' }, displays: [big], primary: big, anchorDisplayId: 1, openCount: 1 })
-    expect(b.bounds.x).toBe(a.bounds.x + 32)
+    expect(b.bounds.x).toBe(a.bounds.x + 24)
+  })
+
+  it('cascades on the other display too, clamped inside it', () => {
+    const at = (n: number) => defaultPlacement({ spec: { kind: 'chat', projectKey: 'acme', sessionRef: 'a|s1' }, displays: [big, small], primary: big, anchorDisplayId: 1, openCount: n })
+    const a = at(0)
+    const b = at(2)
+    expect(b.displayId).toBe(2)
+    expect(b.bounds.x).toBeGreaterThanOrEqual(a.bounds.x)
+    expect(b.bounds.x + b.bounds.width).toBeLessThanOrEqual(small.workArea.x + small.workArea.width)
+    expect(b.bounds.y + b.bounds.height).toBeLessThanOrEqual(small.workArea.y + small.workArea.height)
   })
 })

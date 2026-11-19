@@ -156,7 +156,7 @@ const api: ConsoleApi = {
   },
   theme: {
     get: () => ipcRenderer.invoke(THEME_IPC.get) as Promise<ThemeState>,
-    setSource: (source) => ipcRenderer.invoke(THEME_IPC.setSource, source) as Promise<ThemeState>,
+    setSource: (source) => ipcRenderer.invoke(THEME_IPC.setSource, source) as Promise<ThemeState | { ok: false; reason: 'invalid-args' }>,
     onChanged: (cb) => on<ThemeState>(THEME_IPC.changed, cb)
   },
   windows: {

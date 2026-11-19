@@ -34,6 +34,7 @@ import { createHandlers, createViewerHandlers, registerIpcHandlers } from './ipc
 import { createThemeController, isThemeSource, type ThemeController } from './theme'
 import { createWindowsStore } from './windows/persistence'
 import { MIN_SIZE, type DisplayInfo, type ResolvedPlacement } from './windows/placement'
+import { isCloseAccelerator } from './windows/closeKey'
 import { createViewerRouter, viewerIdOf } from './windows/viewers'
 import { createWindowManager, type ManagedWindow, type WindowManager } from './windows/windowManager'
 import { resolveClaudeCommand } from './pty/claudeBinary'
@@ -162,6 +163,13 @@ function createBrowserWindow(spec: WindowSpec, placement: ResolvedPlacement): Ma
     writeClipboard: (text) => clipboard.writeText(text)
   })
 
+  // The main window never closes from the keyboard (the default menu's close role would quit the app); pop-outs
+  // close from the renderer shortcut.
+  if (spec.kind === 'main') {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (isCloseAccelerator(input)) event.preventDefault()
+    })
+  }
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event, url) => {
     if (url !== win.webContents.getURL()) event.preventDefault()
