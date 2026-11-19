@@ -108,3 +108,47 @@
   .ac-team__center--chat { padding: 8px 8px 10px; }
   .ac-team__tab { padding: 0 12px; }
 }
+
+/* T28: composer toolbar, suggestion popover, attachments, question and plan cards */
+.ac-composer__meta { flex-wrap: wrap; }
+.ac-composer__toolbar { flex-wrap: wrap; min-width: 0; justify-content: flex-end; }
+.ac-composer__tool { min-height: 28px; padding: 2px 10px; border: 1px solid var(--ac-border-btn); border-radius: 6px; background: transparent; color: var(--ac-text-muted); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.ac-composer__tool:hover:not(:disabled) { background: var(--ac-bg-btn-hover); color: var(--ac-text); }
+.ac-composer__tool[aria-pressed='true'] { border-color: var(--ac-accent); color: var(--ac-text); }
+.ac-composer__tool:disabled { opacity: 0.5; cursor: not-allowed; }
+.ac-composer__tool:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 1px; }
+.ac-tc-composer { padding: 8px 14px 10px; border-top: 1px solid var(--ac-border-inset); min-width: 0; }
+.ac-pop { background: var(--ac-bg-panel); border: 1px solid var(--ac-border-btn); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); max-height: min(320px, 45vh); overflow-y: auto; margin-bottom: 4px; }
+.ac-pop__list { list-style: none; margin: 0; padding: 4px; }
+.ac-pop__group { padding: 6px 8px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ac-text-subtle); }
+.ac-pop__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 8px; border-radius: 6px; cursor: pointer; min-width: 0; }
+.ac-pop__row.is-active, .ac-pop__row:hover { background: var(--ac-bg-selected); }
+.ac-pop__name { font-family: var(--ac-font-mono); font-size: 13px; color: var(--ac-text); overflow-wrap: anywhere; }
+.ac-pop__path { min-width: 0; }
+.ac-pop__hint { font-size: 12px; color: var(--ac-text-subtle); }
+.ac-pop__desc { flex: 1 1 200px; min-width: 0; font-size: 12px; color: var(--ac-text-muted); overflow-wrap: anywhere; }
+.ac-pop__note { padding: 4px 12px 8px; font-size: 12px; color: var(--ac-text-subtle); }
+.ac-attach { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-attach__chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 4px 2px 2px; border: 1px solid var(--ac-border-btn); border-radius: 8px; background: var(--ac-bg-inset); }
+.ac-attach__chip img { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; }
+.ac-attach__name { font-size: 12px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-attach__chip button { width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-text-muted); cursor: pointer; }
+.ac-attach__chip button:hover { background: var(--ac-bg-btn-hover); color: var(--ac-text); }
+.ac-attach__chip button:focus-visible { outline: 2px solid var(--ac-accent); }
+.ac-qcard__q { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ac-qcard__q legend { padding: 0; margin-bottom: 4px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.ac-qcard__header { display: inline-block; margin-right: 8px; padding: 0 6px; border: 1px solid var(--ac-border-btn); border-radius: 999px; font-size: 11px; font-weight: 400; color: var(--ac-text-muted); }
+.ac-qcard__opt { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; min-width: 0; }
+.ac-qcard__opt input { margin-top: 3px; }
+.ac-qcard__label { display: block; overflow-wrap: anywhere; }
+.ac-qcard__desc { display: block; font-size: 12px; color: var(--ac-text-muted); overflow-wrap: anywhere; }
+.ac-plan__text { max-height: 320px; }
+@media (max-width: 899px) {
+  .ac-tc-composer { padding: 6px 8px 8px; }
+  .ac-composer__toolbar { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .ac-composer__field { flex-wrap: wrap; }
+  .ac-composer__send { flex: 1 1 100%; }
+  .ac-pop { max-height: 40vh; }
+  .ac-pop__desc { flex-basis: 100%; }
+  .ac-attach__name { max-width: 90px; }
+}

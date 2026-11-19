@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
-import type { ClipboardEvent, KeyboardEvent, ReactNode, Ref } from 'react'
+import type { ClipboardEvent, DragEvent, KeyboardEvent, ReactNode, Ref, SyntheticEvent } from 'react'
 import './chat.css'
 
 export interface ComposerProps {
@@ -16,10 +16,28 @@ export interface ComposerProps {
   stateLabel?: string
   placeholder?: string
   error?: string
-  /** T28 extension slots. */
+  /**
+   * Extension slots (T28, also usable by T29). All optional and generic:
+   * - toolbar: controls rendered at the end of the meta row (wraps on narrow widths)
+   * - beforeInput: content between the meta row and the field (attachment chips, cards)
+   * - suggestions: popover anchored above the field (palette, @-mentions)
+   * - onPaste / onDrop / onDragOver: raw handlers; the composer never sends from them (R-19)
+   * - onKeyDown: runs first; call preventDefault() to stop the built-in Enter/Esc handling
+   */
   toolbar?: ReactNode
   beforeInput?: ReactNode
   onPaste?(e: ClipboardEvent<HTMLTextAreaElement>): void
+  onDrop?(e: DragEvent<HTMLElement>): void
+  onDragOver?(e: DragEvent<HTMLElement>): void
+  onKeyDown?(e: KeyboardEvent<HTMLTextAreaElement>): void
+  onSelect?(e: SyntheticEvent<HTMLTextAreaElement>): void
+  /** When true Enter inserts a newline and Ctrl/Cmd+Enter sends. */
+  ctrlEnterSend?: boolean
+  /** DOM id of the textarea (default "ac-chat-prompt") and its accessible name (default "Message"). */
+  id?: string
+  ariaLabel?: string
+  /** Extra props for the textarea, e.g. aria-controls / aria-activedescendant for a popover. */
+  inputAria?: Record<string, string | boolean | undefined>
   /** Anchor for a suggestions popover (palette, @-mentions); rendered above the input. */
   suggestions?: ReactNode
   textareaRef?: Ref<HTMLTextAreaElement>
@@ -51,12 +69,16 @@ export function Composer(p: ComposerProps): JSX.Element {
 
   const canSend = !p.disabled && p.value.trim() !== ''
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
+    p.onKeyDown?.(e)
+    if (e.defaultPrevented) return
     if (e.key === 'Escape') {
       e.currentTarget.blur()
       return
     }
-    if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return
+    if (e.key !== 'Enter' || e.shiftKey || e.altKey) return
     if (e.nativeEvent.isComposing) return
+    const mod = e.ctrlKey || e.metaKey
+    if (p.ctrlEnterSend ? !mod : mod) return
     e.preventDefault()
     if (canSend) p.onSend()
   }
@@ -65,6 +87,8 @@ export function Composer(p: ComposerProps): JSX.Element {
     <form
       ref={root}
       className="ac-composer"
+      {...(p.onDrop ? { onDrop: p.onDrop } : {})}
+      {...(p.onDragOver ? { onDragOver: p.onDragOver } : {})}
       onSubmit={(e) => {
         e.preventDefault()
         if (canSend) p.onSend()
@@ -79,15 +103,17 @@ export function Composer(p: ComposerProps): JSX.Element {
       <div className="ac-composer__field">
         {p.suggestions && <div className="ac-composer__suggest">{p.suggestions}</div>}
         <textarea
-          id="ac-chat-prompt"
+          id={p.id ?? 'ac-chat-prompt'}
           ref={setRef}
           rows={MIN_LINES}
-          aria-label="Message"
+          aria-label={p.ariaLabel ?? 'Message'}
+          {...p.inputAria}
           placeholder={p.placeholder ?? ''}
           value={p.value}
           disabled={p.disabled}
           onChange={(e) => p.onChange(e.target.value)}
           onKeyDown={onKeyDown}
+          {...(p.onSelect ? { onSelect: p.onSelect } : {})}
           {...(p.onPaste ? { onPaste: p.onPaste } : {})}
         />
         <button type="submit" className="ac-composer__send" disabled={!canSend}>
@@ -102,7 +128,9 @@ export function Composer(p: ComposerProps): JSX.Element {
       {p.disabled && p.disabledReason ? (
         <div className="ac-composer__reason">{p.disabledReason}</div>
       ) : (
-        <div className="ac-composer__hint">Enter to send, Shift+Enter for a new line</div>
+        <div className="ac-composer__hint">
+          {p.ctrlEnterSend ? 'Ctrl+Enter to send, Enter for a new line' : 'Enter to send, Shift+Enter for a new line'}
+        </div>
       )}
     </form>
   )
