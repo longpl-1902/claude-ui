@@ -113,10 +113,13 @@ describe('R-11 Inspector tabs', () => {
 })
 
 describe('R-11 Inspector actions', () => {
-  it('has the four action buttons', () => {
+  it('shows the enabled actions; Stop lives in the "..." menu (T32 U15)', async () => {
     render(<Inspector />)
-    for (const n of ['Message agent', 'Open worktree', 'Pause', 'Stop'])
+    for (const n of ['Message agent', 'Open worktree', 'Pause', 'More actions'])
       expect(screen.getByRole('button', { name: n })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('menuitem', { name: 'Stop' })).toBeInTheDocument()
   })
 
   it('Message agent sets the console draft to @name', async () => {
@@ -139,14 +142,15 @@ describe('R-11 Inspector actions', () => {
     render(<Inspector />)
     await userEvent.click(screen.getByRole('button', { name: 'Pause' }))
     expect(api.agent.pause).toHaveBeenCalledWith('be')
-    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Stop' }))
     expect(api.agent.stop).toHaveBeenCalledWith('be')
     await userEvent.click(screen.getByRole('button', { name: 'Open worktree' }))
     expect(api.worktree.openInEditor).toHaveBeenCalledTimes(1)
     expect(api.worktree.openInEditor).toHaveBeenCalledWith('.worktrees/backend')
   })
 
-  it('Open worktree is disabled and does not call the api when no worktree matches', async () => {
+  it('Open worktree is not offered when no worktree matches', async () => {
     const api = { worktree: { openInEditor: vi.fn() } }
     ;(window as unknown as { api: unknown }).api = api
     act(() => {
@@ -154,17 +158,15 @@ describe('R-11 Inspector actions', () => {
       useConsoleStore.setState({ team: { ...t, worktrees: [] } })
     })
     render(<Inspector />)
-    const btn = screen.getByRole('button', { name: 'Open worktree' })
-    expect(btn).toBeDisabled()
-    expect(btn).toHaveAttribute('title', 'No worktree path for this agent')
-    await userEvent.click(btn)
+    expect(screen.queryByRole('button', { name: 'Open worktree' })).toBeNull()
     expect(api.worktree.openInEditor).not.toHaveBeenCalled()
   })
 
   it('actions do not throw without window.api', async () => {
     render(<Inspector />)
     await userEvent.click(screen.getByRole('button', { name: 'Pause' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Stop' }))
     await userEvent.click(screen.getByRole('button', { name: 'Open worktree' }))
     expect(screen.getByText('backend-impl')).toBeInTheDocument()
   })

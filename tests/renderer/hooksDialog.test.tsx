@@ -71,11 +71,26 @@ describe('HooksDialog', () => {
     expect(screen.getByRole('button', { name: 'Install' })).toBeDisabled()
   })
 
-  it('Uninstall is disabled when nothing is installed', () => {
+  it('shows Install or Uninstall by state (T32 U15), never both for a clean state', () => {
+    seed(status())
+    const { unmount } = render(<HooksDialog open onClose={() => undefined} />)
+    expect(screen.getByRole('button', { name: 'Install' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull()
+    unmount()
+    seed(status({ state: 'installed' }))
+    render(<HooksDialog open onClose={() => undefined} />)
+    expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Uninstall' })).toBeEnabled()
+  })
+
+  it('opens with focus on Close (Enter never writes settings) and lists the events it would add', () => {
     seed(status())
     render(<HooksDialog open onClose={() => undefined} />)
-    expect(screen.getByRole('button', { name: 'Install' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Uninstall' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+    expect(screen.getByText(/Events it adds .16/)).toBeInTheDocument()
+    expect(screen.getByText(/PreToolUse/)).toBeInTheDocument()
+    expect(api.apply).not.toHaveBeenCalled()
+    expect(api.preview).not.toHaveBeenCalled()
   })
 
   it('preview shows paths, notes and the full after JSON; nothing is written until Write file', async () => {
@@ -148,7 +163,8 @@ describe('header Hooks button', () => {
   it('labels the state and opens the dialog', async () => {
     seed(status({ state: 'partial' }))
     render(<TeamHeader />)
-    await userEvent.click(screen.getByRole('button', { name: 'Hooks: partial' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Hooks: partial · Reinstall…' }))
     const dlg = screen.getByRole('dialog', { name: 'Agent Console hooks' })
     expect(within(dlg).getByRole('button', { name: 'Install' })).toBeEnabled()
   })

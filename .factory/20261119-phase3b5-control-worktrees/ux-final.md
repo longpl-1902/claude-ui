@@ -19,7 +19,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 ## P0: broken
 
 ### U1. The whole window goes blank at the widest layout (27" monitor)
-- **Status:** todo
+- **Status:** done. Root cause found by test: a collapsed item (the "older history" icon) overwrote its own natural width, so the plan flipped between icon and text and the layout effect looped ("Maximum update depth exceeded"). useOverflowItems no longer records collapsed widths, skips a plan when its inputs are unchanged, and applies at most 2 commit-driven re-plans per frame. New ErrorBoundary ("Reload view") sits inside TeamView, AccountsView and ExtensionsView, and around the chat view (so the chat window is covered too). Needs a real 27" re-check.
 - **What is wrong:**
   - With a full-screen window zoomed out to about 2200 to 2500 CSS px wide (about 1370 px tall), `#root` renders empty. The window shows only the background. The UIA tree has `Group id=root` with no children.
   - Ctrl+0 does not bring it back. Only Ctrl+R does.
@@ -44,7 +44,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** the needs-you path is visible first. A blank window hides everything.
 
 ### U2. Window controls (min / max / close) cover the right end of every header
-- **Status:** todo
+- **Status:** done. New hooks/useTitlebarInset.ts writes --ac-wco-right (getTitlebarAreaRect + geometrychange, 140px Windows fallback); global.css pads .ac-header/.ac-acc-header/.ac-ext-header (the chat window header is an .ac-header, so windowKinds.css needed no edit). Called from TeamHeader, AccountsHeader, ExtensionsView, ChatView.
 - **What is wrong:** the native title-bar overlay sits on top of header content at every size, in both themes:
   - Team: the primary "+ New session in claude-ui as choose account" is cut under Minimize, and the "…" menu sits under the controls.
   - Team at 1152 and at 914: the per-session "0 needs you" is cut to "0 ……".
@@ -71,7 +71,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 ## P1: clutter that costs the lead time every day
 
 ### U3. Two "needs you" counters in the header
-- **Status:** todo
+- **Status:** done. Only the global needs-you button remains; its tooltip says "N across all projects · M in this session". The "..." menu shows "This session: ... agents · ... running · ... tok · N need you" and "All projects today: ... tok".
 - **What is wrong:** the header shows the global button "● 0 need you" and, right next to it, a text counter "0 needs you" ("0 needs you in this session" at wide sizes). It is the same idea twice with near-identical wording, and the second one is the one that gets clipped (U2).
   - The overflow menu also shows "Tokens 12.86M" and "Tokens today 17.9M" with no scope.
 - **Seen at:** all sizes, both themes.
@@ -84,7 +84,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** the needs-you path is visible first. One clear number beats two similar ones.
 
 ### U4. Header carries too many items; cut it to six
-- **Status:** todo
+- **Status:** done. Header = brand, project + session select, account chip, needs-you, one primary "+ New session", "...". The "team:" title, the history note and the LIVE badge are gone (title and note are in the select tooltip). Pause all (only when something runs), Hooks (Install / on / Reinstall), Extensions and Accounts (with shortcuts) are menu rows. Only the primary action may move into the menu when the row is too narrow.
 - **What is wrong:** the header row holds: brand, "team: Claude in Chrom…" (always truncated), LIVE, project name, session select, ⓘ "older history not loaded", account chip, needs-you, per-session counter, a **disabled** "Pause all in claude-ui", the primary "+ New session in claude-ui as choose account", "Hooks: off", "Extensions" and "…".
   - "as choose account" reads badly.
   - "Hooks: off" is unclear.
@@ -107,7 +107,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** secondary actions go in overflow. One primary per area.
 
 ### U5. Center column: tiny grid, panels painting over each other, three nested scrollbars
-- **Status:** todo
+- **Status:** done. The panes are measured on the panel (not the column that also holds the tab strip), which was the cause of the timeline painting over the grid and console. Defaults: grid = 40 % of the column, console takes the rest, mins 96 / 220; growing one pushes the other to its minimum; the user's dragged sizes are kept. Center has no scroll; only the agent list and the console log scroll. Timeline has a collapse toggle (collapsed under 800 px of column height). Implemented with the existing flex panes + splitters rather than a literal CSS grid.
 - **What is wrong:**
   - The agent grid gets a fixed area of about 120 px (one to four rows) at every size, even when the window is about 1370 px tall. Meanwhile there is an empty gap of about 90 px between the timeline and the console (`22`).
   - The timeline paints over the last grid row and over the console's header and filter chips. Half-hidden rows show at the seams (`01`, `02`, `16`, `26`).
@@ -129,7 +129,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** no nested scroll areas. The needs-you path (agents and asks) is visible first.
 
 ### U6. Three docked side columns starve the center at 1152 to 1536 px; worktree panel duplicates the grid
-- **Status:** todo
+- **Status:** done. Below 1440 the inspector is an overlay drawer (header icon button); below 1600 only one of worktrees / inspector is docked (last opened wins; stored collapsed flags and widths untouched); worktree card = branch, short path (no "." row), count + avatar stack (5 + "+n"), agent list opens on click.
 - **What is wrong:**
   - With worktrees and inspector both open, the center at 1152 is about 500 px. Console lines become "PowerShell $w = "C:\…", "Raw terminal" wraps onto two lines, and the timeline legend wraps.
   - The worktree panel lists *every* agent of the session (100+ rows), which is the same list as the grid.
@@ -149,7 +149,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** progressive disclosure, and no duplicated info.
 
 ### U7. Composer for a session Agent Console cannot control
-- **Status:** todo
+- **Status:** done. A session Agent Console cannot control shows one line ("Runs in VS Code. Agent Console can't type into it.") and a primary Fork here (Resume here if not live); no textarea / Attach / Send. Send with is a labelled Enter | Ctrl+Enter radio switch. The ControlBar had no inline styles left. Chat tab: same one-line state but its button is "Fork it in Team view" (the fork preset lives in the lead console).
 - **What is wrong:**
   - The session runs in VS Code, so the textarea and Send are disabled for screen readers, but they *look* active: full-contrast box, normal Send button.
   - Two send hints are shown at once: the toggle button "Ctrl+Enter to send" and the line "Enter to send, Shift+Enter for a new line".
@@ -167,7 +167,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** one primary action per area, and the empty state gives the next step in one line.
 
 ### U8. Lead console and chat are full of tool noise and long paths
-- **Status:** todo
+- **Status:** done. classifyLine treats CamelCase tool names (PowerShell, SubagentHandback, WebFetch...), MCP tools and a bare "done" as tools (renderer-side heuristic; main assigns no kind). Agent column 140 px, colour dot + middle ellipsis + tooltip. AgentCard and Activity use the shared path shortener; the async-launch result reads "launched in background".
 - **What is wrong:**
   - The default "Messages & asks" filter still shows `PowerShell …` commands, `SubagentHandback` and `done` rows (`08`, `26`, `27`).
   - In Chat, unknown tools such as PowerShell render as body text in a 20 px paragraph, while Read and Bash render as collapsible rows (`09`).
@@ -197,7 +197,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** the needs-you path is visible first, since asks drown in tool lines. Use a consistent type scale.
 
 ### U9. Light theme: agent names and warnings are hard to read
-- **Status:** todo
+- **Status:** done. Agent names render in --ac-text with a coloured dot (the hue no longer carries text contrast). Contrast test extended: warn text, status colours, text and muted text on the console surface too.
 - **What is wrong:** in light theme these elements look like about 2:1 contrast:
   - agent-name colours in the console and chat (yellow "T32 UX lead", light green "Implement X-…"),
   - the amber inbox footer "1 project without hooks…",
@@ -220,7 +220,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 ## P2: polish that removes confusion
 
 ### U10. Rail "running" badge looks like an unread count
-- **Status:** todo
+- **Status:** done. Running is a plain pulsing dot without a number; numbers only for blocked and ready; the hooks ring has the tooltip "Hooks not installed: sub-agent prompts not detected".
 - **What is wrong:** claude-ui shows an amber "1" bubble while the header says "0 need you". The bubble means "1 running", but numbered bubbles read as "something for me". The hollow "no hooks" ring sits on the same avatar.
 - **Seen at:** all sizes, both themes.
 - **Screenshots:** `02-team-1920-dark.png`, `16-team-1440-dark.png`
@@ -231,7 +231,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** the needs-you path is visible first. Red and numbers mean "me".
 
 ### U11. Narrow layout (< 1100): floating "Projects" / "Inspector" pills cover content
-- **Status:** todo
+- **Status:** done. Projects / Inspector are header icon buttons (Ctrl+B / Ctrl+I in the tooltip); the floating pills and their CSS are removed.
 - **What is wrong:** the two floating pills at the bottom corners cover the "Messages & asks" chip and console rows.
 - **Seen at:** 914 px, dark and light.
 - **Screenshots:** `17-team-1100-dark.png`, `18-team-narrow-dark.png`, `27-team-914css-light.png`
@@ -240,7 +240,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** secondary actions on hover/focus or in overflow, and nothing hides content.
 
 ### U12. Timeline rows waste space and cannot be told apart
-- **Status:** todo
+- **Status:** done. Lanes only for the lead, agents with activity in the window and running / needs-you agents; middle-ellipsis labels with tooltip; below 1300 px of timeline width the legend folds into a "Legend" button (container query).
 - **What is wrong:**
   - Rows show for agents with no activity in the 20-minute window (empty bars).
   - Labels truncate to identical prefixes ("Implement X-T1…", "Implement X-T2…").
@@ -259,7 +259,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** no duplicated or low-value chrome. Use a consistent type scale.
 
 ### U13. Extensions screen: unstyled inputs, always-visible destructive buttons, no needs-you
-- **Status:** todo
+- **Status:** done. Themed .ac-acc-text / .ac-acc-select classes on the inputs and selects, needs-you button in the header, Uninstall... in a row "..." menu, Open in editor on hover / focus, path hint under Project, ">-" shows "No description" (renderer only).
 - **What is wrong:**
   - The plugin install box, the catalog search and the Project/Account selects use browser-default styling (thin black or white border, grey fill) in both themes.
   - Every plugin row shows a red "Uninstall…", and every catalog row shows "Open in editor".
@@ -283,7 +283,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** one primary per area, secondary on hover/focus, and the needs-you path is visible on every screen.
 
 ### U14. Accounts screen: stale empty state, jargon, four equal buttons per card
-- **Status:** todo
+- **Status:** done, with one wording change: the policy text no longer says "(Phase 3)" and no "(needs usage data)" suffix either (it already says "Applies once usage data is available"). Sticky headers, Running now lists live external sessions "in VS Code / in a terminal", Set as default only when not default, other card actions in "...", Detected logins collapse to one line when all are linked.
 - **What is wrong:**
   - The header scrolls away, so the needs-you button and Back disappear (`07`).
   - "Running now" says "No sessions running. Start one from the lead console's Raw terminal." while a live (VS Code) session exists, and Raw terminal is no longer the way to start one.
@@ -311,7 +311,7 @@ Status column for step 3: `todo` / `done` / `rejected (reason)`.
 - **Rule:** the empty state gives the next step in one line, there is one primary per area, and needs-you stays visible.
 
 ### U15. Dialogs and inspector: safe focus, one primary action, readable rows
-- **Status:** todo
+- **Status:** partly done. Hooks: focus starts on Close, Install xor Uninstall by state, read-only list of the 16 hook events. Inspector: only enabled actions, one primary, Stop (confirm-gated) in "...", "Assigned task" hidden when it equals the branch. Switcher: status + account dots, the path ellipsizes first. Inbox: visible x close button. REJECTED for now: anchoring the inbox as a popover under the header button at >= 1100 px (needs an anchored portal; the modal with a close button is kept).
 - **What is wrong:**
   - **Hooks dialog:** it opens with focus on **Install**, so Enter writes `settings.local.json`. It also shows "Uninstall" when nothing is installed, and has no preview of the entries it would write (`25`).
   - **Inspector:** it shows four equal buttons, two of them disabled (Message agent, Open worktree, Pause, Stop process…). "Assigned task" still shows a branch name ("main") for the lead (`03`).

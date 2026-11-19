@@ -5,6 +5,7 @@ import { Avatar } from '@renderer/components/ui/Avatar'
 import { LockIcon } from '@renderer/components/ui/Icons'
 import { selectTokensToday, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { formatTokens } from '@shared/format'
+import { RowMenu } from '@renderer/components/extensions/RowMenu'
 import { AccountEditor } from './AccountEditor'
 import './manage.css'
 
@@ -105,16 +106,15 @@ export function AccountCards({ adding, onAdd, onCloseAdd }: AccountCardsProps): 
               <AccountEditor mode="edit" initial={a} onClose={() => setEditingId(undefined)} />
             ) : (
               <div className="ac-acc-row">
-                <Button disabled={isDefault} onClick={() => setDefaultAccount(a.id)}>
-                  Set as default
-                </Button>
-                <Button disabled={a.locked} onClick={() => startSignIn(a.configDir)}>
-                  Sign in again
-                </Button>
-                <Button onClick={() => setEditingId(a.id)}>Rename &amp; color</Button>
-                <Button variant="danger" onClick={() => remove(a.id, a.name)}>
-                  Remove
-                </Button>
+                {!isDefault && <Button onClick={() => setDefaultAccount(a.id)}>Set as default</Button>}
+                <RowMenu
+                  label={`More actions for ${a.name}`}
+                  items={[
+                    ...(a.locked ? [] : [{ label: 'Sign in again', onSelect: () => startSignIn(a.configDir) }]),
+                    { label: 'Rename & color', onSelect: () => setEditingId(a.id) },
+                    { label: 'Remove…', danger: true, onSelect: () => void remove(a.id, a.name) }
+                  ]}
+                />
               </div>
             )}
           </div>

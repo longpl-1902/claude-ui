@@ -105,12 +105,13 @@ afterEach(() => {
 })
 
 describe('R-12 header badge', () => {
-  it('shows LIVE for a live team', () => {
+  it('a live team shows no DEMO badge; the session title is in the select tooltip, not a header row (T32 U4)', () => {
     seedLive()
     render(<TeamHeader />)
-    expect(screen.getByText('LIVE')).toBeInTheDocument()
+    expect(screen.queryByText('LIVE')).toBeNull()
     expect(screen.queryByText(/DEMO/)).toBeNull()
-    expect(screen.getByText('team: lead-session')).toBeInTheDocument()
+    expect(screen.queryByText('team: lead-session')).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Session' })).toHaveAttribute('title', expect.stringContaining('lead-session'))
   })
 
   it('shows DEMO with the demo data text and Back to live in demo mode', async () => {
@@ -131,10 +132,11 @@ describe('R-12 header badge', () => {
     expect(screen.queryByText(/DEMO/)).toBeNull()
   })
 
-  it('shows the truncated-history note', () => {
+  it('the truncated-history note is a line in the session select tooltip (T32 U4)', () => {
     seedLive({ historyTruncated: true })
     render(<TeamHeader />)
-    expect(screen.getByText('older history not loaded')).toBeInTheDocument()
+    expect(screen.queryByText('older history not loaded')).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Session' })).toHaveAttribute('title', expect.stringContaining('older history not loaded'))
   })
 })
 
@@ -323,16 +325,17 @@ describe('R-12 lead console', () => {
 })
 
 describe('P3-C header actions and title', () => {
-  it('demo mode: both are enabled', () => {
+  it('demo mode: both are enabled', async () => {
     useConsoleStore.setState({ teamMode: 'demo' })
     render(<TeamHeader />)
-    expect(screen.getByRole('button', { name: 'Pause all' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '+ New teammate' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    expect(screen.getByRole('menuitem', { name: 'Pause all' })).toBeEnabled()
   })
-  it('repo element carries the full title and CSS gives it width first', () => {
+  it('the session select carries the full title and CSS gives the repo / picker width first', () => {
     const snap = seedLive()
-    const { container } = render(<TeamHeader />)
-    expect(container.querySelector('.ac-header__repo')).toHaveAttribute('title', `${snap.repo} / team: ${snap.teamName}`)
+    render(<TeamHeader />)
+    expect(screen.getByRole('combobox', { name: 'Session' })).toHaveAttribute('title', `${snap.repo} / ${snap.teamName}`)
     const css = readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/teamLeft.css'), 'utf8')
     expect(css).toMatch(/\.ac-header__repo \{ flex: 1 1 auto; min-width: 120px/)
     expect(css).toMatch(/\.ac-header__picker \{ flex-shrink: 3/)

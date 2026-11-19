@@ -8,12 +8,17 @@ import { deriveProjects, useConsoleStore } from '@renderer/store/useConsoleStore
 import { selectControlForSession, useControlStore } from '@renderer/store/useControlStore'
 import { useExtensionsStore } from '@renderer/store/useExtensionsStore'
 import { useMaxWidth } from '@renderer/store/useLayoutStore'
+import { useTitlebarInset } from '@renderer/hooks/useTitlebarInset'
+import { NeedsYouButton } from '@renderer/components/rail/NeedsYouInbox'
 import { useViewedAccount } from '@renderer/components/team/TeamHeader'
+import { ErrorBoundary } from '@renderer/components/ui/ErrorBoundary'
+import '@renderer/components/accounts/manage.css'
 import './ExtensionsView.css'
 
 export const EXTENSIONS_NARROW_MAX = 899
 
-export function ExtensionsView(): JSX.Element {
+function ExtensionsViewContent(): JSX.Element {
+  useTitlebarInset()
   const navigate = useConsoleStore((s) => s.navigate)
   const sessions = useConsoleStore((s) => s.sessions)
   const projectKey = useConsoleStore((s) => s.projectKey)
@@ -49,9 +54,10 @@ export function ExtensionsView(): JSX.Element {
         </button>
         <h1 className="ac-ext-h1">Extensions</h1>
         <div className="ac-ext-ctx">
+          <div className="ac-ext-ctx__project">
           <label>
             Project
-            <select aria-label="Project" value={root} onChange={(e) => setRootPick(e.target.value)}>
+            <select className="ac-acc-select" aria-label="Project" value={root} onChange={(e) => setRootPick(e.target.value)}>
               {root === '' && <option value="">No project</option>}
               {rootOptions.map((p) => (
                 <option key={p.key} value={p.root}>
@@ -60,9 +66,15 @@ export function ExtensionsView(): JSX.Element {
               ))}
             </select>
           </label>
+          {root && (
+            <p className="ac-ext-note ac-ext-ellipsis" title={root}>
+              {root}
+            </p>
+          )}
+          </div>
           <label>
             Account
-            <select aria-label="Account" value={accountId} onChange={(e) => setAccPick(e.target.value)}>
+            <select className="ac-acc-select" aria-label="Account" value={accountId} onChange={(e) => setAccPick(e.target.value)}>
               {!accounts.some((a) => a.id === accountId) && (
                 <option value={accountId}>{viewed?.name ?? 'Default account'}</option>
               )}
@@ -74,13 +86,9 @@ export function ExtensionsView(): JSX.Element {
             </select>
           </label>
         </div>
+        <NeedsYouButton />
       </header>
       <main className="ac-ext-main">
-        {root && (
-          <p className="ac-ext-note ac-ext-ellipsis" title={root}>
-            {root}
-          </p>
-        )}
         {error && (
           <p className="ac-ext-error" role="alert">
             {error}
@@ -92,5 +100,13 @@ export function ExtensionsView(): JSX.Element {
       </main>
       <CliPreviewDialog />
     </div>
+  )
+}
+
+export function ExtensionsView(): JSX.Element {
+  return (
+    <ErrorBoundary label="The extensions view">
+      <ExtensionsViewContent />
+    </ErrorBoundary>
   )
 }

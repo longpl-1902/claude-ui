@@ -147,7 +147,7 @@ a:hover {
 .ac-acc-header,
 .ac-ext-header {
   -webkit-app-region: drag;
-  padding-right: max(20px, calc(100vw - env(titlebar-area-width, 100vw) + 8px));
+  padding-right: max(20px, calc(var(--ac-wco-right, 0px) + 8px));
 }
 :is(.ac-header, .ac-acc-header, .ac-ext-header) :is(button, a, input, select, textarea, label, summary, [role='button'], [role='menu'], [role='menuitem'], [role='dialog'], [tabindex], .ac-header__menu, .ac-header__chip) {
   -webkit-app-region: no-drag;

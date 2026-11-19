@@ -89,3 +89,7 @@
 .ac-acc-session__team { font-weight: 500; }
 .ac-acc-session__path { font-size: 12px; color: var(--ac-text-muted); }
 .ac-acc-session__acct { font-size: 12px; color: var(--ac-text-soft); }
+
+/* T32 U14: the header stays put (needs-you and Back never scroll away) */
+.ac-acc-header { position: sticky; top: 0; z-index: 20; }
+.ac-acc-panel.ac-acc-panel--line { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 16px; }

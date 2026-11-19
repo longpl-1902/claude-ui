@@ -12,6 +12,9 @@ export function DetectedLogins(): JSX.Element {
   const startSignIn = useConsoleStore((s) => s.startSignIn)
   const scanAccounts = useConsoleStore((s) => s.scanAccounts)
   const [scanning, setScanning] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  // Nothing to do here when every login is already linked: one line instead of a full card (T32 U14).
+  const allLinked = loaded && accounts.detected.length > 0 && accounts.detected.every((d) => d.linkedAccountId)
 
   const scan = async (): Promise<void> => {
     setScanning(true)
@@ -20,6 +23,23 @@ export function DetectedLogins(): JSX.Element {
     } finally {
       setScanning(false)
     }
+  }
+
+  if (allLinked && !expanded) {
+    const n = accounts.detected.length
+    return (
+      <section className="ac-acc-panel ac-acc-panel--line" aria-label="Detected logins">
+        <span className="ac-acc-sub">{`${n} login${n === 1 ? '' : 's'} found · all linked`}</span>
+        <Button variant="secondary" disabled={scanning} onClick={() => void scan()}>
+          <RefreshIcon size={14} />
+          {scanning ? 'Scanning…' : 'Scan again'}
+        </Button>
+        <Button variant="ghost" aria-expanded={false} onClick={() => setExpanded(true)}>
+          Show details
+        </Button>
+        <SignInPanel />
+      </section>
+    )
   }
 
   return (

@@ -68,7 +68,8 @@ describe('R-03 / R-13 App hydrates from window.api', () => {
     }
     ;(window as unknown as { api: unknown }).api = api
     render(<App />)
-    await waitFor(() => expect(screen.getByText(/team: from-ipc/)).toBeInTheDocument())
+    // T32 U4: the team title is no longer a header row item; it sits in the session select's tooltip.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Session' })).toHaveAttribute('title', expect.stringContaining('from-ipc')))
     expect(api.team.getSnapshot).toHaveBeenCalled()
     expect(api.accounts.getSnapshot).toHaveBeenCalled()
     expect(useConsoleStore.getState().team.teamName).toBe('from-ipc')

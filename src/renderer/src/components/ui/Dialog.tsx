@@ -34,9 +34,11 @@ export interface DialogProps {
   initialFocus?: () => HTMLElement | null
   children?: ReactNode
   footer?: ReactNode
+  /** Show a visible × close button in the title row (T32 U15). */
+  closeButton?: boolean
 }
 
-export function Dialog({ open, title, onClose, initialFocus, children, footer }: DialogProps) {
+export function Dialog({ open, title, onClose, initialFocus, children, footer, closeButton }: DialogProps) {
   const titleId = useId()
   const panel = useRef<HTMLDivElement>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -85,9 +87,20 @@ export function Dialog({ open, title, onClose, initialFocus, children, footer }:
         className="ac-dialog"
         onKeyDown={onKeyDown}
       >
-        <h2 id={titleId} className="ac-dialog__title">
-          {title}
-        </h2>
+        {closeButton ? (
+          <div className="ac-dialog__head">
+            <h2 id={titleId} className="ac-dialog__title">
+              {title}
+            </h2>
+            <button type="button" className="ac-dialog__close" aria-label="Close" title="Close (Esc)" onClick={onClose}>
+              {'×'}
+            </button>
+          </div>
+        ) : (
+          <h2 id={titleId} className="ac-dialog__title">
+            {title}
+          </h2>
+        )}
         <div className="ac-dialog__body">{children}</div>
         {footer && <div className="ac-dialog__footer">{footer}</div>}
       </div>

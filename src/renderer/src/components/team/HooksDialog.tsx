@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { HooksStatus } from '@shared/types'
+import type { HookEventName, HooksStatus } from '@shared/types'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
 import { ErrorBanner } from '../ui/ErrorBanner'
@@ -22,6 +22,26 @@ export function hooksLabel(h: HooksStatus | null): string {
       return 'n/a'
   }
 }
+
+/** Hook events Agent Console registers (read-only preview shown before Install, T32 U15). */
+export const HOOK_EVENTS = [
+  'SessionStart',
+  'SessionEnd',
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'PermissionRequest',
+  'PermissionDenied',
+  'Notification',
+  'Stop',
+  'StopFailure',
+  'SubagentStart',
+  'SubagentStop',
+  'TeammateIdle',
+  'TaskCreated',
+  'TaskCompleted'
+] as const satisfies readonly HookEventName[]
 
 const STATE_TEXT: Record<string, string> = {
   installed: 'Installed - the hooks are active for this project.',
@@ -67,6 +87,9 @@ export function HooksDialog({ open, onClose }: { open: boolean; onClose: () => v
   const state = hooks?.state ?? 'unavailable'
   const canInstall = !!root && hooks !== null && state !== 'unavailable'
   const canUninstall = canInstall && state !== 'not-installed'
+  // One action per state: Install when nothing is installed, Uninstall when it is; both only when partly installed.
+  const showInstall = state !== 'installed'
+  const showUninstall = state !== 'not-installed' && state !== 'unavailable'
 
   const footer = preview ? (
     <>
@@ -76,11 +99,19 @@ export function HooksDialog({ open, onClose }: { open: boolean; onClose: () => v
       </Button>
     </>
   ) : (
-    <Button onClick={close}>Close</Button>
+    <Button id="ac-hooks-close" onClick={close}>
+      Close
+    </Button>
   )
 
   return (
-    <Dialog open={open} title="Agent Console hooks" onClose={close} footer={footer}>
+    <Dialog
+      open={open}
+      title="Agent Console hooks"
+      onClose={close}
+      footer={footer}
+      initialFocus={() => document.getElementById('ac-hooks-close')}
+    >
       <div className="hooks">
         <p className="hooks__state">
           <strong>Hooks: {hooksLabel(hooks)}</strong>
@@ -98,14 +129,24 @@ export function HooksDialog({ open, onClose }: { open: boolean; onClose: () => v
             Settings file: <code title={hooks.settingsPath}>{hooks.settingsPath}</code>
           </p>
         )}
+        {!preview && showInstall && state !== 'unavailable' && (
+          <div className="hooks__events">
+            <div className="hooks__label">Events it adds ({HOOK_EVENTS.length}, read-only)</div>
+            <p className="hooks__eventlist">{HOOK_EVENTS.join(' · ')}</p>
+          </div>
+        )}
         {!preview && (
           <div className="hooks__actions">
-            <Button disabled={!canInstall} onClick={() => void startPreview('install')}>
-              Install
-            </Button>
-            <Button disabled={!canUninstall} onClick={() => void startPreview('uninstall')}>
-              Uninstall
-            </Button>
+            {showInstall && (
+              <Button disabled={!canInstall} onClick={() => void startPreview('install')}>
+                Install
+              </Button>
+            )}
+            {showUninstall && (
+              <Button disabled={!canUninstall} onClick={() => void startPreview('uninstall')}>
+                Uninstall
+              </Button>
+            )}
           </div>
         )}
         {error && (

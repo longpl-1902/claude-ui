@@ -70,45 +70,52 @@ describe('R-08 TeamHeader', () => {
     render(<TeamHeader />)
     expect(screen.getByText('Agent Console')).toBeInTheDocument()
     expect(screen.getByText(/acme\/sheet-automation/)).toBeInTheDocument()
-    expect(screen.getByText(/team: sheet-export/)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Session' })).toHaveAttribute('title', expect.stringContaining('sheet-export'))
     expect(screen.getByText('you@company.com')).toBeInTheDocument()
     const chip = screen.getByRole('button', { name: 'Account: Company (you@company.com). Manage accounts' })
     expect(chip).toBeInTheDocument()
   })
 
-  it('uses a 20px chip avatar and a decorative separator', () => {
-    const { container } = render(<TeamHeader />)
+  it('uses a 20px chip avatar', () => {
+    render(<TeamHeader />)
     const avatar = screen.getByRole('button', { name: /Manage accounts/ }).firstElementChild as HTMLElement
     expect(avatar.style.width).toBe('20px')
     expect(avatar.style.height).toBe('20px')
-    expect(container.querySelector('.ac-header__sep')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('shows the counters: 6 agents, 3 running, 1 needs you, Tokens 1.12M', () => {
+  it('shows the scoped counters in the "..." menu: 6 agents, 3 running, 1 needs you, 1.12M tok (T32 U3)', async () => {
     const { container } = render(<TeamHeader />)
-    expect(container).toHaveTextContent(/6\s*agents/)
-    expect(container).toHaveTextContent(/3\s*running/)
-    expect(container).toHaveTextContent(/1\s*needs you/)
-    expect(container).toHaveTextContent(/Tokens\s*1\.12M/)
+    expect(container).not.toHaveTextContent(/6\s*agents/)
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    const menu = screen.getByRole('menu')
+    expect(menu).toHaveTextContent(/This session:\s*6\s*agents/)
+    expect(menu).toHaveTextContent(/3\s*running/)
+    expect(menu).toHaveTextContent(/1\s*need you/)
+    expect(menu).toHaveTextContent(/1\.12M\s*tok/)
+    expect(menu).toHaveTextContent(/All projects today:/)
   })
 
-  it('has the Pause all and + New teammate buttons', () => {
+  it('has + New teammate in the row and Pause all in the "..." menu', async () => {
     render(<TeamHeader />)
-    expect(screen.getByRole('button', { name: 'Pause all' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+ New teammate' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause all' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    expect(screen.getByRole('menuitem', { name: 'Pause all' })).toBeInTheDocument()
   })
 
   it('Pause all calls window.api.team.pauseAll', async () => {
     const pauseAll = vi.fn().mockResolvedValue({ ok: false, reason: 'not-implemented' })
     ;(window as unknown as { api: unknown }).api = { team: { pauseAll } }
     render(<TeamHeader />)
-    await userEvent.click(screen.getByRole('button', { name: 'Pause all' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Pause all' }))
     expect(pauseAll).toHaveBeenCalledTimes(1)
   })
 
   it('Pause all and + New teammate do not throw without window.api', async () => {
     render(<TeamHeader />)
-    await userEvent.click(screen.getByRole('button', { name: 'Pause all' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Pause all' }))
     await userEvent.click(screen.getByRole('button', { name: '+ New teammate' }))
   })
 

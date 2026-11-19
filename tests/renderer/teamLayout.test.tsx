@@ -2,6 +2,8 @@
 import './jestDom'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TeamView } from '@renderer/screens/TeamView'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
@@ -87,40 +89,45 @@ describe('TeamView horizontal splitters', () => {
 
   it('uses the documented defaults and mins', () => {
     render(<TeamView />) // no ResizeObserver in jsdom: container = window.innerHeight (1000)
-    expect(now(grid())).toBe(450)
-    expect(grid()).toHaveAttribute('aria-valuemin', '120')
-    expect(now(cons())).toBe(240)
-    expect(cons()).toHaveAttribute('aria-valuemin', '120')
+    // T32 U5: grid = 40 % of the column, console takes what the grid and a 150 px timeline leave, mins 96 / 220
+    expect(now(grid())).toBe(400)
+    expect(grid()).toHaveAttribute('aria-valuemin', '96')
+    expect(now(cons())).toBe(438)
+    expect(cons()).toHaveAttribute('aria-valuemin', '220')
     expect(now(wt())).toBe(500)
     expect(wt()).toHaveAttribute('aria-valuemin', '80')
     expect(now(insp())).toBe(260)
     expect(insp()).toHaveAttribute('aria-valuemin', '120')
-    expect(document.getElementById('ac-pane-grid')!.style.height).toBe('450px')
+    expect(document.getElementById('ac-pane-grid')!.style.height).toBe('400px')
   })
 
   it('keyboard: arrows, Shift, Home/End, Enter and double-click reset', () => {
     render(<TeamView />)
     fireEvent.keyDown(grid(), { key: 'ArrowDown' })
-    expect(now(grid())).toBe(466)
+    expect(now(grid())).toBe(416)
     fireEvent.keyDown(grid(), { key: 'ArrowUp', shiftKey: true })
-    expect(now(grid())).toBe(402)
+    expect(now(grid())).toBe(352)
     fireEvent.keyDown(grid(), { key: 'Home' })
-    expect(now(grid())).toBe(120)
+    expect(now(grid())).toBe(96)
     fireEvent.keyDown(grid(), { key: 'ArrowUp' })
-    expect(now(grid())).toBe(120)
+    expect(now(grid())).toBe(96)
     fireEvent.keyDown(grid(), { key: 'Enter' })
-    expect(now(grid())).toBe(450)
+    expect(now(grid())).toBe(400)
     fireEvent.keyDown(grid(), { key: 'End' })
-    expect(now(grid())).toBe(1000 - 12 - 60 - 240)
+    // growing the grid pushes the console down to its minimum
+    expect(now(grid())).toBe(1000 - 12 - 60 - 220)
+    expect(now(cons())).toBe(220)
     fireEvent.doubleClick(grid())
-    expect(now(grid())).toBe(450)
+    expect(now(grid())).toBe(400)
+    fireEvent.keyDown(cons(), { key: 'Enter' })
+    expect(now(cons())).toBe(438)
 
     // the console handle sits above its pane: ArrowUp grows it
     fireEvent.keyDown(cons(), { key: 'ArrowUp' })
-    expect(now(cons())).toBe(256)
+    expect(now(cons())).toBe(454)
     fireEvent.keyDown(cons(), { key: 'ArrowDown', shiftKey: true })
-    expect(now(cons())).toBe(192)
-    expect(document.getElementById('ac-pane-console')!.style.height).toBe('192px')
+    expect(now(cons())).toBe(390)
+    expect(document.getElementById('ac-pane-console')!.style.height).toBe('390px')
 
     fireEvent.keyDown(insp(), { key: 'ArrowDown' })
     expect(now(insp())).toBe(276)
@@ -133,13 +140,13 @@ describe('TeamView horizontal splitters', () => {
     fireEvent.pointerDown(grid(), { clientY: 500, button: 0, pointerId: 1 })
     expect(document.body.style.userSelect).toBe('none')
     fireEvent.pointerMove(grid(), { clientY: 440, pointerId: 1 })
-    expect(now(grid())).toBe(390)
+    expect(now(grid())).toBe(340)
     fireEvent.pointerUp(grid(), { pointerId: 1 })
     expect(document.body.style.userSelect).toBe('')
 
     fireEvent.pointerDown(cons(), { clientY: 700, button: 0, pointerId: 2 })
     fireEvent.pointerMove(cons(), { clientY: 650, pointerId: 2 })
-    expect(now(cons())).toBe(290)
+    expect(now(cons())).toBe(488)
     fireEvent.pointerUp(cons(), { pointerId: 2 })
   })
 
@@ -148,19 +155,19 @@ describe('TeamView horizontal splitters', () => {
     fireEvent.keyDown(grid(), { key: 'ArrowDown', shiftKey: true })
     fireEvent.keyDown(insp(), { key: 'ArrowDown' })
     const stored = JSON.parse(window.localStorage.getItem(KEY)!)
-    expect(stored).toEqual({ grid: 514, inspectorTop: 276 })
+    expect(stored).toEqual({ grid: 464, inspectorTop: 276 })
     unmount()
     render(<TeamView />)
-    expect(now(grid())).toBe(514)
+    expect(now(grid())).toBe(464)
     expect(now(insp())).toBe(276)
-    expect(now(cons())).toBe(240)
+    expect(now(cons())).toBe(438)
   })
 
   it.each(['not json', 'null', '[]', '{"grid":"x","console":null}'])('falls back to defaults for %s', (raw) => {
     window.localStorage.setItem(KEY, raw)
     render(<TeamView />)
-    expect(now(grid())).toBe(450)
-    expect(now(cons())).toBe(240)
+    expect(now(grid())).toBe(400)
+    expect(now(cons())).toBe(438)
   })
 
   it('survives a throwing storage', () => {
@@ -172,7 +179,7 @@ describe('TeamView horizontal splitters', () => {
     })
     render(<TeamView />)
     fireEvent.keyDown(grid(), { key: 'ArrowDown' })
-    expect(now(grid())).toBe(466)
+    expect(now(grid())).toBe(416)
   })
 
   it('clamps to the measured container so the other panes keep their minimums', () => {
@@ -184,7 +191,7 @@ describe('TeamView horizontal splitters', () => {
           this.cb = cb
         }
         observe(el: Element) {
-          const h = el.tagName === 'MAIN' ? 500 : 400
+          const h = el.id === 'ac-center-panel' ? 500 : 400
           this.cb([{ contentRect: { height: h } }])
         }
         disconnect() {}
@@ -193,18 +200,18 @@ describe('TeamView horizontal splitters', () => {
     )
     window.localStorage.setItem(KEY, JSON.stringify({ grid: 9999, console: 9999, worktrees: 9999, inspectorTop: 9999 }))
     render(<TeamView />)
-    // center 500: room = 500 - 12 - 60 = 428; console <= 428 - 120, grid keeps its min
-    expect(now(cons())).toBe(308)
-    expect(now(grid())).toBe(120)
-    expect(grid()).toHaveAttribute('aria-valuemax', '120')
+    // center panel 500: room = 500 - 12 - 60 = 428; console <= 428 - 96, grid keeps its min
+    expect(now(cons())).toBe(332)
+    expect(now(grid())).toBe(96)
+    expect(grid()).toHaveAttribute('aria-valuemax', '208')
     // left 400: worktrees <= 400 - 6 - 80
     expect(now(wt())).toBe(314)
     // right 400: inspector top <= 400 - 6 - 120
     expect(now(insp())).toBe(274)
     fireEvent.keyDown(cons(), { key: 'Home' })
-    expect(now(cons())).toBe(120)
+    expect(now(cons())).toBe(220)
     fireEvent.keyDown(grid(), { key: 'End' })
-    expect(now(grid())).toBe(308)
+    expect(now(grid())).toBe(208)
   })
 })
 
@@ -270,6 +277,28 @@ describe('narrow window (matchMedia)', () => {
     expect(toggle).toHaveFocus()
   })
 
+  it('T32 U11: the Projects and Inspector toggles are header buttons; nothing floats over the content', () => {
+    const { container } = render(<TeamView />)
+    const header = container.querySelector('header') as HTMLElement
+    expect(within(header).getByRole('button', { name: 'Projects' })).toHaveAttribute('title', expect.stringContaining('Ctrl+B'))
+    expect(within(header).getByRole('button', { name: 'Inspector' })).toHaveAttribute('title', expect.stringContaining('Ctrl+I'))
+    expect(container.querySelector('.ac-team__drawer-toggle, .ac-team__ldrawer-toggle')).toBeNull()
+    for (const file of ['screens/TeamView.css', 'components/rail/rail.css']) {
+      const css = readFileSync(resolve(__dirname, '../../src/renderer/src', file), 'utf8')
+      expect(css).not.toMatch(/drawer-toggle/)
+    }
+  })
+
+  it('T32 U11: the Projects button opens the left drawer and focus returns to it on Escape', async () => {
+    render(<TeamView />)
+    const toggle = screen.getByRole('button', { name: 'Projects' })
+    await userEvent.click(toggle)
+    expect(screen.getByRole('dialog', { name: 'Projects, worktrees and tasks' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Projects, worktrees and tasks' })).toBeNull()
+    expect(toggle).toHaveFocus()
+  })
+
   it('opens the drawer when another agent is selected', () => {
     render(<TeamView />)
     expect(screen.queryByRole('dialog', { name: 'Agent inspector' })).toBeNull()
@@ -280,7 +309,7 @@ describe('narrow window (matchMedia)', () => {
   it('horizontal splitters still work and there is no inspector column', () => {
     const { container } = render(<TeamView />)
     fireEvent.keyDown(grid(), { key: 'ArrowDown' })
-    expect(now(grid())).toBe(Math.round(700 * 0.45) + 16)
+    expect(now(grid())).toBe(Math.round(700 * 0.4) + 16)
     expect(container.querySelector('.ac-team__right:not(.ac-team__right--drawer)')).toBeNull()
   })
 })

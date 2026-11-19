@@ -162,7 +162,7 @@ function InboxRow({ item, onGo }: { item: AttentionItem; onGo: () => void }): JS
 }
 
 /** Header button "● N need you" + the global inbox. Works on every screen (F4). */
-export function NeedsYouButton(): JSX.Element {
+export function NeedsYouButton({ inSession }: { inSession?: number } = {}): JSX.Element {
   const snapshot = useAttentionStore((s) => s.snapshot)
   const setDnd = useAttentionStore((s) => s.setDnd)
   const dnd = useAttentionStore((s) => s.prefs.dnd)
@@ -183,7 +183,7 @@ export function NeedsYouButton(): JSX.Element {
         className={`ac-needs${blocked.length > 0 ? ' is-hot' : ''}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={ready.length > 0 ? `${ready.length} ready for you` : 'Global: every project and account'}
+        title={[`${blocked.length} across all projects`, inSession !== undefined ? `${inSession} in this session` : '', ready.length > 0 ? `${ready.length} ready for you` : ''].filter(Boolean).join(' · ')}
         onClick={() => setOpen(true)}
       >
         <span className="ac-needs__dot" aria-hidden="true">
@@ -195,6 +195,7 @@ export function NeedsYouButton(): JSX.Element {
       <Dialog
         open={open}
         title="Needs you"
+        closeButton
         onClose={() => setOpen(false)}
         footer={
           <div className="ac-inbox__footer">

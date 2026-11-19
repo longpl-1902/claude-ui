@@ -142,3 +142,23 @@
 .ac-tc-done-row:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 1px; }
 .ac-tc-done-row__show { margin-left: auto; color: var(--ac-accent); }
 @media (max-width: 899px) { .ac-card--compact .ac-card__meta--inline span:last-child { display: none; } }
+
+/* T32 U12: timeline legend folds into a button in a narrow column; collapse toggle */
+.ac-tc-panel { container-type: inline-size; }
+.ac-tc-legend-chips { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 12px; white-space: nowrap; }
+.ac-tc-legend-btn { display: none; min-height: 24px; padding: 0 8px; border: 1px solid var(--ac-border-btn); border-radius: 6px; background: transparent; color: var(--ac-text-muted); font: inherit; font-size: 11px; cursor: help; }
+@container (max-width: 1299px) {
+  .ac-tc-legend-chips { display: none; }
+  .ac-tc-legend-btn { display: inline-flex; align-items: center; }
+}
+.ac-tc-tl-toggle { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--ac-text-muted); font: inherit; cursor: pointer; }
+.ac-tc-tl-toggle:hover { background: var(--ac-bg-btn-hover); }
+.ac-tc-tl { min-width: 320px; }
+
+/* T32 U8: agent column = 140 px, colour dot + name in the text colour (hue never carries the text contrast) */
+.ac-tc-line__who { flex: 0 0 140px; display: inline-flex; align-items: center; gap: 6px; color: var(--ac-text); }
+.ac-tc-line__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.ac-tc-line--notice .ac-tc-line__who, .ac-tc-line--thinking .ac-tc-line__who { color: var(--ac-text-subtle); }
+/* T32 U7: not-controllable session: one line + one primary action */
+.ac-tc-external { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 16px 12px; }
+.ac-tc-external p { margin: 0; flex: 1 1 240px; }

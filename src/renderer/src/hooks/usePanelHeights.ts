@@ -7,10 +7,16 @@ export type PaneGroup = 'center' | 'left' | 'right'
 
 /** Height of one splitter handle. */
 export const HANDLE_H = 6
-export const GRID_MIN = 120
-export const CONSOLE_MIN = 120
+/** T32 U5: rows of the center grid are [agents minmax(96px, grid)] [timeline auto] [console minmax(220px, 1fr)]. */
+export const GRID_MIN = 96
+export const CONSOLE_MIN = 220
 export const CONSOLE_DEF = 240
 export const TIMELINE_MIN = 60
+/** Timeline row when it is open by default; below TIMELINE_OPEN_MIN_H of column height it starts collapsed. */
+export const TIMELINE_DEF = 150
+export const TIMELINE_OPEN_MIN_H = 800
+/** The agent grid never takes more than this share of the column by default. */
+export const GRID_MAX_SHARE = 0.4
 export const WORKTREES_MIN = 80
 /** Minimum for the shared-task pane below the worktrees. */
 export const TASKS_MIN = 80
@@ -57,9 +63,13 @@ function save(r: Raw): void {
 function defOf(key: PaneKey, h: Heights): number {
   switch (key) {
     case 'grid':
-      return Math.round(h.center * 0.45)
+      return Math.max(GRID_MIN, Math.round(h.center * GRID_MAX_SHARE))
     case 'console':
-      return CONSOLE_DEF
+      // The console takes what the grid and the timeline leave.
+      return Math.max(
+        CONSOLE_DEF,
+        h.center - 2 * HANDLE_H - Math.max(GRID_MIN, Math.round(h.center * GRID_MAX_SHARE)) - (h.center >= TIMELINE_OPEN_MIN_H ? TIMELINE_DEF : TIMELINE_MIN)
+      )
     case 'worktrees':
       return Math.round(h.left * 0.5)
     case 'inspectorTop':
@@ -89,10 +99,12 @@ export function fitHeights(raw: Raw, h: Heights): Record<PaneKey, number> {
 function maxOf(key: PaneKey, v: Record<PaneKey, number>, h: Heights): number {
   const centerRoom = h.center - 2 * HANDLE_H - TIMELINE_MIN
   switch (key) {
+    // Growing one of the pair pushes the other down to its minimum (T32 U5), so each may use all the room but the
+    // other's minimum.
     case 'grid':
-      return Math.max(GRID_MIN, centerRoom - v.console)
+      return Math.max(GRID_MIN, centerRoom - CONSOLE_MIN)
     case 'console':
-      return Math.max(CONSOLE_MIN, centerRoom - v.grid)
+      return Math.max(CONSOLE_MIN, centerRoom - GRID_MIN)
     case 'worktrees':
       return Math.max(WORKTREES_MIN, h.left - HANDLE_H - TASKS_MIN)
     case 'inspectorTop':
@@ -177,10 +189,14 @@ export function usePanelHeights(observe = true) {
   const max = (key: PaneKey): number => maxOf(key, values, h)
   const def = (key: PaneKey): number => clamp(defOf(key, h), MINS[key], maxOf(key, values, h))
   const set = (key: PaneKey, v: number): void => {
-    const next: Raw = { ...raw, [key]: clamp(Math.round(v), MINS[key], maxOf(key, values, h)) }
+    const nv = clamp(Math.round(v), MINS[key], maxOf(key, values, h))
+    const next: Raw = { ...raw, [key]: nv }
+    const room = h.center - 2 * HANDLE_H - TIMELINE_MIN
+    if (key === 'grid' && nv + values.console > room) next.console = Math.max(CONSOLE_MIN, room - nv)
+    if (key === 'console' && nv + values.grid > room) next.grid = Math.max(GRID_MIN, room - nv)
     setRaw(next)
     save(next)
   }
 
-  return { values, max, set, def, bind }
+  return { values, max, set, def, bind, centerHeight: h.center }
 }

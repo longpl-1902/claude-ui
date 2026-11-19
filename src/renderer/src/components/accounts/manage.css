@@ -21,3 +21,14 @@
 .ac-acc-table__fixed td { color: var(--ac-text-muted); font-style: italic; }
 .ac-acc-empty-block { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .ac-acc-error--banner { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid currentColor; border-radius: 6px; }
+
+/* T32 U13 / U14: row "..." menu (shared by Extensions and Accounts) */
+.ac-rowmenu { position: relative; display: inline-flex; }
+.ac-rowmenu__btn { min-width: 32px; min-height: 32px; padding: 0 8px; border: 1px solid var(--ac-border-btn); border-radius: var(--ac-radius-control); background: var(--ac-bg-btn); color: var(--ac-text); font: inherit; cursor: pointer; }
+.ac-rowmenu__btn:hover { background: var(--ac-bg-btn-hover); }
+.ac-rowmenu__btn:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
+.ac-rowmenu__menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; min-width: 160px; padding: 4px; background: var(--ac-bg-panel); border: 1px solid var(--ac-border-btn); border-radius: 8px; box-shadow: var(--ac-shadow-lg); }
+.ac-rowmenu__item { min-height: 32px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap; }
+.ac-rowmenu__item.is-danger { color: var(--ac-danger-text); }
+.ac-rowmenu__item:hover, .ac-rowmenu__item:focus-visible { background: var(--ac-bg-btn-hover); outline: none; }
+

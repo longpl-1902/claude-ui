@@ -164,7 +164,7 @@ export function ProjectRail({ compact = false, inDrawer = false, onPicked }: Pro
     const pinned = pins.includes(p.key)
     const muted = prefs.mutedProjects.includes(p.key)
     const badgeText =
-      worst === 'needs' ? String(p.needsYou) : worst === 'running' ? String(p.running) : String(p.waiting + idleN || '')
+      worst === 'needs' ? String(p.needsYou) : worst === 'running' ? '' : String(p.waiting + idleN || '')
     const state =
       worst === 'needs'
         ? `${p.needsYou} need you`
@@ -203,14 +203,20 @@ export function ProjectRail({ compact = false, inDrawer = false, onPicked }: Pro
             {initials(p.name)}
             {worst !== 'none' && (
               <span
-                className={`ac-rail__badge ac-rail__badge--${worst}${reduced ? '' : ' is-animated'}`}
+                className={`ac-rail__badge ac-rail__badge--${worst}${worst === 'running' ? ' is-dot' : ''}${reduced ? '' : ' is-animated'}`}
                 data-testid={`badge-${p.key}`}
                 data-state={worst}
               >
                 {badgeText}
               </span>
             )}
-            {partial && <span className="ac-rail__ring" data-testid={`partial-${p.key}`} />}
+            {partial && (
+              <span
+                className="ac-rail__ring"
+                data-testid={`partial-${p.key}`}
+                title="Hooks not installed: sub-agent prompts not detected"
+              />
+            )}
           </span>
           {expanded && (
             <span className="ac-rail__text">

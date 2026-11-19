@@ -145,8 +145,7 @@
 
 /* Collapse / expand controls. */
 .ac-team__collapse,
-.ac-team__strip-btn,
-.ac-team__drawer-toggle {
+.ac-team__strip-btn {
   min-width: 28px;
   min-height: 28px;
   background: var(--ac-bg-btn);
@@ -167,8 +166,7 @@
 }
 
 .ac-team__collapse:hover,
-.ac-team__strip-btn:hover,
-.ac-team__drawer-toggle:hover {
+.ac-team__strip-btn:hover {
   background: var(--ac-bg-btn-hover);
 }
 
@@ -191,7 +189,7 @@
   border-left: 1px solid var(--ac-border);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1439px) {
   .ac-team__scrim {
     position: fixed;
     inset: 0;
@@ -216,16 +214,6 @@
 
   .ac-team__right--drawer:focus {
     outline: none;
-  }
-
-  .ac-team__drawer-toggle {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    z-index: 120;
-    min-height: 40px;
-    padding: 0 16px;
-    box-shadow: var(--ac-shadow-md);
   }
 }
 
@@ -272,6 +260,31 @@
     margin-bottom: 12px;
   }
   .ac-team__strip {
+    min-height: 0;
+  }
+
+  /* T32 U5: no nested scrollbars in the center column. The column never scrolls; only the agent list (grid pane) and
+     the console log scroll, so the composer and "Fork here" always stay in view. */
+  #ac-pane-console {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #ac-pane-console > .ac-tc-console {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  #ac-pane-console .ac-tc-log {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+  #ac-pane-console .ac-tc-raw {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+  .ac-pane--timeline {
     min-height: 0;
   }
 }

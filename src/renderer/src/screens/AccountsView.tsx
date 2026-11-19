@@ -7,9 +7,10 @@ import { AccountsHeader } from '@renderer/components/accounts/AccountsHeader'
 import { DetectedLogins } from '@renderer/components/accounts/DetectedLogins'
 import { FolderRules } from '@renderer/components/accounts/FolderRules'
 import { RunningNow } from '@renderer/components/accounts/RunningNow'
+import { ErrorBoundary } from '@renderer/components/ui/ErrorBoundary'
 import './AccountsView.css'
 
-export function AccountsView() {
+function AccountsViewContent() {
   const [adding, setAdding] = useState(false)
   const accountsError = useConsoleStore((s) => s.accountsError)
   const clearAccountsError = useConsoleStore((s) => s.clearAccountsError)
@@ -40,5 +41,13 @@ export function AccountsView() {
         <RunningNow />
       </main>
     </div>
+  )
+}
+
+export function AccountsView() {
+  return (
+    <ErrorBoundary label="The accounts view">
+      <AccountsViewContent />
+    </ErrorBoundary>
   )
 }

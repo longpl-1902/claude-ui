@@ -172,11 +172,12 @@ describe('T33 ChatView', () => {
     expect(screen.getByText(`to @${name}`)).toBeInTheDocument()
   })
 
-  it('external session: composer disabled with the reason', () => {
+  it('external session: no composer, one line with the reason and one action (T32 U7)', () => {
     seed()
     render(<ChatView />)
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled()
-    expect(screen.getByText(/Switch to Team view to resume or fork/)).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull()
+    expect(screen.getByText(/Agent Console can't type into it/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fork it in Team view' })).toBeInTheDocument()
   })
 
   it('pending permission is pinned above the composer and answered through the store', async () => {

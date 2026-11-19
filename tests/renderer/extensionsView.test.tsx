@@ -209,9 +209,25 @@ describe('T30 Extensions screen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Install…' }))
     expect(api.plugins.preview).toHaveBeenCalledWith(expect.any(String), 'install', 'foo@bar')
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
-    await userEvent.click(screen.getByRole('button', { name: /^Uninstall acme/ }))
+    // T32 U13: Uninstall... moved into the row's "..." menu.
+    await userEvent.click(screen.getByRole('button', { name: /^More actions for acme/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Uninstall acme/ }))
     expect(api.plugins.preview).toHaveBeenCalledWith(expect.any(String), 'uninstall', 'acme@market')
     expect(api.cli.apply).not.toHaveBeenCalled()
+  })
+
+  it('T32 U13: inputs and selects use the themed classes, the header has needs-you, the path hints under Project', async () => {
+    render(<ExtensionsView />)
+    await screen.findByText('acme')
+    expect(screen.getByLabelText('Plugin to install')).toHaveClass('ac-acc-text')
+    expect(screen.getByLabelText('Search catalog')).toHaveClass('ac-acc-text')
+    expect(screen.getByRole('combobox', { name: 'Project' })).toHaveClass('ac-acc-select')
+    expect(screen.getByRole('combobox', { name: 'Account' })).toHaveClass('ac-acc-select')
+    expect(screen.getByRole('button', { name: /need you/ })).toBeInTheDocument()
+    expect(document.querySelector('.ac-ext-ctx__project .ac-ext-note')).not.toBeNull()
+    // Enable/Disable stays visible; Uninstall... is only in the row menu
+    expect(screen.queryByRole('button', { name: /^Uninstall acme/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /^(Enable|Disable) acme/ })).toBeInTheDocument()
   })
 
   it('catalog: tabs, search, scope badge and open', async () => {
@@ -302,7 +318,9 @@ describe('T30 route, header entry and shortcut', () => {
     mockMatchMedia(1500)
     useConsoleStore.setState({ screen: 'team' })
     render(<TeamHeader />)
-    await userEvent.click(screen.getByRole('button', { name: 'Extensions' }))
+    // T32 U4: Extensions lives in the header's "..." menu at every width.
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Extensions' }))
     expect(useConsoleStore.getState().screen).toBe('extensions')
   })
 

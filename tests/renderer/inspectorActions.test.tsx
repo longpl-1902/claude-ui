@@ -114,6 +114,16 @@ afterEach(() => {
 })
 
 const btn = (name: string | RegExp): HTMLElement => screen.getByRole('button', { name })
+/** T32 U15: Stop lives in the inspector's "..." menu. */
+const stopItem = async (name: string | RegExp): Promise<HTMLElement> => {
+  await userEvent.click(btn('More actions'))
+  return screen.getByRole('menuitem', { name })
+}
+/** T32 U4: the secondary header actions live in the "..." menu. */
+const headerItem = async (name: string | RegExp): Promise<HTMLElement> => {
+  await userEvent.click(btn('More header actions'))
+  return screen.getByRole('menuitem', { name })
+}
 
 describe('UX M4 viewed-session account', () => {
   it('a personal-account session shows the personal colour while the default account is the company one', () => {
@@ -143,46 +153,43 @@ describe('UX M4 viewed-session account', () => {
 })
 
 describe('inspector action matrix', () => {
-  it('demo: all four enabled and unchanged', () => {
+  it('demo: all actions enabled; Stop is in the "..." menu', async () => {
     seedDemoTeam()
     render(<Inspector />)
-    for (const n of ['Message agent', 'Pause', 'Stop']) expect(btn(n)).toBeEnabled()
+    for (const n of ['Message agent', 'Pause']) expect(btn(n)).toBeEnabled()
+    expect(await stopItem('Stop')).toBeEnabled()
   })
 
-  it('external idle: nothing can act, Stop process is disabled as not running', () => {
+  it('external idle: nothing can act, so no action is shown (T32 U15)', () => {
     seedLive()
     seedSessions({ live: false })
     render(<Inspector />)
-    expect(btn('Message agent')).toBeDisabled()
-    expect(btn('Message agent')).toHaveAttribute('title', expect.stringContaining('no API to send it messages'))
-    expect(btn('Pause')).toBeDisabled()
-    expect(btn('Stop process…')).toBeDisabled()
-    expect(btn('Stop process…')).toHaveAttribute('title', 'This session is not running')
+    expect(screen.queryByRole('button', { name: 'Message agent' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull()
   })
 
-  it('external live with a pid: only Stop process is enabled; without a pid it says so', () => {
+  it('external live with a pid: only Stop process is offered; without a pid nothing is', async () => {
     seedLive()
     seedSessions({ live: true, registryPid: 4242, entrypoint: 'claude-vscode' })
     const { unmount } = render(<Inspector />)
-    expect(btn('Message agent')).toBeDisabled()
-    expect(btn('Pause')).toBeDisabled()
-    expect(btn('Stop process…')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Message agent' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+    expect(await stopItem('Stop process…')).toHaveAttribute('title', 'Ends this Claude Code process (asks first)')
     unmount()
     seedSessions({ live: true })
     render(<Inspector />)
-    expect(btn('Stop process…')).toBeDisabled()
-    expect(btn('Stop process…')).toHaveAttribute('title', 'Process id unknown')
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull()
   })
 
-  it('controlled idle: Message and Stop work, Pause is disabled as idle', () => {
+  it('controlled idle: Message and Stop work, Pause is not shown while idle', async () => {
     seedLive()
     seedSessions()
     useControlStore.setState({ sessions: [ctl()] })
     render(<Inspector />)
     expect(btn('Message agent')).toBeEnabled()
-    expect(btn('Pause')).toBeDisabled()
-    expect(btn('Pause')).toHaveAttribute('title', expect.stringContaining('idle'))
-    expect(btn('Stop')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+    expect(await stopItem('Stop')).toBeEnabled()
   })
 
   it('controlled busy: Pause interrupts the control session; a sub-agent tooltip says the whole turn', async () => {
@@ -201,7 +208,7 @@ describe('inspector action matrix', () => {
     seedSessions({ live: false })
     useControlStore.setState({ sessions: [ctl({ state: 'exited' })] })
     render(<Inspector />)
-    expect(btn('Message agent')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Message agent' })).toBeNull()
   })
 })
 
@@ -249,13 +256,13 @@ describe('Stop', () => {
     seedSessions()
     useControlStore.setState({ sessions: [ctl()] })
     const { unmount } = render(<Inspector />)
-    await userEvent.click(btn('Stop'))
+    await userEvent.click(await stopItem('Stop'))
     expect(control.stop).toHaveBeenCalledWith('c1')
     unmount()
     control.stop.mockClear()
     useControlStore.setState({ sessions: [ctl({ state: 'busy' })] })
     render(<Inspector />)
-    await userEvent.click(btn('Stop'))
+    await userEvent.click(await stopItem('Stop'))
     expect(control.stop).not.toHaveBeenCalled()
     const dlg = screen.getByRole('dialog')
     await userEvent.click(within(dlg).getByRole('button', { name: 'Stop session' }))
@@ -266,7 +273,7 @@ describe('Stop', () => {
     seedLive()
     seedSessions({ live: true, registryPid: 4242, entrypoint: 'claude-vscode' })
     render(<Inspector />)
-    await userEvent.click(btn('Stop process…'))
+    await userEvent.click(await stopItem('Stop process…'))
     expect(killExternal).not.toHaveBeenCalled()
     const dlg = screen.getByRole('dialog')
     for (const t of ['alpha', 'Fix the build', '4242', 'Company', 'VS Code extension', 'The transcript is kept; the turn in progress is lost'])
@@ -276,7 +283,7 @@ describe('Stop', () => {
     expect(killExternal).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).toBeNull()
 
-    await userEvent.click(btn('Stop process…'))
+    await userEvent.click(await stopItem('Stop process…'))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Stop process' }))
     expect(killExternal).toHaveBeenCalledTimes(1)
     expect(killExternal).toHaveBeenCalledWith({ accountId: 'company', sessionId: SID, pid: 4242 })
@@ -287,7 +294,7 @@ describe('Stop', () => {
     seedLive()
     seedSessions({ live: true, registryPid: 4242 })
     render(<Inspector />)
-    await userEvent.click(btn('Stop process…'))
+    await userEvent.click(await stopItem('Stop process…'))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Stop process' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('pid-changed')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
@@ -316,26 +323,27 @@ describe('header: scoped actions (UX S5)', () => {
       ]
     })
     render(<TeamHeader />)
-    await userEvent.click(btn('Pause all in alpha'))
+    await userEvent.click(await headerItem('Pause all in alpha'))
     expect(control.interrupt).toHaveBeenCalledTimes(1)
     expect(control.interrupt).toHaveBeenCalledWith('c1')
     expect((window.api!.team.pauseAll as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled()
   })
 
-  it('Pause all in <project> is disabled with the reason when nothing is busy', () => {
+  it('Pause all in <project> is not offered when nothing is busy (never a disabled header button)', async () => {
     seedLive()
     seedSessions()
     useControlStore.setState({ sessions: [ctl({ state: 'idle' })] })
     render(<TeamHeader />)
-    expect(btn('Pause all in alpha')).toBeDisabled()
-    expect(btn('Pause all in alpha')).toHaveAttribute('title', 'No controlled session is busy in alpha')
+    expect(screen.queryByRole('button', { name: /^Pause all/ })).toBeNull()
+    await userEvent.click(btn('More header actions'))
+    expect(screen.queryByRole('menuitem', { name: /^Pause all/ })).toBeNull()
   })
 
-  it('+ New session names project and account, opens the start form and never sends', async () => {
+  it('+ New session resolves the account by folder rule, opens the start form and never sends', async () => {
     seedLive()
     seedSessions()
     render(<TeamHeader />)
-    const b = await screen.findByRole('button', { name: '+ New session in alpha as Personal' })
+    const b = await screen.findByRole('button', { name: '+ New session' })
     await userEvent.click(b)
     expect(useControlStore.getState().startForm).toMatchObject({ open: true, cwd: ROOT, accountId: 'personal' })
     expect(resolveFolder).toHaveBeenCalledWith(ROOT)
@@ -347,17 +355,19 @@ describe('header: scoped actions (UX S5)', () => {
     seedLive()
     seedSessions()
     render(<TeamHeader />)
-    await userEvent.click(await screen.findByRole('button', { name: '+ New session in alpha as choose account' }))
+    await userEvent.click(await screen.findByRole('button', { name: '+ New session' }))
     const form = useControlStore.getState().startForm
     expect(form.open).toBe(true)
     expect(form.accountId).toBeUndefined()
   })
 
-  it('the needs-you counter is labelled "in this session"', () => {
+  it('there is one needs-you control; the per-session number is in its tooltip (T32 U3)', () => {
     seedLive()
     seedSessions()
     render(<TeamHeader />)
-    expect(document.querySelector('.is-needs')).toHaveTextContent(/needs you in this session/)
+    expect(document.querySelector('.is-needs')).toBeNull()
+    expect(screen.getAllByText(/need you/)).toHaveLength(1)
+    expect(btn(/need you/)).toHaveAttribute('title', expect.stringMatching(/across all projects · \d+ in this session/))
   })
 })
 
@@ -368,21 +378,24 @@ describe('header at narrow width (< 1300 px)', () => {
     seedSessions()
     useControlStore.setState({ sessions: [ctl({ state: 'busy' })] })
     render(<TeamHeader />)
-    expect(document.querySelector('.is-needs')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /need you/ })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Session' })).toBeInTheDocument()
     expect(btn(/Manage accounts/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Pause all/ })).toBeNull()
     expect(screen.queryByText(/Tokens/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /^\+ New session/ })).toBeNull()
 
     const more = btn('More header actions')
     expect(more).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(more)
     const menu = screen.getByRole('menu')
     expect(within(menu).getByRole('menuitem', { name: 'Pause all in alpha' })).toBeEnabled()
-    expect(within(menu).getByRole('menuitem', { name: /^\+ New session in alpha/ })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '+ New session' })).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: /^Hooks:/ })).toBeInTheDocument()
-    expect(menu).toHaveTextContent(/Tokens/)
+    expect(menu).toHaveTextContent(/This session:/)
+    expect(menu).toHaveTextContent(/tok/)
+    expect(within(menu).getByRole('menuitem', { name: 'Extensions' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Accounts' })).toBeInTheDocument()
 
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Pause all in alpha' }))
     expect(control.interrupt).toHaveBeenCalledWith('c1')
@@ -393,12 +406,14 @@ describe('header at narrow width (< 1300 px)', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('at 1440 px there is no overflow menu', () => {
+  it('at 1440 px the primary stays in the row; Hooks is only in the "..." menu', async () => {
     seedLive()
     seedSessions()
     render(<TeamHeader />)
-    expect(screen.queryByRole('button', { name: 'More header actions' })).toBeNull()
-    expect(btn(/^Hooks:/)).toBeInTheDocument()
+    expect(btn('+ New session')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Hooks:/ })).toBeNull()
+    await userEvent.click(btn('More header actions'))
+    expect(screen.getByRole('menuitem', { name: /^Hooks:/ })).toBeInTheDocument()
   })
 
   it('the inspector composer and confirm dialog render at a narrow width without the splitter props', async () => {
@@ -406,6 +421,6 @@ describe('header at narrow width (< 1300 px)', () => {
     seedLive()
     seedSessions({ live: true, registryPid: 7 })
     render(<Inspector topHeight={300} />)
-    expect(btn('Stop process…')).toBeEnabled()
+    expect(await stopItem('Stop process…')).toBeEnabled()
   })
 })

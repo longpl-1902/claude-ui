@@ -22,6 +22,8 @@ export interface OverflowPlanInput {
   /** Content-box width of the container. */
   avail: number
   moreWidth?: number
+  /** The "..." button is always rendered and already counted in fixed. */
+  moreInFixed?: boolean
 }
 
 /** Width the row needs when the first `k` steps are applied. */
@@ -44,7 +46,7 @@ export function neededWidth(inp: OverflowPlanInput, k: number): number {
       count += 1
     }
   })
-  if (anyHidden) {
+  if (anyHidden && !inp.moreInFixed) {
     total += inp.moreWidth ?? OVERFLOW_MORE_WIDTH
     count += 1
   }
@@ -79,6 +81,8 @@ export interface UseOverflowOptions {
   /** Ids of items that are not rendered right now (width 0). */
   absent?: readonly string[]
   collapse?: Readonly<Record<string, number>>
+  /** True when the "..." button is always rendered (a data-fixed item), so it is not added again once something hides. */
+  moreInFixed?: boolean
   /** Used when nothing can be measured (no layout): true = move every item into the menu. */
   fallbackNarrow: boolean
 }
@@ -89,6 +93,9 @@ export interface UseOverflowResult {
   collapsed: ReadonlySet<string>
   compact: boolean
 }
+
+/** Most re-plans one frame may apply from commits. */
+export const MAX_REPLANS = 2
 
 const px = (v: string | undefined): number => {
   const n = Number.parseFloat(v ?? '')
@@ -106,19 +113,32 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
   const [state, setState] = useState<OverflowState>({ k: opts.fallbackNarrow ? opts.order.length : 0, compact: false })
   const stateRef = useRef(state)
   stateRef.current = state
+  // Re-plans applied in the current frame; the commit effect stops applying after MAX_REPLANS (never loops).
+  const replans = useRef({ n: 0, frame: 0 })
+  const lastSig = useRef('')
   const optsRef = useRef(opts)
   optsRef.current = opts
 
-  const measure = useCallback((): void => {
+  const measure = useCallback((fromCommit = false): void => {
     const el = containerRef.current
     if (!el) return
     const o = optsRef.current
     const prev = stateRef.current
     const apply = (next: OverflowState): void => {
-      if (next.k !== prev.k || next.compact !== prev.compact) {
-        stateRef.current = next
-        setState(next)
+      if (next.k === prev.k && next.compact === prev.compact) return
+      if (fromCommit) {
+        const r = replans.current
+        if (r.n >= MAX_REPLANS) return
+        r.n += 1
+        if (r.frame === 0 && typeof requestAnimationFrame === 'function') {
+          r.frame = requestAnimationFrame(() => {
+            r.n = 0
+            r.frame = 0
+          })
+        }
       }
+      stateRef.current = next
+      setState(next)
     }
     const cs = getComputedStyle(el)
     const avail = el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight)
@@ -130,6 +150,8 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
     const gap = gapRaw > 0 ? gapRaw : 12
 
     el.querySelectorAll<HTMLElement>('[data-oi]').forEach((n) => {
+      // A collapsed item (icon form) must not overwrite its natural width, or the plan flips between the two forms.
+      if (n.dataset.collapsed !== undefined) return
       const w = n.offsetWidth
       if (w > 0) widths.current[n.dataset.oi ?? ''] = w
     })
@@ -149,10 +171,16 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
       fixedCount += 1
     })
 
+    // Nothing the plan depends on changed since the last one: skip (a commit caused by our own setState lands here).
+    const sig = JSON.stringify([avail, gap, fixed, fixedCount, w, o.order, o.collapse ?? null, prev.k, prev.compact])
+    if (fromCommit && sig === lastSig.current) return
+    lastSig.current = sig
+
     const base: OverflowPlanInput = {
       order: o.order,
       widths: w,
       ...(o.collapse ? { collapse: o.collapse } : {}),
+      ...(o.moreInFixed ? { moreInFixed: true } : {}),
       fixed,
       fixedCount,
       gap,
@@ -170,7 +198,7 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
 
   // Every commit: item labels / counts change widths without the container resizing.
   useLayoutEffect(() => {
-    measure()
+    measure(true)
   })
 
   useLayoutEffect(() => {
@@ -178,11 +206,12 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
     if (!el) return
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => measure()) : null
     ro?.observe(el)
-    window.addEventListener('resize', measure)
+    const onResize = (): void => measure()
+    window.addEventListener('resize', onResize)
     void document.fonts?.ready?.then(() => measure())
     return () => {
       ro?.disconnect()
-      window.removeEventListener('resize', measure)
+      window.removeEventListener('resize', onResize)
     }
   }, [measure])
 

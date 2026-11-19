@@ -18,6 +18,7 @@ import {
   CONSOLE_MIN,
   GRID_MIN,
   INSPECTOR_TOP_MIN,
+  TIMELINE_OPEN_MIN_H,
   WORKTREES_MIN,
   usePanelHeights
 } from '@renderer/hooks/usePanelHeights'
@@ -26,15 +27,22 @@ import { useCenterView, useCenterViewShortcuts, useCenterViewStore } from '@rend
 import { useLayoutStore, useMaxWidth } from '@renderer/store/useLayoutStore'
 import { useWindowsStore } from '@renderer/store/useWindowsStore'
 import { chatSpecForCurrent } from '@renderer/windowActions'
+import { ErrorBoundary } from '@renderer/components/ui/ErrorBoundary'
 import './TeamView.css'
 
-/** At or below this width the inspector becomes an overlay drawer. */
+/** At or below this width the project rail, worktrees and tasks merge into a left drawer. */
 const NARROW = 1100
+/** Below 1440 CSS px the inspector is an overlay drawer (T32 U6). */
+const INSPECTOR_OVERLAY = 1439
+/** Below 1600 CSS px only one of the worktrees column and the inspector is docked at a time (T32 U6). */
+const ONE_DOCK = 1599
 /** At or below this width the project rail (T22) shows icons only. */
 const COMPACT_RAIL = 1439
 
-export function TeamView() {
+function TeamViewContent() {
   const narrow = useMaxWidth(NARROW)
+  const inspectorOverlay = useMaxWidth(INSPECTOR_OVERLAY)
+  const oneDock = useMaxWidth(ONE_DOCK)
   const compactRail = useMaxWidth(COMPACT_RAIL)
   const w = usePanelWidths()
   // Wide layout: columns fill the viewport, so panes are measured; otherwise the page scrolls.
@@ -43,6 +51,27 @@ export function TeamView() {
   const rightCollapsed = useLayoutStore((s) => s.rightCollapsed)
   const toggleLeft = useLayoutStore((s) => s.toggleLeft)
   const toggleRight = useLayoutStore((s) => s.toggleRight)
+  // Below ONE_DOCK only one of worktrees / inspector is docked; opening one folds the other. The user's own collapsed
+  // flags (and their widths) stay as they are.
+  const [lastDock, setLastDock] = useState<'left' | 'right'>('right')
+  const prevCollapsed = useRef({ left: leftCollapsed, right: rightCollapsed })
+  useEffect(() => {
+    const p = prevCollapsed.current
+    if (p.left && !leftCollapsed) setLastDock('left')
+    if (p.right && !rightCollapsed) setLastDock('right')
+    prevCollapsed.current = { left: leftCollapsed, right: rightCollapsed }
+  }, [leftCollapsed, rightCollapsed])
+  const sharedDock = oneDock && !inspectorOverlay && !leftCollapsed && !rightCollapsed
+  const leftFolded = leftCollapsed || (sharedDock && lastDock === 'right')
+  const rightFolded = rightCollapsed || (sharedDock && lastDock === 'left')
+  const expandLeft = () => {
+    if (leftCollapsed) toggleLeft()
+    setLastDock('left')
+  }
+  const expandRight = () => {
+    if (rightCollapsed) toggleRight()
+    setLastDock('right')
+  }
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
   const view = useCenterView()
   const setView = useCenterViewStore((s) => s.setView)
@@ -108,15 +137,15 @@ export function TeamView() {
   }
   // Selecting another agent opens the drawer on narrow windows.
   useEffect(() => {
-    if (prevSelected.current !== selectedAgentId && narrow) {
+    if (prevSelected.current !== selectedAgentId && inspectorOverlay) {
       setDrawerOpen(true)
       setLeftOpen(false)
     }
     prevSelected.current = selectedAgentId
-  }, [selectedAgentId, narrow])
+  }, [selectedAgentId, inspectorOverlay])
   useEffect(() => {
-    if (!narrow) setDrawerOpen(false)
-  }, [narrow])
+    if (!inspectorOverlay) setDrawerOpen(false)
+  }, [inspectorOverlay])
   useEffect(() => {
     if (drawerOpen) drawerRef.current?.focus()
   }, [drawerOpen])
@@ -156,7 +185,27 @@ export function TeamView() {
       <a className="ac-team__skip" href="#ac-agents">
         Skip to agents
       </a>
-      <TeamHeader />
+      <TeamHeader
+        {...(narrow || inspectorOverlay
+          ? {
+              drawers: {
+                ...(narrow
+                  ? {
+                      projects: {
+                        open: leftOpen,
+                        onClick: () => {
+                          setLeftOpen((o) => !o)
+                          setDrawerOpen(false)
+                        },
+                        buttonRef: leftToggle
+                      }
+                    }
+                  : {}),
+                inspector: { open: drawerOpen, onClick: () => setDrawerOpen((o) => !o), buttonRef: drawerToggle }
+              }
+            }
+          : {})}
+      />
       <ProjectSwitcher />
       <div className="ac-team__cols" style={colsStyle}>
         <div className="ac-team__rail-slot" data-compact={compactRail ? 'true' : 'false'}>
@@ -164,19 +213,6 @@ export function TeamView() {
         </div>
         {narrow ? (
           <>
-            <button
-              ref={leftToggle}
-              type="button"
-              className="ac-team__ldrawer-toggle"
-              aria-expanded={leftOpen}
-              aria-controls="ac-left"
-              onClick={() => {
-                setLeftOpen((o) => !o)
-                setDrawerOpen(false)
-              }}
-            >
-              Projects
-            </button>
             {leftOpen && (
               <>
                 <div className="ac-team__scrim" onMouseDown={closeLeft} />
@@ -202,7 +238,7 @@ export function TeamView() {
               </>
             )}
           </>
-        ) : leftCollapsed ? (
+        ) : leftFolded ? (
           <aside id="ac-left" className="ac-team__strip ac-team__strip--left" aria-label="Worktrees and tasks">
             <button
               type="button"
@@ -210,7 +246,7 @@ export function TeamView() {
               aria-expanded={false}
               aria-controls="ac-left"
               aria-label="Expand worktrees panel"
-              onClick={toggleLeft}
+              onClick={expandLeft}
             >
               {'›'}
             </button>
@@ -261,7 +297,6 @@ export function TeamView() {
         )}
         <main
           className={`ac-team__center${view === 'chat' ? ' ac-team__center--chat' : ''}`}
-          ref={hh.bind('center')}
           onKeyDown={onCenterKey}
         >
           <div className="ac-team__tabs" role="tablist" aria-label="Center view" onKeyDown={onTabKey}>
@@ -282,11 +317,13 @@ export function TeamView() {
               </button>
             ))}
           </div>
+          {view === 'team' && !showMax && <OverlapBanner />}
           <div
             id="ac-center-panel"
             role="tabpanel"
             aria-labelledby={`ac-tab-${view}`}
             className="ac-team__panel"
+            ref={hh.bind('center')}
           >
             {view === 'chat' ? (
               <ChatView />
@@ -296,7 +333,6 @@ export function TeamView() {
               </div>
             ) : (
               <>
-                <OverlapBanner />
                 <div id="ac-pane-grid" className="ac-pane ac-pane--fixed" style={{ height: hv.grid }}>
                   <div id="ac-agents">
                     <AgentGrid />
@@ -313,7 +349,7 @@ export function TeamView() {
                   onChange={(v) => hh.set('grid', v)}
                 />
                 <div className="ac-pane ac-pane--fill ac-pane--timeline">
-                  <Timeline />
+                  <Timeline defaultCollapsed={hh.centerHeight < TIMELINE_OPEN_MIN_H} />
                 </div>
                 <Splitter
                   label="Resize lead console"
@@ -332,18 +368,8 @@ export function TeamView() {
             )}
           </div>
         </main>
-        {narrow ? (
+        {inspectorOverlay ? (
           <>
-            <button
-              ref={drawerToggle}
-              type="button"
-              className="ac-team__drawer-toggle"
-              aria-expanded={drawerOpen}
-              aria-controls="ac-right"
-              onClick={() => setDrawerOpen((o) => !o)}
-            >
-              Inspector
-            </button>
             {drawerOpen && (
               <>
                 <div className="ac-team__scrim" onMouseDown={closeDrawer} />
@@ -365,7 +391,7 @@ export function TeamView() {
               </>
             )}
           </>
-        ) : rightCollapsed ? (
+        ) : rightFolded ? (
           <aside id="ac-right" className="ac-team__strip ac-team__strip--right" aria-label="Agent inspector">
             <button
               type="button"
@@ -373,7 +399,7 @@ export function TeamView() {
               aria-expanded={false}
               aria-controls="ac-right"
               aria-label="Expand inspector panel"
-              onClick={toggleRight}
+              onClick={expandRight}
             >
               {'‹'}
             </button>
@@ -409,5 +435,13 @@ export function TeamView() {
         )}
       </div>
     </div>
+  )
+}
+
+export function TeamView() {
+  return (
+    <ErrorBoundary label="The team view">
+      <TeamViewContent />
+    </ErrorBoundary>
   )
 }

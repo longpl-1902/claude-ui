@@ -119,21 +119,38 @@ describe('WorktreeList (live)', () => {
     expect(feat).toHaveTextContent('+2 / -1')
     expect(feat).toHaveTextContent('1 changed')
     expect(feat).toHaveTextContent('overlaps main')
-    expect(within(feat).getByRole('button', { name: 'Select bob' })).toBeInTheDocument()
+    expect(within(feat).getByRole('button', { name: '1 agent in feat/x' })).toBeInTheDocument()
     const main = cards[0] as HTMLElement
     expect(main).toHaveTextContent('2 changed')
     expect(main).toHaveTextContent('fetch failed')
     expect(main).not.toHaveTextContent('+0 / -0')
-    expect(within(main).getByRole('button', { name: 'Select lead' })).toBeInTheDocument()
+    expect(within(main).getByRole('button', { name: '1 agent in main' })).toBeInTheDocument()
+    // the main worktree is the project root: no stray dot path row (T32 U6)
+    expect(main.querySelector('.ac-wt__path')).toBeNull()
     expect(screen.getByTitle('D:/repo-wt/feat-x')).toBeInTheDocument()
     await userEvent.click(within(feat).getByRole('button', { name: 'Open feat/x in editor' }))
     expect(openInEditor).toHaveBeenCalledWith('D:/repo-wt/feat-x')
+  })
+
+  it('T32 U6: the card shows an avatar stack of at most 5 plus "+n" and a count', () => {
+    const names = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']
+    seedLive([agent('lead', 'lead', ROOT), ...names.map((n) => agent(n, n, 'D:/repo-wt/feat-x'))])
+    useWorkspaceStore.setState({ watchedRoot: ROOT, workspace: TWO_WT() })
+    const { container } = render(<WorktreeList />)
+    const stack = screen.getByRole('button', { name: '7 agents in feat/x' })
+    expect(stack).toHaveTextContent('+2')
+    expect(stack).toHaveTextContent('7 agents')
+    expect(stack.querySelectorAll('.ac-avatar')).toHaveLength(5)
+    expect(container.querySelector('.ac-wt__avatars')).toBeNull()
   })
 
   it('clicking an agent avatar selects that agent', async () => {
     seedLive([agent('lead', 'lead', ROOT), agent('bob', 'bob', 'D:/repo-wt/feat-x')])
     useWorkspaceStore.setState({ watchedRoot: ROOT, workspace: TWO_WT() })
     render(<WorktreeList />)
+    // the agent list opens on click (T32 U6)
+    expect(screen.queryByRole('button', { name: 'Select bob' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '1 agent in feat/x' }))
     await userEvent.click(screen.getByRole('button', { name: 'Select bob' }))
     expect(useConsoleStore.getState().selectedAgentId).toBe('bob')
   })
@@ -367,6 +384,42 @@ describe('Timeline (live)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show finished' }))
     expect(names()).toHaveLength(4)
     expect(screen.getByRole('button', { name: 'Hide finished' })).toBeInTheDocument()
+  })
+
+  it('T32 U12: only the lead, agents with activity in the window, and running agents get a lane', () => {
+    const sp = spans([['edit', NOW - 5 * MIN, NOW - MIN]])
+    const working = { kind: 'teammate', startedMs: 0, lastActivityMs: NOW, openTools: [], lastTurn: 'user' } as Agent['runtime']
+    const idle = (id: string): Agent =>
+      agent(id, id, ROOT, {
+        spans: [],
+        runtime: { kind: 'teammate', startedMs: 0, lastActivityMs: 0, openTools: [], lastTurn: 'assistant_end' }
+      })
+    seedLive([agent('lead', 'lead', ROOT, { spans: sp }), agent('active', 'active', ROOT, { spans: sp, runtime: working }), idle('quiet')])
+    render(<Timeline />)
+    const names = screen.getAllByRole('img').map((n) => n.getAttribute('aria-label'))
+    expect(names).toContain('lead activity, last 20 minutes')
+    expect(names).toContain('active activity, last 20 minutes')
+    expect(names).not.toContain('quiet activity, last 20 minutes')
+  })
+
+  it('T32 U12: long lane labels get a middle ellipsis and the full name in a tooltip; the legend folds into a button', () => {
+    const long = 'Implement X-T34 multi window'
+    seedLive([agent('lead', 'lead', ROOT, { spans: spans([['edit', NOW - 5 * MIN, NOW - MIN]]) }), agent('w', long, ROOT, { spans: spans([['bash', NOW - 5 * MIN, NOW - MIN]]), runtime: { kind: 'teammate', startedMs: 0, lastActivityMs: NOW, openTools: [], lastTurn: 'user' } })])
+    const { container } = render(<Timeline />)
+    const lane = container.querySelector('.ac-tc-lane-name[title="' + long + '"]')!
+    expect(lane.textContent).toContain('…')
+    expect(lane.textContent!.length).toBeLessThanOrEqual(16)
+    expect(screen.getByRole('button', { name: /^Legend:/ })).toBeInTheDocument()
+  })
+
+  it('T32 U5: the timeline starts collapsed in a short column and the toggle expands it', async () => {
+    seedLive([agent('lead', 'lead', ROOT, { spans: spans([['edit', NOW - 5 * MIN, NOW - MIN]]) })])
+    render(<Timeline defaultCollapsed />)
+    const toggle = screen.getByRole('button', { name: 'Expand timeline' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+    await userEvent.click(toggle)
+    expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
   it('narrow width: the live lane grid uses the flexible modifier class (no 560px minimum)', () => {

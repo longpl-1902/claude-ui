@@ -1,9 +1,11 @@
 import { Button } from '@renderer/components/ui/Button'
 import { NeedsYouButton } from '@renderer/components/rail/NeedsYouInbox'
 import { ChevronLeftIcon } from '@renderer/components/ui/Icons'
+import { useTitlebarInset } from '@renderer/hooks/useTitlebarInset'
 import { selectActiveAccount, useConsoleStore } from '@renderer/store/useConsoleStore'
 
 export function AccountsHeader({ onAdd }: { onAdd(): void }): JSX.Element {
+  useTitlebarInset()
   const navigate = useConsoleStore((s) => s.navigate)
   const active = useConsoleStore(selectActiveAccount)
   return (

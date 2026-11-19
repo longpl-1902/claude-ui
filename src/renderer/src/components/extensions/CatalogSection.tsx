@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { CatalogKind } from '@shared/types'
 import { Button } from '../ui/Button'
 import { useExtensionsStore } from '../../store/useExtensionsStore'
+import { describe } from './describe'
 
 const TABS: { kind: CatalogKind; label: string }[] = [
   { kind: 'skill', label: 'Skills' },
@@ -46,7 +47,7 @@ export function CatalogSection(): JSX.Element {
           </button>
         ))}
       </div>
-      <input type="search" aria-label="Search catalog" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="ac-acc-text" type="search" aria-label="Search catalog" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
       {err && (
         <p className="ac-ext-error" role="alert">
           {err}
@@ -64,8 +65,8 @@ export function CatalogSection(): JSX.Element {
                 </strong>
                 <span className="ac-ext-badge">{c.scope === 'plugin' ? (c.plugin ?? 'plugin') : c.scope}</span>
               </div>
-              {c.description && <span className="ac-ext-desc">{c.description}</span>}
-              <div className="ac-ext-item__actions">
+              {c.description && <span className="ac-ext-desc">{describe(c.description)}</span>}
+              <div className="ac-ext-item__actions ac-ext-item__actions--hover">
                 <Button size="sm" title={c.path} aria-label={`Open in editor ${c.name}`} onClick={() => void open(c.path)}>
                   Open in editor
                 </Button>

@@ -48,3 +48,13 @@
 .ac-ext.is-narrow .ac-ext-item { grid-template-columns: minmax(0, 1fr); }
 .ac-ext.is-narrow .ac-ext-kv__row { grid-template-columns: minmax(0, 1fr); }
 .ac-ext.is-narrow .ac-ext-ctx select { max-width: 100%; }
+
+/* T32 U13: path hint under the Project select, row actions on hover / focus */
+.ac-ext-ctx__project { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ac-ext-ctx__project .ac-ext-note { max-width: 320px; }
+.ac-ext-item__actions--hover { opacity: 0; transition: opacity 0.12s; }
+.ac-ext-item:hover .ac-ext-item__actions--hover,
+.ac-ext-item:focus-within .ac-ext-item__actions--hover { opacity: 1; }
+@media (hover: none) { .ac-ext-item__actions--hover { opacity: 1; } }
+
+.ac-ext-header { position: sticky; top: 0; z-index: 20; }
