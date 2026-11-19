@@ -62,7 +62,7 @@ describe('R-06 validateAccountsFile', () => {
     raw.profiles = [{ id: 'a', name: `  ${'n'.repeat(60)}  `, color: 'red', configDir: '~/a' }]
     raw.rules = []
     raw.defaultAccountId = null
-    const p = validateAccountsFile(raw).data.profiles[0]
+    const p = validateAccountsFile(raw).data.profiles[0]!
     expect(p.name).toBe('n'.repeat(40))
     expect(ACCOUNT_COLORS).toContain(p.color)
   })
@@ -76,8 +76,8 @@ describe('R-06 validateAccountsFile', () => {
     raw.rules = []
     raw.defaultAccountId = null
     const ps = validateAccountsFile(raw).data.profiles
-    expect(ps[0].kind).toBeUndefined()
-    expect(ps[1].kind).toBe('personal')
+    expect(ps[0]!.kind).toBeUndefined()
+    expect(ps[1]!.kind).toBe('personal')
   })
 
   it('R-06 drops rules with bad pattern, unknown account, or a fallback pattern; keeps ask', () => {
@@ -114,10 +114,10 @@ describe('R-06 validateAccountsFile', () => {
 
   it('R-06 profile.folderRules is re-derived from the global rules list', () => {
     const raw = goodFile() as unknown as Record<string, unknown>
-    ;(raw.profiles as Array<{ folderRules: unknown }>)[0].folderRules = [{ pattern: 'stale', accountId: 'work', note: '' }]
+    ;(raw.profiles as Array<{ folderRules: unknown }>)[0]!.folderRules = [{ pattern: 'stale', accountId: 'work', note: '' }]
     const r = validateAccountsFile(raw).data
-    expect(r.profiles[0].folderRules).toEqual([{ pattern: '~/work/**', accountId: 'work', note: 'n' }])
-    expect(r.profiles[1].folderRules).toEqual([])
+    expect(r.profiles[0]!.folderRules).toEqual([{ pattern: '~/work/**', accountId: 'work', note: 'n' }])
+    expect(r.profiles[1]!.folderRules).toEqual([])
   })
 })
 
@@ -174,7 +174,7 @@ describe('R-06 loadAccountsFile / saveAccountsFile', () => {
     expect(fs.has(FILE)).toBe(false)
     const moved = fs.fileKeys().filter((k) => /accounts\.json\.corrupt-\d{8}-\d{6}$/.test(k))
     expect(moved).toHaveLength(1)
-    expect(fs.content(moved[0])).toBe('{ this is not json')
+    expect(fs.content(moved[0]!)).toBe('{ this is not json')
     expect(r.warnings.length).toBeGreaterThan(0)
   })
 
@@ -190,10 +190,10 @@ describe('R-06 loadAccountsFile / saveAccountsFile', () => {
   it('R-06 save writes derived folderRules into each profile', async () => {
     const fs = createMemoryFs({}, [], { caseInsensitive: true })
     const data = goodFile()
-    data.profiles[0].folderRules = []
+    data.profiles[0]!.folderRules = []
     await saveAccountsFile(fs, DIR, data)
     const saved = JSON.parse(fs.content(FILE)!) as AccountsFile
-    expect(saved.profiles[0].folderRules).toEqual([{ pattern: '~/work/**', accountId: 'work', note: 'n' }])
+    expect(saved.profiles[0]!.folderRules).toEqual([{ pattern: '~/work/**', accountId: 'work', note: 'n' }])
   })
 })
 

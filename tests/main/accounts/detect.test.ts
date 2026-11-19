@@ -44,7 +44,7 @@ describe('R-02/R-03 detectLogins', () => {
     expect(d.display).toEqual({ signedIn: true, email: 'me@example.com', org: 'Example Org' })
     expect(d.sources).toContain('Claude Code CLI (default folder)')
     expect(JSON.stringify(r)).not.toContain('FAKE')
-    expect(r[0].configDir).toBe('~/.claude')
+    expect(r[0]!.configDir).toBe('~/.claude')
   })
 
   it('R-02 ~/.claude-server-commander is excluded; a dir with settings.json + projects/ is included, not signed in', async () => {
@@ -146,10 +146,10 @@ describe('R-02/R-03 detectLogins', () => {
     const r = await detectLogins(fs, host({ CLAUDE_CONFIG_DIR: 'c:/users/u/.claude-personal' }))
     const matching = r.filter((d) => d.configDir.toLowerCase() === '~/.claude-personal')
     expect(matching).toHaveLength(1)
-    expect(matching[0].sources).toEqual(
+    expect(matching[0]!.sources).toEqual(
       expect.arrayContaining(['Claude Code CLI (~/.claude-personal)', 'VS Code user settings', 'CLAUDE_CONFIG_DIR environment variable'])
     )
-    expect(matching[0].display.email).toBe('p@example.com')
+    expect(matching[0]!.display.email).toBe('p@example.com')
   })
 
   it('R-02 default first, the rest alphabetical by configDir', async () => {
