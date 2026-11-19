@@ -77,7 +77,9 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
         <div className="insp__who">
           <span className="insp__name">{agent.name}</span>
           <span className="insp__sub">
-            {agent.role} · {agent.model}
+            {[agent.role, agent.model && !agent.role.includes(agent.model) ? agent.model : '']
+              .filter(Boolean)
+              .join(' · ')}
           </span>
         </div>
         <span title={info.reason}>
