@@ -107,6 +107,38 @@ describe('R-10 sign-in controller', () => {
     expect(ctl.status(DIR)).toMatchObject({ step: 'done', email: 'new@example.com' })
   })
 
+  it('R-10 baseline signed in: an mtime bump with the same email stays waiting, then exit 0 -> done', async () => {
+    const { ctl, fs, watchers, exit } = setup({ [FILE]: withEmail('same@example.com') })
+    await ctl.start(DIR)
+    fs.setFile(FILE, JSON.stringify({ firstStartTime: 'x', oauthAccount: { emailAddress: 'same@example.com' } }))
+    watchers[0]!.trigger()
+    await flush()
+    expect(ctl.status(DIR).step).toBe('waiting')
+    exit(0)
+    await flush()
+    expect(ctl.status(DIR)).toMatchObject({ step: 'done', email: 'same@example.com' })
+  })
+
+  it('R-10 a watcher change that lands while an evaluate is in flight is not lost', async () => {
+    const { ctl, fs, watchers } = setup()
+    await ctl.start(DIR)
+    fs.setFile(FILE, noEmail)
+    const realRead = fs.readFile.bind(fs)
+    let reads = 0
+    fs.readFile = async (p: string) => {
+      const text = await realRead(p)
+      if (reads++ === 0) {
+        // the CLI writes the email after this read returned, and its change event arrives mid-evaluate
+        fs.setFile(FILE, withEmail())
+        watchers[0]!.trigger()
+      }
+      return text
+    }
+    watchers[0]!.trigger()
+    await flush()
+    expect(ctl.status(DIR)).toMatchObject({ step: 'done', email: 'me@example.com' })
+  })
+
   it('R-10 baseline signed in + exit 0 -> done', async () => {
     const { ctl, exit } = setup({ [FILE]: withEmail() })
     await ctl.start(DIR)

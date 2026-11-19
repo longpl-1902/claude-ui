@@ -15,11 +15,12 @@ export interface LoadResult {
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const joinIn = (dir: string, name: string): string => (dir.includes('\\') ? win32 : posix).join(dir, name)
 
-export function validateAccountsFile(raw: unknown): { data: AccountsFile; warnings: string[] } {
+export function validateAccountsFile(raw: unknown): { data: AccountsFile; warnings: string[]; lossy: boolean } {
   const warnings: string[] = []
-  if (!isRecord(raw)) return { data: emptyAccountsFile(), warnings: ['accounts file is not an object - using defaults'] }
+  let dropped = false
+  if (!isRecord(raw)) return { data: emptyAccountsFile(), warnings: ['accounts file is not an object - using defaults'], lossy: true }
   if (raw.version !== 1) {
-    return { data: emptyAccountsFile(), warnings: ['accounts file has an unsupported version - using defaults'] }
+    return { data: emptyAccountsFile(), warnings: ['accounts file has an unsupported version - using defaults'], lossy: true }
   }
 
   const profiles: AccountProfile[] = []
@@ -27,26 +28,26 @@ export function validateAccountsFile(raw: unknown): { data: AccountsFile; warnin
   const rawProfiles = Array.isArray(raw.profiles) ? raw.profiles : []
   rawProfiles.forEach((p, i) => {
     if (!isRecord(p)) {
-      warnings.push(`profile #${i + 1} is not an object - dropped`)
+      warnings.push(`profile #${i + 1} is not an object - dropped`); dropped = true
       return
     }
     const id = typeof p.id === 'string' ? p.id.trim() : ''
     if (!id) {
-      warnings.push(`profile #${i + 1} has no id - dropped`)
+      warnings.push(`profile #${i + 1} has no id - dropped`); dropped = true
       return
     }
     if (ids.has(id)) {
-      warnings.push(`profile "${id}" has a duplicate id - dropped`)
+      warnings.push(`profile "${id}" has a duplicate id - dropped`); dropped = true
       return
     }
     const name = typeof p.name === 'string' ? p.name.trim().slice(0, 40).trim() : ''
     if (!name) {
-      warnings.push(`profile "${id}" has no name - dropped`)
+      warnings.push(`profile "${id}" has no name - dropped`); dropped = true
       return
     }
     const configDir = typeof p.configDir === 'string' ? p.configDir.trim() : ''
     if (!configDir) {
-      warnings.push(`profile "${id}" has no configDir - dropped`)
+      warnings.push(`profile "${id}" has no configDir - dropped`); dropped = true
       return
     }
     let color: string
@@ -66,23 +67,23 @@ export function validateAccountsFile(raw: unknown): { data: AccountsFile; warnin
   const rawRules = Array.isArray(raw.rules) ? raw.rules : []
   rawRules.forEach((r, i) => {
     if (!isRecord(r)) {
-      warnings.push(`rule #${i + 1} is not an object - dropped`)
+      warnings.push(`rule #${i + 1} is not an object - dropped`); dropped = true
       return
     }
     if (typeof r.pattern !== 'string' || r.pattern.trim() === '') {
-      warnings.push(`rule #${i + 1} has no pattern - dropped`)
+      warnings.push(`rule #${i + 1} has no pattern - dropped`); dropped = true
       return
     }
     if (isFallbackPattern(r.pattern)) {
-      warnings.push(`rule #${i + 1} is a fallback pattern - dropped`)
+      warnings.push(`rule #${i + 1} is a fallback pattern - dropped`); dropped = true
       return
     }
     if (typeof r.accountId !== 'string' || (r.accountId !== 'ask' && !ids.has(r.accountId))) {
-      warnings.push(`rule "${r.pattern}" points at an unknown account - dropped`)
+      warnings.push(`rule "${r.pattern}" points at an unknown account - dropped`); dropped = true
       return
     }
     if (typeof r.note !== 'string') {
-      warnings.push(`rule "${r.pattern}" has no note - dropped`)
+      warnings.push(`rule "${r.pattern}" has no note - dropped`); dropped = true
       return
     }
     rules.push({ pattern: r.pattern, accountId: r.accountId, note: r.note })
@@ -107,7 +108,7 @@ export function validateAccountsFile(raw: unknown): { data: AccountsFile; warnin
   if (raw.limitPolicy === 'pause' || raw.limitPolicy === 'wait' || raw.limitPolicy === 'switch') limitPolicy = raw.limitPolicy
   else if (raw.limitPolicy !== undefined) warnings.push('limitPolicy is invalid - using pause')
 
-  return { data: { version: 1, profiles, rules, defaultAccountId, safety, limitPolicy }, warnings }
+  return { data: { version: 1, profiles, rules, defaultAccountId, safety, limitPolicy }, warnings, lossy: dropped }
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0')
@@ -139,7 +140,23 @@ export async function loadAccountsFile(fs: WriteFs, dir: string, now: () => Date
       recoveredFrom: moved
     }
   }
-  return validateAccountsFile(parsed)
+  const result = validateAccountsFile(parsed)
+  if (!result.lossy) return { data: result.data, warnings: result.warnings }
+  // The file parsed but could not be used as is: keep the original under a .corrupt- name so a later save cannot lose it.
+  const copy = `${file}.corrupt-${stamp(now())}`
+  try {
+    await fs.writeFile(copy, text)
+  } catch {
+    return {
+      data: result.data,
+      warnings: [...result.warnings, 'accounts file could not be backed up before using defaults']
+    }
+  }
+  return {
+    data: result.data,
+    warnings: [...result.warnings, 'original accounts file was kept aside as a .corrupt copy'],
+    recoveredFrom: copy
+  }
 }
 
 export async function saveAccountsFile(fs: WriteFs, dir: string, data: AccountsFile): Promise<void> {

@@ -38,7 +38,7 @@ vi.mock('@xterm/addon-fit', () => ({
 }))
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 
-type DataEv = { ptyId: string; data: string }
+type DataEv = { ptyId: string; data: string; end: number }
 type ExitEv = { ptyId: string; exitCode: number }
 
 function makeApi() {
@@ -51,7 +51,7 @@ function makeApi() {
       resize: vi.fn().mockResolvedValue({ ok: true }),
       kill: vi.fn().mockResolvedValue({ ok: true }),
       list: vi.fn().mockResolvedValue([]),
-      getBuffer: vi.fn().mockResolvedValue('BUFFER'),
+      getBuffer: vi.fn().mockResolvedValue({ data: 'BUFFER', end: 6 }),
       onData: vi.fn((cb: (e: DataEv) => void) => {
         dataCbs.push(cb)
         return vi.fn()
@@ -94,12 +94,35 @@ describe('R-13 TerminalView', () => {
     render(<TerminalView ptyId="p1" />)
     await waitFor(() => expect(xterm.write).toHaveBeenCalledWith('BUFFER'))
     act(() => {
-      h.emitData({ ptyId: 'p1', data: 'hello' })
-      h.emitData({ ptyId: 'other', data: 'nope' })
+      h.emitData({ ptyId: 'p1', data: 'hello', end: 11 })
+      h.emitData({ ptyId: 'other', data: 'nope', end: 4 })
     })
     expect(xterm.write).toHaveBeenCalledWith('hello')
     expect(xterm.write).not.toHaveBeenCalledWith('nope')
     expect(xterm.write.mock.calls[0]![0]).toBe('BUFFER')
+  })
+
+  it('a chunk that is in the buffer and also pushed before getBuffer resolves is written once; a straddling chunk is trimmed', async () => {
+    const h = makeApi()
+    let resolveBuf!: (v: { data: string; end: number }) => void
+    h.api.pty.getBuffer.mockReturnValue(new Promise((r) => (resolveBuf = r)))
+    setApi(h.api)
+    render(<TerminalView ptyId="p1" />)
+    await waitFor(() => expect(h.api.pty.getBuffer).toHaveBeenCalled())
+    act(() => {
+      h.emitData({ ptyId: 'p1', data: 'BCDE', end: 5 }) // fully inside the buffer
+      h.emitData({ ptyId: 'p1', data: 'EFG', end: 7 }) // straddles: only 'FG' is new
+      h.emitData({ ptyId: 'p1', data: 'HI', end: 9 }) // new
+    })
+    await act(async () => resolveBuf({ data: 'ABCDE', end: 5 }))
+    const written = xterm.write.mock.calls.map((c) => c[0] as string).join('')
+    expect(written).toBe('ABCDEFGHI')
+    // live chunks after ready keep the same rule
+    act(() => {
+      h.emitData({ ptyId: 'p1', data: 'HI', end: 9 })
+      h.emitData({ ptyId: 'p1', data: 'J', end: 10 })
+    })
+    expect(xterm.write.mock.calls.map((c) => c[0] as string).join('')).toBe('ABCDEFGHIJ')
   })
 
   it('typing calls pty.write with the ptyId', async () => {

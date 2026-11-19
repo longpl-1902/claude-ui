@@ -35,9 +35,10 @@ function setup(opts: { files?: Record<string, string>; dirs?: string[]; sessions
     onExit: vi.fn((cb: (id: string, code: number) => void) => (exitCbs.push(cb), () => undefined)),
     disposeAll: vi.fn()
   } as unknown as PtyManagerApi & { spawnClaude: ReturnType<typeof vi.fn> }
-  const watchFile: WatchFile = () => ({ close: () => undefined })
+  const watchers: Array<() => void> = []
+  const watchFile: WatchFile = (_f, onChange) => (watchers.push(onChange), { close: () => undefined })
   const svc = createAccountsService({ fs, host, userDataDir: USERDATA, pty, watchFile, claudeFound: () => opts.claudeFound ?? true })
-  return { svc, fs, pty, sessions, exitCbs }
+  return { svc, fs, pty, sessions, exitCbs, watchers }
 }
 
 const session = (over: Partial<PtyInfo>): PtyInfo => ({
@@ -128,6 +129,15 @@ describe('R-12 accountsService mutations', () => {
     const { svc } = setup()
     expect((await svc.saveProfile({ name: '', color: '#6E9BF0', configDir: '~/.claude-x' })).ok).toBe(false)
     expect((await svc.saveProfile({ name: 'X', color: 'nope', configDir: '~/.claude-x' })).ok).toBe(false)
+    expect((await svc.snapshot()).accounts).toEqual([])
+  })
+
+  it('R-12 saveProfile and linkDetected with a relative config dir -> invalid-folder and nothing is written', async () => {
+    const { svc, fs } = setup()
+    expect(await svc.saveProfile({ name: 'X', color: '#6E9BF0', configDir: 'foo' })).toMatchObject({ ok: false, reason: 'invalid-folder' })
+    expect(await svc.linkDetected({ configDir: 'foo/bar' })).toMatchObject({ ok: false, reason: 'invalid-folder' })
+    expect(await svc.saveProfile({ name: 'X', color: '#6E9BF0', configDir: '   ' })).toMatchObject({ ok: false, reason: 'invalid-args' })
+    expect(fs.writes).toEqual([])
     expect((await svc.snapshot()).accounts).toEqual([])
   })
 
@@ -310,6 +320,36 @@ describe('R-13 accountsService launchClaude', () => {
     const t = await twoAccounts()
     await t.svc.setDefault(t.me)
     expect((await t.svc.snapshot()).activeAccountId).toBe(t.me)
+  })
+
+  it('R-08 two quick launches for different accounts in one folder: the second sees the first session and is locked', async () => {
+    const t = await twoAccounts()
+    await t.svc.setSafety({ warnPersonalInCompanyFolder: true, showAccountColorEdge: true, lockAccountOnTeamStart: true })
+    t.pty.spawnClaude.mockImplementation(async (r: { accountId?: string; cwd: string }) => {
+      await new Promise((res) => setTimeout(res, 5))
+      t.sessions.push(session({ id: `s${t.sessions.length}`, accountId: r.accountId, cwd: r.cwd }))
+      return { ok: true, id: `s${t.sessions.length}` }
+    })
+    const cwd = `${HOME}/work/x`
+    const [a, b] = await Promise.all([
+      t.svc.launchClaude({ cwd, accountId: t.work, cols: 80, rows: 24 }),
+      t.svc.launchClaude({ cwd, accountId: t.me, cols: 80, rows: 24, confirmed: true })
+    ])
+    expect(a.ok).toBe(true)
+    expect(b).toMatchObject({ ok: false, reason: 'account-locked' })
+    expect(t.pty.spawnClaude).toHaveBeenCalledTimes(1)
+  })
+
+  it('R-10 a sign-in that completes via the file watcher emits changed (before the login process exits)', async () => {
+    const t = setup()
+    await t.svc.signIn.start('~/.claude-new')
+    const changed = vi.fn()
+    t.svc.onChanged(changed)
+    t.fs.setFile(`${HOME}/.claude-new/.claude.json`, claudeJson)
+    t.watchers[0]!()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(t.svc.signIn.status('~/.claude-new').step).toBe('done')
+    expect(changed).toHaveBeenCalled()
   })
 
   it('R-13 a pty exit triggers a changed event', async () => {

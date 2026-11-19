@@ -77,21 +77,21 @@ app.whenReady().then(() => {
   })
 
   // Coalesce pty output per id within one 16 ms tick.
-  const pending = new Map<string, string>()
+  const pending = new Map<string, { data: string; end: number }>()
   let timer: ReturnType<typeof setTimeout> | null = null
   function flushPtyData(only?: string): void {
-    for (const [ptyId, data] of [...pending]) {
+    for (const [ptyId, { data, end }] of [...pending]) {
       if (only !== undefined && ptyId !== only) continue
       pending.delete(ptyId)
-      broadcast(IPC.ptyData, { ptyId, data })
+      broadcast(IPC.ptyData, { ptyId, data, end })
     }
     if (pending.size === 0 && timer) {
       clearTimeout(timer)
       timer = null
     }
   }
-  pty.onData((ptyId, data) => {
-    pending.set(ptyId, (pending.get(ptyId) ?? '') + data)
+  pty.onData((ptyId, data, end) => {
+    pending.set(ptyId, { data: (pending.get(ptyId)?.data ?? '') + data, end })
     timer ??= setTimeout(() => {
       timer = null
       flushPtyData()

@@ -9,6 +9,7 @@ import type {
   OkResult,
   OkWithId,
   ProfileInput,
+  PtyBufferSnapshot,
   PtyDataEvent,
   PtyExitEvent,
   PtyInfo,
@@ -89,7 +90,7 @@ export interface IpcInvokeMap {
   'pty:resize': { args: [ptyId: string, cols: number, rows: number]; result: OkResult }
   'pty:kill': { args: [ptyId: string]; result: OkResult }
   'pty:list': { args: []; result: PtyInfo[] }
-  'pty:get-buffer': { args: [ptyId: string]; result: string }
+  'pty:get-buffer': { args: [ptyId: string]; result: PtyBufferSnapshot }
   'app:pick-folder': { args: []; result: string | null }
   'app:get-default-cwd': { args: []; result: string }
 }
@@ -170,7 +171,7 @@ export interface ConsoleApi {
     resize(id: string, cols: number, rows: number): Promise<OkResult>
     kill(id: string): Promise<OkResult>
     list(): Promise<PtyInfo[]>
-    getBuffer(id: string): Promise<string>
+    getBuffer(id: string): Promise<PtyBufferSnapshot>
     onData(cb: (e: PtyDataEvent) => void): () => void
     onExit(cb: (e: PtyExitEvent) => void): () => void
   }

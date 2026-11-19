@@ -75,11 +75,13 @@ interface Entry {
   jsonPath: string
   ptyId: string | null
   watcher: FileWatcher | null
-  baselineMtime: number | null
   baselineHadEmail: boolean
+  /** In memory only, never logged: lets a re-sign-in tell a changed email from an untouched file. */
+  baselineEmail: string | undefined
   exitCode: number | null
   status: SignInStatus
   busy: boolean
+  dirty: boolean
 }
 
 export function createSignInController(deps: { pty: PtyManagerApi; fs: ReadFs; host: HostEnv; watchFile: WatchFile }): SignInController {
@@ -109,23 +111,21 @@ export function createSignInController(deps: { pty: PtyManagerApi; fs: ReadFs; h
     e.watcher?.close()
     e.watcher = null
   }
-  const mtimeOf = async (path: string): Promise<number | null> => {
-    try {
-      return await fs.mtimeMs(path)
-    } catch {
-      return null
-    }
-  }
 
   async function evaluate(e: Entry): Promise<void> {
-    if (e.status.step !== 'waiting' || e.busy) return
+    if (e.status.step !== 'waiting') return
+    if (e.busy) {
+      e.dirty = true
+      return
+    }
     e.busy = true
     try {
       const fields = await readDisplayFields(fs, e.abs, host.home, host.platform)
-      const mtime = await mtimeOf(e.jsonPath)
       if (e.status.step !== 'waiting') return
-      const changed = mtime !== null && (e.baselineMtime === null || mtime > e.baselineMtime)
-      const done = fields.email !== undefined && (changed || e.exitCode === 0 || !e.baselineHadEmail)
+      // No email before sign-in: any email that appears means done. Already signed in: need exit 0 or a different email.
+      const done =
+        fields.email !== undefined &&
+        (!e.baselineHadEmail || e.exitCode === 0 || fields.email !== e.baselineEmail)
       const ptyPart = e.ptyId ? { ptyId: e.ptyId } : {}
       if (done) {
         closeWatcher(e)
@@ -141,6 +141,10 @@ export function createSignInController(deps: { pty: PtyManagerApi; fs: ReadFs; h
       }
     } finally {
       e.busy = false
+      if (e.dirty) {
+        e.dirty = false
+        void evaluate(e)
+      }
     }
   }
 
@@ -170,11 +174,12 @@ export function createSignInController(deps: { pty: PtyManagerApi; fs: ReadFs; h
       jsonPath,
       ptyId: null,
       watcher: null,
-      baselineMtime: await mtimeOf(jsonPath),
       baselineHadEmail: before.email !== undefined,
+      baselineEmail: before.email,
       exitCode: null,
       status: none(dir),
-      busy: false
+      busy: false,
+      dirty: false
     }
     entries.set(r.key, e)
     const out = await pty.spawnClaude({
