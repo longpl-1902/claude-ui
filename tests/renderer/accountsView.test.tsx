@@ -158,6 +158,23 @@ describe('R-12 / R-15 Accounts screen: interactions', () => {
     expect(useConsoleStore.getState().accounts.limitPolicy).toBe('wait')
   })
 
+  it('limit policy radios: one Tab stop and arrow keys move the selection', async () => {
+    setup()
+    const pause = screen.getByRole('radio', { name: /Pause the team and ask me/ })
+    const wait = screen.getByRole('radio', { name: /Wait for the reset, then resume/ })
+    pause.focus()
+    await userEvent.keyboard('{ArrowDown}')
+    expect(wait).toBeChecked()
+    expect(wait).toHaveFocus()
+    expect(useConsoleStore.getState().accounts.limitPolicy).toBe('wait')
+    await userEvent.keyboard('{ArrowUp}')
+    expect(pause).toBeChecked()
+    // only the checked radio is in the tab order
+    const radios = screen.getAllByRole('radio')
+    expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1)
+    expect(new Set(radios.map((r) => (r as HTMLInputElement).name)).size).toBe(1)
+  })
+
   it('Safety checkboxes are real and toggle the store', async () => {
     setup()
     const boxes = screen.getAllByRole('checkbox')

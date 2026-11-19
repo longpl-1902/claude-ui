@@ -37,14 +37,15 @@ export function AccountPolicies(): JSX.Element {
           {LIMIT_OPTS.map(([value, title, desc]) => {
             const on = accounts.limitPolicy === value
             return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                className={`ac-acc-radio${on ? ' ac-acc-radio--on' : ''}`}
-                onClick={() => setLimitPolicy(value)}
-              >
+              <label key={value} className={`ac-acc-radio${on ? ' ac-acc-radio--on' : ''}`}>
+                <input
+                  type="radio"
+                  name="ac-acc-limit"
+                  className="ac-acc-radio__input"
+                  value={value}
+                  checked={on}
+                  onChange={() => setLimitPolicy(value)}
+                />
                 <span className="ac-acc-radio__ring">
                   <span className="ac-acc-radio__dot" />
                 </span>
@@ -52,7 +53,7 @@ export function AccountPolicies(): JSX.Element {
                   <span className="ac-acc-radio__title">{title}</span>
                   <span className="ac-acc-sub">{desc}</span>
                 </span>
-              </button>
+              </label>
             )
           })}
         </div>
