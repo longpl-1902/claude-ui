@@ -10,7 +10,7 @@ const SAFETY: [keyof SafetySettings, string][] = [
 const LIMIT_OPTS: [LimitPolicy, string, string][] = [
   ['pause', 'Pause the team and ask me', 'Safest. Nothing switches without you.'],
   ['wait', 'Wait for the reset, then resume', 'Agents keep their place and continue after the limit resets.'],
-  ['switch', 'Switch to the other account', 'Only for personal folders. Company folders always pause.']
+  ['switch', 'Switch to the other account', 'Only for personal folders. Applies once usage data is available (Phase 3).']
 ]
 
 export function AccountPolicies(): JSX.Element {

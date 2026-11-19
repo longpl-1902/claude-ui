@@ -1,14 +1,32 @@
+import { useState } from 'react'
 import { Button } from '@renderer/components/ui/Button'
 import { Avatar } from '@renderer/components/ui/Avatar'
+import { LockIcon } from '@renderer/components/ui/Icons'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { formatTokens } from '@shared/format'
+import { AccountEditor } from './AccountEditor'
+import './manage.css'
 
 export function AccountCards(): JSX.Element {
   const accounts = useConsoleStore((s) => s.accounts)
   const setDefaultAccount = useConsoleStore((s) => s.setDefaultAccount)
   const startSignIn = useConsoleStore((s) => s.startSignIn)
+  const removeProfile = useConsoleStore((s) => s.removeProfile)
+  const [editingId, setEditingId] = useState<string>()
+  const [adding, setAdding] = useState(false)
+  const [removeError, setRemoveError] = useState<string>()
+
+  async function remove(id: string, name: string): Promise<void> {
+    if (!window.confirm(`Remove "${name}"? Its login stays in its config folder.`)) return
+    const r = await removeProfile(id)
+    setRemoveError(r.ok ? undefined : (r.reason ?? 'Could not remove the account.'))
+  }
+
   return (
-    <section className="ac-acc-cards">
+    <section className="ac-acc-cards" aria-label="Accounts">
+      {accounts.accounts.length === 0 && !adding && (
+        <p className="ac-acc-empty">No accounts yet. Use a detected login above, or add one.</p>
+      )}
       {accounts.accounts.map((a) => {
         const isDefault = a.id === accounts.defaultAccountId
         return (
@@ -17,8 +35,15 @@ export function AccountCards(): JSX.Element {
               <Avatar initials={a.name.charAt(0)} color={a.color} size={40} shape="circle" />
               <div className="ac-acc-card__who">
                 <span className="ac-acc-card__name">{a.name}</span>
-                <span className="ac-acc-sub">{a.email}</span>
+                <span className="ac-acc-sub">{a.email ?? 'Not signed in'}</span>
               </div>
+              {a.kind && <span className="ac-acc-tag">{a.kind === 'company' ? 'Company' : 'Personal'}</span>}
+              {a.locked && (
+                <span className="ac-acc-badge ac-acc-badge--lock" title="In use by a running session">
+                  <LockIcon size={12} /> Locked
+                  <span className="ac-sr-only"> (In use by a running session)</span>
+                </span>
+              )}
               {isDefault && <span className="ac-acc-badge">Default</span>}
             </div>
 
@@ -37,33 +62,56 @@ export function AccountCards(): JSX.Element {
               </div>
               <div className="ac-acc-field ac-acc-field--full">
                 <span className="ac-acc-field__label">Config folder</span>
-                <span className="ac-acc-mono">{a.configDir}</span>
+                <span className="ac-acc-mono">
+                  {a.configDir}
+                  {a.isDefaultDir ? ' (default folder)' : ''}
+                </span>
               </div>
             </div>
 
             <div className="ac-acc-usage">
-              {a.signedIn && a.tokensToday !== undefined ? (
-                <div className="ac-acc-usage__row">
-                  <span className="ac-acc-usage__label">Tokens used today</span>
-                  <span>{formatTokens(a.tokensToday)}</span>
-                </div>
-              ) : a.signedIn ? (
-                <span className="ac-acc-sub">Usage not available</span>
-              ) : (
-                <span className="ac-acc-sub">Sign in from Detected logins above to see usage.</span>
-              )}
+              <div className="ac-acc-usage__row">
+                <span className="ac-acc-usage__label">Tokens used today</span>
+                <span>{a.tokensToday === undefined ? '—' : formatTokens(a.tokensToday)}</span>
+              </div>
             </div>
 
-            <div className="ac-acc-row">
-              <Button disabled={isDefault} onClick={() => setDefaultAccount(a.id)}>
-                Set as default
-              </Button>
-              <Button onClick={() => startSignIn(a.configDir)}>Sign in again</Button>
-              <Button>Rename &amp; color</Button>
-            </div>
+            {editingId === a.id ? (
+              <AccountEditor mode="edit" initial={a} onClose={() => setEditingId(undefined)} />
+            ) : (
+              <div className="ac-acc-row">
+                <Button disabled={isDefault} onClick={() => setDefaultAccount(a.id)}>
+                  Set as default
+                </Button>
+                <Button disabled={a.locked} onClick={() => startSignIn(a.configDir)}>
+                  Sign in again
+                </Button>
+                <Button onClick={() => setEditingId(a.id)}>Rename &amp; color</Button>
+                <Button variant="danger" onClick={() => remove(a.id, a.name)}>
+                  Remove
+                </Button>
+              </div>
+            )}
           </div>
         )
       })}
+      {adding ? (
+        <div className="ac-acc-card ac-acc-card--edit">
+          <h2 className="ac-acc-h2 ac-acc-h2--sm">Add account</h2>
+          <AccountEditor mode="create" onClose={() => setAdding(false)} />
+        </div>
+      ) : (
+        <div>
+          <Button variant="dashed" onClick={() => setAdding(true)}>
+            + Add another account
+          </Button>
+        </div>
+      )}
+      {removeError && (
+        <span className="ac-acc-error" role="alert">
+          {removeError}
+        </span>
+      )}
     </section>
   )
 }
