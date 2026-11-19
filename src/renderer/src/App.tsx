@@ -6,14 +6,21 @@ import { useConsoleStore } from '@renderer/store/useConsoleStore'
 export default function App() {
   const screen = useConsoleStore((s) => s.screen)
   const hydrateTeam = useConsoleStore((s) => s.hydrateTeam)
-  const hydrateAccounts = useConsoleStore((s) => s.hydrateAccounts)
 
   useEffect(() => {
     document.title = 'Agent Console'
-    if (!window.api) return
-    window.api.team.getSnapshot().then(hydrateTeam).catch(() => {})
-    window.api.accounts.getSnapshot().then(hydrateAccounts).catch(() => {})
-  }, [hydrateTeam, hydrateAccounts])
+    const api = window.api
+    if (!api) return
+    api.team.getSnapshot().then(hydrateTeam).catch(() => {})
+    const st = useConsoleStore.getState()
+    void st.refreshAccounts()
+    const offChanged = api.accounts?.onChanged?.(st.hydrateAccounts)
+    const offStatus = api.accounts?.onSignInStatus?.(st.applySignInStatus)
+    return () => {
+      offChanged?.()
+      offStatus?.()
+    }
+  }, [hydrateTeam])
 
   return screen === 'team' ? <TeamView /> : <AccountsView />
 }

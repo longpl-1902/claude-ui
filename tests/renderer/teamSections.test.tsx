@@ -7,10 +7,39 @@ import { TeamHeader } from '@renderer/components/team/TeamHeader'
 import { WorktreeList } from '@renderer/components/team/WorktreeList'
 import { SharedTaskList } from '@renderer/components/team/SharedTaskList'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { mockAccountsSnapshot } from '@shared/mock'
+import { seedMockAccounts } from './seedAccounts'
 
-beforeEach(() => resetConsoleStore())
+beforeEach(() => {
+  resetConsoleStore()
+  seedMockAccounts()
+})
 afterEach(() => {
   delete (window as unknown as { api?: unknown }).api
+})
+
+describe('R-11 TeamHeader without an account', () => {
+  it('shows No account with a neutral avatar and border', () => {
+    resetConsoleStore()
+    render(<TeamHeader />)
+    const chip = screen.getByRole('button', { name: 'Account: none. Manage accounts' })
+    expect(chip).toHaveTextContent('No account')
+    expect(chip).toHaveTextContent('?')
+    expect(document.querySelector('header')!.style.borderTop).toContain('var(--ac-border)')
+  })
+
+  it('shows a lock icon when the active account is locked', () => {
+    const snap = structuredClone(mockAccountsSnapshot)
+    snap.accounts = snap.accounts.map((a) => (a.id === snap.activeAccountId ? { ...a, locked: true } : a))
+    useConsoleStore.getState().hydrateAccounts(snap)
+    render(<TeamHeader />)
+    expect(screen.getByTitle('Account locked while a session runs')).toBeInTheDocument()
+  })
+
+  it('shows no lock icon when unlocked', () => {
+    render(<TeamHeader />)
+    expect(screen.queryByTitle('Account locked while a session runs')).toBeNull()
+  })
 })
 
 describe('R-08 TeamHeader', () => {

@@ -6,7 +6,7 @@ export function AccountsHeader(): JSX.Element {
   const navigate = useConsoleStore((s) => s.navigate)
   const active = useConsoleStore(selectActiveAccount)
   return (
-    <header className="ac-acc-header" style={{ borderTopColor: active.color }}>
+    <header className="ac-acc-header" style={{ borderTopColor: active?.color ?? 'var(--ac-border)' }}>
       <button type="button" className="ac-acc-back" onClick={() => navigate('team')}>
         <ChevronLeftIcon size={16} />
         Team view
