@@ -74,3 +74,41 @@ a:hover {
     transition: none !important;
   }
 }
+
+/* Scrollbars (user feedback: native light scrollbars looked out of place).
+   Thin, rounded, no arrow buttons, transparent track; thumb strengthens on hover.
+   T31 extends this for the light theme / forced colors. */
+:root {
+  color-scheme: dark;
+  --ac-scroll-thumb: rgba(164, 170, 180, 0.28);
+  --ac-scroll-thumb-hover: rgba(164, 170, 180, 0.5);
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--ac-scroll-thumb);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 32px;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--ac-scroll-thumb-hover);
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@media (forced-colors: active) {
+  ::-webkit-scrollbar-thumb {
+    background-color: CanvasText;
+  }
+}
