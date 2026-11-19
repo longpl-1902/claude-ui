@@ -1,0 +1,36 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format check
+        run: |
+          $unformatted = gofmt -l .
+          if ($unformatted) {
+            Write-Error "Files not gofmt'd: $unformatted"
+            exit 1
+          }
+        shell: pwsh
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build
+        run: |
+          go build -trimpath -ldflags "-s -w -X main.version=ci" -o ac.exe ./cmd/ac
+      - name: Size check
+        run: |
+          $size = (Get-Item ac.exe).Length
+          $mb = [math]::Round($size / 1MB, 2)
+          Write-Host "ac.exe size: $mb MB"
+          if ($size -gt 15728640) {
+            Write-Error "ac.exe exceeds 15 MB limit ($mb MB)"
+            exit 1
+          }
+        shell: pwsh

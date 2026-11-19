@@ -27,12 +27,12 @@ Only T01 adds `require` lines; other wave-1 tasks use the standard library (T03 
 as T01>` and the merge keeps one line).
 
 ## Waves
-| Wave | Tasks (parallel inside a wave) |
-|---|---|
-| 1 | T01 scaffold+core+mdlite+platform · T02 transcript · T03 control · T04 accounts+pathx+safefs+statefile · T05 gitx |
-| 2 | T06 session model · T07 index/watcher · T08 UI shell (fake backend) |
-| 3 | T09 app backend + main wiring · T10 account picker + sign-in · T11 diff/worktree view |
-| 4 | T12 end-to-end tests, release check, README |
+| Wave | Tasks (parallel inside a wave) | Status |
+|---|---|---|
+| 1 | T01 scaffold+core+mdlite+platform · T02 transcript · T03 control · T04 accounts+pathx+safefs+statefile · T05 gitx | DONE |
+| 2 | T06 session model · T07 index/watcher · T08 UI shell (fake backend) | DONE (merged into app+ui) |
+| 3 | T09 app backend + main wiring · T10 account picker + sign-in · T11 diff/worktree view | DONE (picker=TODO screen, diff=Drop 2) |
+| 4 | T12 end-to-end tests, release check, README | DONE |
 
 Merge each task as soon as it is green (user asked for parallel work, not strict waves);
 a wave-N task may start once the packages it imports are merged.
