@@ -426,3 +426,8 @@ export interface WindowOpenRequest {
 }
 
 export type WindowOpenResult = OkResult & { id?: number }
+
+/** Persisted window preferences (T36). */
+export interface WindowPrefs {
+  reopenOnStart: boolean
+}

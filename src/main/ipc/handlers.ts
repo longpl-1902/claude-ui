@@ -20,6 +20,13 @@ export type Handlers = {
   [C in InvokeChannel]: (...args: IpcInvokeMap[C]['args']) => Promise<IpcInvokeMap[C]['result']> | IpcInvokeMap[C]['result']
 }
 
+/** Channels that answer for the calling window (T36): the handler gets the viewer id first. */
+export const VIEWER_CHANNELS = ['team:get-snapshot', 'transcripts:select', 'transcripts:get-selection'] as const
+type ViewerChannel = (typeof VIEWER_CHANNELS)[number]
+export type ViewerHandlers = {
+  [C in ViewerChannel]: (viewer: string, ...args: IpcInvokeMap[C]['args']) => Promise<IpcInvokeMap[C]['result']> | IpcInvokeMap[C]['result']
+}
+
 const NOT_IMPLEMENTED: OkResult = { ok: false, reason: 'not-implemented' }
 const INVALID_ARGS: OkResult = { ok: false, reason: 'invalid-args' }
 
@@ -52,6 +59,7 @@ export interface HandlerDeps {
     snapshot(): AttentionSnapshot
     getPrefs(): AttentionPrefs
     setPrefs(p: AttentionPrefs): Promise<OkResult>
+    focusItem?(itemId: string): OkResult
   }
   /** T25 services (catalog scanner + claude mcp/plugin runner). */
   catalog?: ReturnType<typeof createCatalog>
@@ -332,7 +340,8 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
     Object.assign(real, {
       'attention:get': () => att.snapshot(),
       'attention:get-prefs': () => att.getPrefs(),
-      'attention:set-prefs': (p) => (isAttentionPrefs(p) ? att.setPrefs(p) : { ...INVALID_ARGS })
+      'attention:set-prefs': (p) => (isAttentionPrefs(p) ? att.setPrefs(p) : { ...INVALID_ARGS }),
+      'attention:focus-item': (id) => (str(id, 512) && id !== '' ? (att.focusItem?.(id) ?? { ...NOT_IMPLEMENTED }) : { ...INVALID_ARGS })
     } satisfies Partial<Handlers>)
   }
   if (pty) {
@@ -615,12 +624,36 @@ function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefa
     'hooks:apply': () => ({ ...NOT_IMPLEMENTED }),
     'attention:get': () => ({ items: [], projects: [], updatedAt: new Date(0).toISOString() }),
     'attention:get-prefs': () => ({ mutedProjects: [], dnd: false, notifyErrors: false }),
-    'attention:set-prefs': () => ({ ...NOT_IMPLEMENTED })
+    'attention:set-prefs': () => ({ ...NOT_IMPLEMENTED }),
+    'attention:focus-item': (id) => (str(id, 512) && id !== '' ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS })
   }
 }
 
-export function registerIpcHandlers(ipc: Pick<IpcMain, 'handle'>, handlers: Handlers = createHandlers()): void {
+/** Viewer-scoped handlers over the transcript service (T36); the viewer is the calling window. */
+export function createViewerHandlers(t: Pick<TranscriptService, 'snapshot' | 'select' | 'getSelection'>): ViewerHandlers {
+  return {
+    'team:get-snapshot': (viewer) => t.snapshot(viewer),
+    'transcripts:select': (viewer, sel) => (isTeamSelection(sel) ? t.select(sel, viewer) : structuredClone(EMPTY_TEAM_SNAPSHOT)),
+    'transcripts:get-selection': (viewer) => t.getSelection(viewer)
+  }
+}
+
+const senderIdOf = (event: unknown): number => {
+  const id = (event as { sender?: { id?: unknown } } | null | undefined)?.sender?.id
+  return typeof id === 'number' ? id : -1
+}
+
+export function registerIpcHandlers(
+  ipc: Pick<IpcMain, 'handle'>,
+  handlers: Handlers = createHandlers(),
+  scope?: { handlers: ViewerHandlers; viewerOf(senderId: number): string }
+): void {
   for (const channel of INVOKE_CHANNELS) {
+    if (scope && (VIEWER_CHANNELS as readonly string[]).includes(channel)) {
+      const scoped = scope.handlers[channel as ViewerChannel] as (viewer: string, ...args: unknown[]) => unknown
+      ipc.handle(channel, (event, ...args: unknown[]) => scoped(scope.viewerOf(senderIdOf(event)), ...args))
+      continue
+    }
     const fn = handlers[channel] as (...args: unknown[]) => unknown
     ipc.handle(channel, (_event, ...args: unknown[]) => fn(...args))
   }

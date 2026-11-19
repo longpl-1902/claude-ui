@@ -75,7 +75,15 @@ export const useAttentionStore = create<AttentionStoreState>((set, get) => {
     if (list.length === 0) return
     const i = list.findIndex((x) => x.id === get().focusedId)
     const next = i < 0 ? (dir === 1 ? 0 : list.length - 1) : (i + dir + list.length) % list.length
-    await get().focusItem(list[next]!.id)
+    const id = list[next]!.id
+    // Main focuses the window that shows the item (a chat for that session, else its project, else main).
+    const route = window.api?.attention?.focusItem
+    if (route) {
+      set({ focusedId: id })
+      const r = await route(id).catch(() => null)
+      if (r?.ok) return
+    }
+    await get().focusItem(id)
   }
 
   return {

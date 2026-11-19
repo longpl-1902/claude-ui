@@ -218,3 +218,37 @@ describe('R-24 flash and overlay', () => {
     expect(s.overlay).toHaveBeenLastCalledWith(0)
   })
 })
+
+describe('T36 per-window toast suppression (isViewed)', () => {
+  function withViewed(o: { focused: boolean; viewed: boolean; prefs?: Record<string, unknown> }) {
+    const show = vi.fn((_n: { title: string; body: string; onClick: () => void }) => {})
+    const prefs = { mutedProjects: [] as string[], dnd: false, notifyErrors: false, ...(o.prefs ?? {}) }
+    const isViewed = vi.fn((_i: unknown) => o.viewed)
+    const nt = createNotifier({
+      show, flash: () => {}, overlay: () => {}, isFocusedAndVisible: () => o.focused, prefs: () => prefs as never, onFocusItem: () => {}, isViewed
+    } as never)
+    return { nt, show, isViewed }
+  }
+
+  it('no toast when focused and a window shows the item', () => {
+    const s = withViewed({ focused: true, viewed: true })
+    s.nt.update(snap([item()]))
+    expect(s.show).not.toHaveBeenCalled()
+    expect(s.isViewed).toHaveBeenCalled()
+  })
+  it('toast when the app is not focused, even if a window shows the item', () => {
+    const s = withViewed({ focused: false, viewed: true })
+    s.nt.update(snap([item()]))
+    expect(s.show).toHaveBeenCalledTimes(1)
+  })
+  it('toast when focused but no window shows the item', () => {
+    const s = withViewed({ focused: true, viewed: false })
+    s.nt.update(snap([item()]))
+    expect(s.show).toHaveBeenCalledTimes(1)
+  })
+  it('viewedProjectKey is ignored when isViewed is given', () => {
+    const s = withViewed({ focused: true, viewed: false, prefs: { viewedProjectKey: PROJ } })
+    s.nt.update(snap([item()]))
+    expect(s.show).toHaveBeenCalledTimes(1)
+  })
+})

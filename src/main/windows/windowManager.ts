@@ -1,5 +1,5 @@
 import { WINDOW_IPC } from '../../shared/ipc'
-import type { OkResult, WindowInfo, WindowOpenResult, WindowSpec } from '../../shared/types'
+import type { OkResult, WindowInfo, WindowOpenResult, WindowPrefs, WindowSpec } from '../../shared/types'
 import { MAX_SECONDARY_WINDOWS, parseOpenRequest, windowKey } from '../../shared/windowSpec'
 import { trimPlacements, type WindowsState, type WindowsStore } from './persistence'
 import {
@@ -48,6 +48,8 @@ export interface WindowManagerDeps {
   setTimer(fn: () => void, ms: number): unknown
   clearTimer(t: unknown): void
   ipc: { handle(channel: string, fn: (e: { sender: { id: number } }, ...args: unknown[]) => unknown): void }
+  /** A window was closed (first thing in its 'closed' handler). Used to release per-window state. */
+  onClosed?(w: ManagedWindow, spec: WindowSpec): void
 }
 
 export interface WindowManager {
@@ -56,8 +58,11 @@ export interface WindowManager {
   open(req: unknown, fromWindowId?: number): WindowOpenResult
   list(): WindowInfo[]
   focus(id: number): OkResult
-  /** Focus the window that shows a project: its project window, else the main window. */
-  focusProject(projectKey: string): ManagedWindow | undefined
+  /**
+   * Focus the window that shows an item: a chat window for that exact session (`sessionRef` = `${accountId}|${sessionId}`),
+   * else the project window, else the main window.
+   */
+  focusProject(projectKey: string, sessionRef?: string): ManagedWindow | undefined
   main(): ManagedWindow | undefined
   all(): ManagedWindow[]
   /** The app is quitting: remember what is open and stop treating closes as the user's choice. */
@@ -169,6 +174,11 @@ export function createWindowManager(deps: WindowManagerDeps): WindowManager {
       }
     })
     win.on('closed', () => {
+      try {
+        deps.onClosed?.(win, spec)
+      } catch {
+        // a release hook must not break closing
+      }
       const i = entries.indexOf(entry)
       if (i >= 0) entries.splice(i, 1)
       if (quitting) return
@@ -247,9 +257,11 @@ export function createWindowManager(deps: WindowManagerDeps): WindowManager {
     open,
     list: info,
     focus,
-    focusProject(projectKey) {
+    focusProject(projectKey, sessionRef) {
       const target =
-        live().find((e) => e.spec.kind === 'project' && e.spec.projectKey === projectKey) ?? live().find((e) => e.spec.kind === 'main')
+        (sessionRef !== undefined ? live().find((e) => e.spec.kind === 'chat' && e.spec.sessionRef === sessionRef) : undefined) ??
+        live().find((e) => e.spec.kind === 'project' && e.spec.projectKey === projectKey) ??
+        live().find((e) => e.spec.kind === 'main')
       if (target) reveal(target.win)
       return target?.win
     },
@@ -260,6 +272,15 @@ export function createWindowManager(deps: WindowManagerDeps): WindowManager {
       deps.ipc.handle(WINDOW_IPC.open, (e, req) => open(req, live().find((x) => x.win.senderId === e.sender.id)?.win.id))
       deps.ipc.handle(WINDOW_IPC.list, () => info())
       deps.ipc.handle(WINDOW_IPC.focus, (_e, id) => focus(id))
+      deps.ipc.handle(WINDOW_IPC.getPrefs, (): WindowPrefs => ({ reopenOnStart: state.reopenOnStart }))
+      deps.ipc.handle(WINDOW_IPC.setPrefs, (_e, p): OkResult => {
+        if (typeof p !== 'object' || p === null || Array.isArray(p)) return { ok: false, reason: 'invalid-args' }
+        const v = (p as { reopenOnStart?: unknown }).reopenOnStart
+        if (typeof v !== 'boolean') return { ok: false, reason: 'invalid-args' }
+        state.reopenOnStart = v
+        saveNow()
+        return { ok: true }
+      })
       deps.ipc.handle(WINDOW_IPC.close, (e): OkResult => {
         const entry = live().find((x) => x.win.senderId === e.sender.id)
         if (!entry) return { ok: false, reason: 'not-found' }

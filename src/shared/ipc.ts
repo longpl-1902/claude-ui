@@ -49,6 +49,7 @@ import type {
   ThemeState,
   UsageToday,
   WindowInfo,
+  WindowPrefs,
   WindowOpenRequest,
   WindowOpenResult
 } from './types'
@@ -108,6 +109,7 @@ export const IPC = {
   attentionGet: 'attention:get',
   attentionGetPrefs: 'attention:get-prefs',
   attentionSetPrefs: 'attention:set-prefs',
+  attentionFocusItem: 'attention:focus-item',
   controlDetails: 'control:details',
   controlSendRich: 'control:send-rich',
   controlRefreshContext: 'control:refresh-context',
@@ -165,6 +167,8 @@ export const WINDOW_IPC = {
   list: 'window:list', // invoke -> WindowInfo[]
   focus: 'window:focus', // invoke (id: number) -> OkResult
   close: 'window:close', // invoke -> OkResult (closes the CALLING window when it is a secondary one)
+  getPrefs: 'window:get-prefs', // invoke -> WindowPrefs
+  setPrefs: 'window:set-prefs', // invoke (WindowPrefs) -> OkResult
   changed: 'window:changed' // main -> renderer push (WindowInfo[])
 } as const
 
@@ -242,6 +246,7 @@ export interface IpcInvokeMap {
   'attention:get': { args: []; result: AttentionSnapshot }
   'attention:get-prefs': { args: []; result: AttentionPrefs }
   'attention:set-prefs': { args: [p: AttentionPrefs]; result: OkResult }
+  'attention:focus-item': { args: [itemId: string]; result: OkResult }
   'control:details': { args: [controlId: string]; result: ControlDetails | null }
   'control:send-rich': { args: [controlId: string, text: string, images: ImageAttachment[]]; result: OkResult }
   'control:refresh-context': { args: [controlId: string]; result: OkResult }
@@ -321,6 +326,7 @@ const invokeChannelList = [
   'attention:get',
   'attention:get-prefs',
   'attention:set-prefs',
+  'attention:focus-item',
   'control:details',
   'control:send-rich',
   'control:refresh-context',
@@ -450,6 +456,8 @@ export interface ConsoleApi {
     setPrefs(p: AttentionPrefs): Promise<OkResult>
     onChanged(cb: (s: AttentionSnapshot) => void): () => void
     onFocus(cb: (e: { itemId: string }) => void): () => void
+    /** Asks main to focus the window that shows the item (T36); the renderer falls back to local focus when absent. */
+    focusItem?(itemId: string): Promise<OkResult>
   }
   catalog: {
     list(projectRoot: string | null, accountId: string): Promise<CatalogItem[]>
@@ -477,6 +485,8 @@ export interface ConsoleApi {
     focus(id: number): Promise<OkResult>
     /** Closes the calling window if it is a secondary one; the main window is never closed this way. */
     close(): Promise<OkResult>
+    getPrefs?(): Promise<WindowPrefs>
+    setPrefs?(p: WindowPrefs): Promise<OkResult>
     onChanged(cb: (list: WindowInfo[]) => void): () => void
   }
   app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string>; openExternal(url: string): Promise<OkResult> }

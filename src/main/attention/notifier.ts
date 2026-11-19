@@ -7,6 +7,8 @@ export interface NotifierDeps {
   isFocusedAndVisible: () => boolean
   prefs: () => AttentionPrefs
   onFocusItem: (id: string) => void
+  /** True when a visible window already shows the item's session; replaces the single viewedProjectKey pref (T36). */
+  isViewed?: (i: AttentionItem) => boolean
 }
 
 const TOAST_GAP_MS = 3000
@@ -57,7 +59,7 @@ export function createNotifier(deps: NotifierDeps): { update(s: AttentionSnapsho
         if (i.severity !== 'blocked' && !(i.severity === 'idle' && prefs.notifyIdle === true)) return false
         if (i.kind === 'api-error' && !prefs.notifyErrors) return false
         if (muted.has(i.projectKey) || prefs.dnd) return false
-        if (focused && prefs.viewedProjectKey === i.projectKey) return false
+        if (focused && (deps.isViewed ? deps.isViewed(i) : prefs.viewedProjectKey === i.projectKey)) return false
         return true
       })
       const eligibleIds = new Set(eligible.map((i) => i.id))

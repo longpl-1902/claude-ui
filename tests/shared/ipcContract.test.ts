@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { INVOKE_CHANNELS, IPC, PUSH_CHANNELS, THEME_IPC } from '@shared/ipc'
+import { INVOKE_CHANNELS, IPC, PUSH_CHANNELS, THEME_IPC, WINDOW_IPC } from '@shared/ipc'
 import {
   createHandlers, isControlStartRequest, isEffort, isImageAttachment, isImageList, isMcpAddRequest, isPermissionAnswer, isUuid
 } from '../../src/main/ipc/handlers'
@@ -430,5 +430,26 @@ describe('T31 theme channels', () => {
       expect(Object.values(IPC) as string[]).not.toContain(c)
       expect(INVOKE_CHANNELS as readonly string[]).not.toContain(c)
     }
+  })
+})
+
+describe('T36 per-window selection channels', () => {
+  const preload = (): string => readFileSync(resolve(process.cwd(), 'src/preload/index.ts'), 'utf8').replace(/\r\n/g, '\n')
+
+  it('attention:focus-item is an invoke channel, not a push channel', () => {
+    expect(IPC.attentionFocusItem).toBe('attention:focus-item')
+    expect(INVOKE_CHANNELS as readonly string[]).toContain('attention:focus-item')
+    expect(PUSH_CHANNELS as readonly string[]).not.toContain('attention:focus-item')
+  })
+
+  it('window prefs channels follow the window pattern and stay out of the generic table', () => {
+    expect(WINDOW_IPC.getPrefs).toBe('window:get-prefs')
+    expect(WINDOW_IPC.setPrefs).toBe('window:set-prefs')
+    for (const c of [WINDOW_IPC.getPrefs, WINDOW_IPC.setPrefs]) expect(INVOKE_CHANNELS as readonly string[]).not.toContain(c)
+  })
+
+  it('the preload references the new channel constants', () => {
+    const src = preload()
+    for (const ref of ['IPC.attentionFocusItem', 'WINDOW_IPC.getPrefs', 'WINDOW_IPC.setPrefs']) expect(src).toContain(ref)
   })
 })

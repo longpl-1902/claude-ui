@@ -1,6 +1,7 @@
 import type { ThemeSource } from '@shared/types'
 import { THEME_LABEL, THEME_SOURCES, useThemeStore } from '@renderer/theme/useThemeStore'
 import './appearance.css'
+import { ReopenWindowsToggle } from './ReopenWindowsToggle'
 
 const HINT: Record<ThemeSource, string> = {
   system: 'Follows the Windows theme and accent colour live.',
@@ -42,6 +43,7 @@ export function AppearanceRow(): JSX.Element {
           )
         })}
       </div>
+      <ReopenWindowsToggle />
       <p className="ac-acc-sub" role="status">
         Showing the {mode} theme. Ctrl+Shift+L cycles System, Light and Dark.
       </p>

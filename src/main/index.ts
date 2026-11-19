@@ -6,7 +6,7 @@ import { existsSync, promises as fsp, readFileSync, renameSync, writeFileSync } 
 import { homedir, release as osRelease } from 'node:os'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
-import type { WindowSpec } from '@shared/types'
+import type { OkResult, WindowSpec } from '@shared/types'
 import { specToQuery } from '@shared/windowSpec'
 import { createAccountsService } from './accounts/accountsService'
 import { expandHome, isAbsoluteFor, isDefaultConfigDir, toDisplayPath } from './accounts/paths'
@@ -30,10 +30,11 @@ import { parseHookPayload } from './hooks/hookPayload'
 import { ensureScriptInstalled, resolveNode } from './hooks/hookRuntime'
 import { createHookServer } from './hooks/hookServer'
 import { createHooksService } from './hooks/hooksService'
-import { createHandlers, registerIpcHandlers } from './ipc/handlers'
+import { createHandlers, createViewerHandlers, registerIpcHandlers } from './ipc/handlers'
 import { createThemeController, isThemeSource, type ThemeController } from './theme'
 import { createWindowsStore } from './windows/persistence'
 import { MIN_SIZE, type DisplayInfo, type ResolvedPlacement } from './windows/placement'
+import { createViewerRouter, viewerIdOf } from './windows/viewers'
 import { createWindowManager, type ManagedWindow, type WindowManager } from './windows/windowManager'
 import { resolveClaudeCommand } from './pty/claudeBinary'
 import { createPtyManager, loadNodePty } from './pty/ptyManager'
@@ -123,6 +124,8 @@ const mainWindow = (): BrowserWindow | undefined => windows?.main() ? BrowserWin
 let theme: ThemeController | undefined
 // Window wiring (T34): main + pop-out windows. All data and sessions are app-wide; a window only subscribes.
 let windows: WindowManager | undefined
+// Each window views its own session (T36): the router maps IPC callers to viewers and viewers back to windows.
+const viewers = createViewerRouter(() => windows)
 
 const toDisplayInfo = (d: Electron.Display): DisplayInfo => ({ id: d.id, workArea: d.workArea, scaleFactor: d.scaleFactor })
 
@@ -300,7 +303,8 @@ app.whenReady().then(async () => {
     controlledSessions: () =>
       control.list().flatMap((c) => (c.sessionId ? [{ sessionId: c.sessionId, controlId: c.id }] : []))
   })
-  transcripts.onTeam((s) => broadcast(IPC.teamChanged, s))
+  // team:changed goes to the viewer's own window only
+  transcripts.onTeam((s, viewer) => viewers.send(viewer, IPC.teamChanged, s))
   transcripts.onSessions((list) => broadcast(IPC.transcriptsSessionsChanged, list))
   transcripts.onUsage((u) => broadcast(IPC.usageChanged, u))
 
@@ -393,6 +397,14 @@ app.whenReady().then(async () => {
   await prefs.load()
   const redDot = nativeImage.createFromDataURL(RED_DOT_DATA_URL)
   const liveNotifications = new Set<Notification>()
+  // The item's window (a chat for that session, else its project window, else main) comes to the front and handles it.
+  const routeAttentionFocus = (itemId: string): OkResult => {
+    const item = hub.snapshot().items.find((i) => i.id === itemId)
+    const target = item ? windows?.focusProject(item.projectKey, `${item.accountId}|${item.sessionId}`) : windows?.main()
+    if (!target || target.isDestroyed()) return { ok: false, reason: 'not-found' }
+    target.send(IPC.attentionFocus, { itemId })
+    return { ok: true }
+  }
   const notifier = createNotifier({
     show: (n) => {
       if (!Notification.isSupported()) return
@@ -408,13 +420,9 @@ app.whenReady().then(async () => {
     overlay: (c) => mainWindow()?.setOverlayIcon(c > 0 ? redDot : null, c > 0 ? `${c} need you` : ''),
     isFocusedAndVisible: () => BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused() && w.isVisible()),
     prefs: () => prefs.get(),
-    onFocusItem: (itemId) => {
-      // The window that shows the item's project (its project window, else main) comes to the front and handles it.
-      const projectKey = hub.snapshot().items.find((i) => i.id === itemId)?.projectKey
-      const target = projectKey !== undefined ? windows?.focusProject(projectKey) : windows?.main()
-      if (!target) return
-      if (!target.isDestroyed()) target.send(IPC.attentionFocus, { itemId })
-    }
+    onFocusItem: (itemId) => void routeAttentionFocus(itemId),
+    isViewed: (i) =>
+      transcripts.viewing().some((x) => x.accountId === i.accountId && x.sessionId === i.sessionId && viewers.isShown(x.viewer))
   })
   hub.onChanged((snap) => {
     broadcast(IPC.attentionChanged, snap)
@@ -550,6 +558,7 @@ app.whenReady().then(async () => {
       attention: {
         snapshot: () => hub.snapshot(),
         getPrefs: () => prefs.get(),
+        focusItem: (itemId) => routeAttentionFocus(itemId),
         setPrefs: async (p) => {
           const r = await prefs.save(p)
           if (r.ok) notifier.update(hub.snapshot())
@@ -564,7 +573,8 @@ app.whenReady().then(async () => {
       },
       openExternal: (url) => shell.openExternal(url),
       defaultCwd: () => (app.isPackaged ? host.home : (process.env['INIT_CWD'] ?? process.cwd()))
-    })
+    }),
+    { handlers: createViewerHandlers(transcripts), viewerOf: (id) => viewers.viewerOf(id) }
   )
   void transcripts.start().then(() => hub.refresh())
   try {
@@ -596,7 +606,11 @@ app.whenReady().then(async () => {
     }),
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
-    ipc: { handle: (channel, fn) => ipcMain.handle(channel, (e, ...args) => fn(e, ...args)) }
+    ipc: { handle: (channel, fn) => ipcMain.handle(channel, (e, ...args) => fn(e, ...args)) },
+    // a closed pop-out no longer views its session (the session is dropped with its last viewer)
+    onClosed: (w, spec) => {
+      if (spec.kind !== 'main') transcripts.releaseViewer(viewerIdOf(w.senderId))
+    }
   })
   windows.registerIpc()
   // Opens the main window and the pop-out windows that were open at the last quit.

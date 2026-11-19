@@ -13,6 +13,9 @@ import { createSessionModel, parseSubagentMeta, type SessionModel } from './sess
 import { createTailer, type Tailer } from './tailer'
 import { isTranscriptReadable, type ByteReadFs } from './transcriptFs'
 import { createUsageCounter } from './usageToday'
+import { DEFAULT_VIEWER, type ViewerId } from './viewer'
+
+export { DEFAULT_VIEWER, type ViewerId } from './viewer'
 
 export interface DirWatcher {
   close(): void
@@ -44,10 +47,14 @@ export interface TranscriptServiceDeps {
 
 export interface TranscriptService {
   start(): Promise<void>
-  snapshot(): TeamSnapshot
+  snapshot(viewer?: ViewerId): TeamSnapshot
   listSessions(): Promise<SessionSummary[]>
-  select(sel: TeamSelection): Promise<TeamSnapshot>
-  getSelection(): TeamSelection
+  select(sel: TeamSelection, viewer?: ViewerId): Promise<TeamSnapshot>
+  getSelection(viewer?: ViewerId): TeamSelection
+  /** Drops a closed window's viewer; its session goes when no viewer is left. No-op for DEFAULT_VIEWER / unknown ids. */
+  releaseViewer(viewer: ViewerId): void
+  /** Viewers that currently show a session (for toast suppression). */
+  viewing(): { viewer: ViewerId; accountId: string; sessionId: string }[]
   usageToday(): UsageToday
   usageByProject(): Record<string, TokenTotals>
   ingestHook(e: HookEvent): void
@@ -56,7 +63,7 @@ export interface TranscriptService {
   onFileChange(cb: (path: string) => void): () => void
   refreshRoots(): Promise<void>
   onPtyChanged(): void
-  onTeam(cb: (s: TeamSnapshot) => void): () => void
+  onTeam(cb: (s: TeamSnapshot, viewer: ViewerId) => void): () => void
   onSessions(cb: (s: SessionSummary[]) => void): () => void
   onUsage(cb: (u: UsageToday) => void): () => void
   dispose(): void
@@ -139,13 +146,23 @@ interface FileRec {
   mtimeMs: number
   metaPath?: string
 }
-interface Selected {
+interface Session {
+  /** pickKey(pick) = `${accountId}|${sessionId}|${norm(configDirAbs)}` */
+  key: string
   pick: AutoPick
   model: SessionModel
   tailer: Tailer
   files: Map<string, FileRec>
   subDir: string
   registryJson: string
+  /** refcount: the viewers that show this session */
+  viewers: Set<ViewerId>
+}
+interface Viewer {
+  id: ViewerId
+  selection: TeamSelection
+  session: Session | null
+  waiting: boolean
 }
 interface RootWatch {
   key: string
@@ -177,10 +194,15 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   let disposed = false
   let roots: ConfigRoot[] = []
   const rootWatches = new Map<string, RootWatch>()
-  let selection: TeamSelection = { mode: 'auto' }
-  let selected: Selected | null = null
-  let waitingForSession = false
-  const pendingTail = new Set<string>()
+  let started = false
+  const sessions = new Map<string, Session>()
+  const viewers = new Map<ViewerId, Viewer>([[DEFAULT_VIEWER, { id: DEFAULT_VIEWER, selection: { mode: 'auto' }, session: null, waiting: false }]])
+  const pendingTail = new Map<string, Session>()
+  /** viewers owed a throttled push */
+  const pushQueue = new Set<ViewerId>()
+  const isActive = (s: Session): boolean => !disposed && sessions.get(s.key) === s
+  const isLiveViewer = (v: Viewer): boolean => !disposed && viewers.get(v.id) === v
+  const viewersOf = (s: Session): Viewer[] => [...s.viewers].flatMap((id) => viewers.get(id) ?? [])
   let drainQueued = false
   let repickQueued = false
   let pollTick = 0
@@ -193,7 +215,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   let pumping = false
   const usageEnumerated = new Set<string>()
 
-  const teamCbs = new Set<(s: TeamSnapshot) => void>()
+  const teamCbs = new Set<(s: TeamSnapshot, v: ViewerId) => void>()
   const sessionCbs = new Set<(s: SessionSummary[]) => void>()
   const usageCbs = new Set<(u: UsageToday) => void>()
   const activityCbs = new Set<(k: 'file-edit') => void>()
@@ -204,6 +226,16 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     for (const cb of [...cbs]) {
       try {
         cb(v)
+      } catch {
+        /* a listener must not break the service */
+      }
+    }
+  }
+
+  const fireTeam = (s: TeamSnapshot, v: ViewerId): void => {
+    for (const cb of [...teamCbs]) {
+      try {
+        cb(s, v)
       } catch {
         /* a listener must not break the service */
       }
@@ -237,48 +269,64 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   }
 
   // ---- snapshots ---------------------------------------------------------------------------------------------
-  function currentSnapshot(): TeamSnapshot {
-    if (selected) {
-      const snap = selected.model.snapshot(deps.nowMs())
-      const large = snap.agents.length > LARGE_TEAM
-      const finishedCount = snap.agents.filter((a) => a.runtime?.finished).length
-      const largeFinishedCap = Math.max(
-        MIN_LARGE_FINISHED_ACTIVITY_CAP,
-        Math.min(LARGE_FINISHED_ACTIVITY_CAP, Math.floor(LARGE_FINISHED_ITEM_BUDGET / Math.max(1, finishedCount)))
-      )
-      for (const a of snap.agents) {
-        const cap = a.runtime?.finished ? (large ? largeFinishedCap : FINISHED_ACTIVITY_CAP) : large ? LARGE_RUNNING_ACTIVITY_CAP : Infinity
-        if (a.activity.length > cap) a.activity = a.activity.slice(-cap)
-      }
-      if (snap.events.length > SNAPSHOT_EVENTS_CAP) snap.events = snap.events.slice(-SNAPSHOT_EVENTS_CAP)
-      if (snap.console.length > SNAPSHOT_CONSOLE_CAP) snap.console = snap.console.slice(-SNAPSHOT_CONSOLE_CAP)
-      return snap
+  function sessionSnapshot(s: Session): TeamSnapshot {
+    const snap = s.model.snapshot(deps.nowMs())
+    const large = snap.agents.length > LARGE_TEAM
+    const finishedCount = snap.agents.filter((a) => a.runtime?.finished).length
+    const largeFinishedCap = Math.max(
+      MIN_LARGE_FINISHED_ACTIVITY_CAP,
+      Math.min(LARGE_FINISHED_ACTIVITY_CAP, Math.floor(LARGE_FINISHED_ITEM_BUDGET / Math.max(1, finishedCount)))
+    )
+    for (const a of snap.agents) {
+      const cap = a.runtime?.finished ? (large ? largeFinishedCap : FINISHED_ACTIVITY_CAP) : large ? LARGE_RUNNING_ACTIVITY_CAP : Infinity
+      if (a.activity.length > cap) a.activity = a.activity.slice(-cap)
     }
+    if (snap.events.length > SNAPSHOT_EVENTS_CAP) snap.events = snap.events.slice(-SNAPSHOT_EVENTS_CAP)
+    if (snap.console.length > SNAPSHOT_CONSOLE_CAP) snap.console = snap.console.slice(-SNAPSHOT_CONSOLE_CAP)
+    return snap
+  }
+  function emptySnapshot(waiting: boolean): TeamSnapshot {
     const s = structuredClone(EMPTY_TEAM_SNAPSHOT)
-    if (waitingForSession) s.waitingForSession = true
+    if (waiting) s.waitingForSession = true
     return s
   }
-  function pushNow(): void {
-    clear(pushTimer)
-    pushTimer = null
+  const viewerSnapshot = (v: Viewer): TeamSnapshot => (v.session ? sessionSnapshot(v.session) : emptySnapshot(v.waiting))
+  function pushNow(vs: Iterable<Viewer>): void {
     if (disposed) return
-    fire(teamCbs, currentSnapshot())
+    // a session's snapshot is computed once per call (model.snapshot() clears its dirty flag)
+    const memo = new Map<Session, TeamSnapshot>()
+    for (const v of [...vs]) {
+      if (!isLiveViewer(v)) continue
+      pushQueue.delete(v.id)
+      let snap: TeamSnapshot
+      if (v.session) {
+        snap = memo.get(v.session) ?? sessionSnapshot(v.session)
+        memo.set(v.session, snap)
+      } else snap = emptySnapshot(v.waiting)
+      fireTeam(snap, v.id)
+    }
+    if (pushQueue.size === 0) {
+      clear(pushTimer)
+      pushTimer = null
+    }
   }
-  function schedulePush(): void {
-    if (pushTimer !== null || disposed) return
+  function schedulePush(s: Session): void {
+    if (disposed) return
+    for (const id of s.viewers) pushQueue.add(id)
+    if (pushTimer !== null) return
     pushTimer = deps.setTimer(() => {
       pushTimer = null
-      pushNow()
+      pushNow([...pushQueue].flatMap((id) => viewers.get(id) ?? []))
     }, PUSH_MS)
   }
-  const afterIngest = (sel: Selected): void => {
-    if (sel === selected && sel.model.isDirty()) schedulePush()
+  const afterIngest = (sel: Session): void => {
+    if (isActive(sel) && sel.model.isDirty()) schedulePush(sel)
   }
 
   // ---- file registration -------------------------------------------------------------------------------------
   const subDirOf = (pick: AutoPick): string => `${pick.configDirAbs.replace(/[\\/]+$/, '')}/projects/${pick.projectDir}/${pick.sessionId}/subagents`
 
-  function register(sel: Selected, path: string, kind: Kind, source: string, metaPath?: string): FileRec | null {
+  function register(sel: Session, path: string, kind: Kind, source: string, metaPath?: string): FileRec | null {
     const key = norm(path)
     if (sel.files.has(key)) return null
     const rec: FileRec = { path, kind, source, size: -1, mtimeMs: -1 }
@@ -287,7 +335,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     return rec
   }
 
-  function registerSubPath(sel: Selected, path: string): FileRec | null {
+  function registerSubPath(sel: Session, path: string): FileRec | null {
     const m = /(?:^|[\\/])agent-(.+?)\.(jsonl|meta\.json)$/i.exec(path)
     if (!m) return null
     const agentId = m[1]!
@@ -295,7 +343,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     return register(sel, path, 'meta', agentId)
   }
 
-  async function scanSubagents(sel: Selected, dir: string, depth: number, found: FileRec[]): Promise<void> {
+  async function scanSubagents(sel: Session, dir: string, depth: number, found: FileRec[]): Promise<void> {
     let entries
     try {
       entries = await fs.readdir(dir)
@@ -327,7 +375,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   }
 
   // ---- tail --------------------------------------------------------------------------------------------------
-  async function ingestLines(sel: Selected, source: string, lines: string[]): Promise<void> {
+  async function ingestLines(sel: Session, source: string, lines: string[]): Promise<void> {
     let batch: TranscriptRecord[] = []
     let n = 0
     for (const line of lines) {
@@ -335,19 +383,19 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       const rec = parseLine(line)
       if (rec) {
         batch.push(rec)
-        if (sel === selected && isEdit(rec)) scheduleActivity()
+        if (isActive(sel) && isEdit(rec)) scheduleActivity()
       }
       if (++n % BATCH_LINES === 0) {
         sel.model.ingest(source, batch)
         batch = []
         await slice()
-        if (sel !== selected) return
+        if (!isActive(sel)) return
       }
     }
     if (batch.length > 0) sel.model.ingest(source, batch)
   }
 
-  async function loadMeta(sel: Selected, agentId: string, metaPath: string): Promise<void> {
+  async function loadMeta(sel: Session, agentId: string, metaPath: string): Promise<void> {
     let text: string
     try {
       text = await fs.readText(metaPath)
@@ -355,17 +403,17 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       return
     }
     const meta = parseSubagentMeta(text)
-    if (meta && sel === selected) sel.model.setMeta(agentId, meta)
+    if (meta && isActive(sel)) sel.model.setMeta(agentId, meta)
   }
 
-  async function processFile(sel: Selected, rec: FileRec): Promise<void> {
+  async function processFile(sel: Session, rec: FileRec): Promise<void> {
     let st
     try {
       st = await fs.stat(rec.path)
     } catch {
       return
     }
-    if (!st || sel !== selected) return
+    if (!st || !isActive(sel)) return
     const first = rec.size < 0
     rec.size = st.size
     rec.mtimeMs = st.mtimeMs
@@ -381,37 +429,37 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
         } catch {
           break
         }
-        if (sel !== selected) return
+        if (!isActive(sel)) return
         if (r.reset) sel.model.reset(rec.source)
         if (r.skippedBytes > 0) sel.model.markHistoryTruncated()
         await ingestLines(sel, rec.source, r.lines)
-        if (sel !== selected || r.eof) break
+        if (!isActive(sel) || r.eof) break
         await slice()
-        if (sel !== selected) return
+        if (!isActive(sel)) return
       }
     }
     afterIngest(sel)
   }
 
-  function enqueue(rec: FileRec): void {
-    pendingTail.add(norm(rec.path))
+  function enqueue(sel: Session, rec: FileRec): void {
+    pendingTail.set(norm(rec.path), sel)
     if (drainQueued || disposed) return
     drainQueued = true
     bg(async () => {
       drainQueued = false
-      while (pendingTail.size > 0 && selected && !disposed) {
-        const sel = selected
-        const key = pendingTail.values().next().value as string
+      while (pendingTail.size > 0 && !disposed) {
+        const [key, sel] = pendingTail.entries().next().value as [string, Session]
         pendingTail.delete(key)
+        if (!isActive(sel)) continue
         const rec2 = sel.files.get(key)
         if (rec2) await processFile(sel, rec2)
       }
     })
   }
 
-  async function refreshRegistry(sel: Selected): Promise<void> {
+  async function refreshRegistry(sel: Session): Promise<void> {
     const live = (await index.readRegistry(roots)).filter((l) => l.accountId === sel.pick.accountId && l.entry.sessionId === sel.pick.sessionId)
-    if (sel !== selected) return
+    if (!isActive(sel)) return
     const stamp = (e: { statusUpdatedAt?: number; updatedAt?: number }): number => e.statusUpdatedAt ?? e.updatedAt ?? 0
     const best = live.sort((a, b) => stamp(b.entry) - stamp(a.entry))[0]
     const value = best
@@ -432,34 +480,63 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   const samePick = (a: AutoPick, b: AutoPick): boolean =>
     a.accountId === b.accountId && a.sessionId === b.sessionId && norm(a.configDirAbs) === norm(b.configDirAbs)
 
-  async function switchTo(pick: AutoPick | null): Promise<void> {
-    selected = null
-    pendingTail.clear()
-    if (!pick) {
-      pushNow()
+  const pickKey = (p: AutoPick): string => `${p.accountId}|${p.sessionId}|${norm(p.configDirAbs)}`
+
+  /** Unlinks the viewer from its session; the session is dropped (no more reads) once no viewer is left. */
+  function detach(v: Viewer): void {
+    const s = v.session
+    if (!s) return
+    v.session = null
+    s.viewers.delete(v.id)
+    if (s.viewers.size > 0) return
+    if (sessions.get(s.key) === s) sessions.delete(s.key)
+    for (const [k, owner] of [...pendingTail]) if (owner === s) pendingTail.delete(k)
+  }
+
+  async function attach(v: Viewer, pick: AutoPick | null): Promise<void> {
+    if (!isLiveViewer(v)) return
+    if (pick && v.session && v.session.key === pickKey(pick)) {
+      pushNow([v])
       return
     }
-    const sel: Selected = {
+    detach(v)
+    if (!pick) {
+      pushNow([v])
+      return
+    }
+    const key = pickKey(pick)
+    const have = sessions.get(key)
+    if (have) {
+      // lane tasks are serial, so an existing session is already loaded
+      have.viewers.add(v.id)
+      v.session = have
+      pushNow([v])
+      return
+    }
+    const sess: Session = {
+      key,
       pick,
       model: createSessionModel({ sessionId: pick.sessionId, accountId: pick.accountId }),
       tailer: createTailer(fs),
       files: new Map(),
       subDir: subDirOf(pick),
-      registryJson: 'null'
+      registryJson: 'null',
+      viewers: new Set([v.id])
     }
-    selected = sel
-    const main = register(sel, `${pick.configDirAbs.replace(/[\\/]+$/, '')}/projects/${pick.projectDir}/${pick.sessionId}.jsonl`, 'main', 'lead')!
+    sessions.set(key, sess)
+    v.session = sess
+    const main = register(sess, `${pick.configDirAbs.replace(/[\\/]+$/, '')}/projects/${pick.projectDir}/${pick.sessionId}.jsonl`, 'main', 'lead')!
     const subs: FileRec[] = []
-    await scanSubagents(sel, sel.subDir, 0, subs)
+    await scanSubagents(sess, sess.subDir, 0, subs)
     // metas first (so tree links exist), then the main file, then sub-agent files
     for (const rec of [...subs.filter((r) => r.kind === 'meta'), main, ...subs.filter((r) => r.kind === 'sub')]) {
-      if (selected !== sel) return
-      await processFile(sel, rec)
+      if (!isActive(sess)) return
+      await processFile(sess, rec)
     }
-    if (selected !== sel) return
-    await refreshRegistry(sel)
-    if (selected !== sel) return
-    pushNow()
+    if (!isActive(sess)) return
+    await refreshRegistry(sess)
+    if (!isActive(sess)) return
+    pushNow(viewersOf(sess))
   }
 
   async function isLive(pick: AutoPick): Promise<boolean> {
@@ -467,37 +544,63 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   }
 
   /** `force`: a user's choice of project/auto, which must not be held back by the keep-current-pick stability rule. */
-  async function applyAuto(force = false): Promise<void> {
+  async function applyAuto(v: Viewer, force = false, memo?: Map<string, ReturnType<SessionIndex['pickAuto']>>): Promise<void> {
+    if (!isLiveViewer(v) || v.selection.mode !== 'auto') return
     const hint = deps.controlHint?.() ?? deps.ptyHint()
-    const { pick, waitingForSession: waiting } = await index.pickAuto(roots, hint, selection.mode === 'auto' ? selection.projectKey : undefined)
-    if (selection.mode !== 'auto' || disposed) return
+    const projectKey = v.selection.projectKey
+    const memoKey = projectKey ?? ''
+    let picking = memo?.get(memoKey)
+    if (!picking) {
+      picking = index.pickAuto(roots, hint, projectKey)
+      memo?.set(memoKey, picking)
+    }
+    const { pick, waitingForSession: waiting } = await picking
+    if (!isLiveViewer(v) || v.selection.mode !== 'auto') return
     // Stability: without a pty (the highest tier) keep the current pick while it is still live, so two busy
     // sessions do not make the view flip (each flip re-backfills every sub-agent file).
-    if (!force && selected && hint === null && (await isLive(selected.pick))) {
-      if (selection.mode !== 'auto' || disposed) return
-      if (waitingForSession) {
-        waitingForSession = false
-        pushNow()
+    if (!force && v.session && hint === null && (await isLive(v.session.pick))) {
+      if (!isLiveViewer(v) || v.selection.mode !== 'auto') return
+      if (v.waiting) {
+        v.waiting = false
+        pushNow([v])
       }
       return
     }
-    const waitChanged = waiting !== waitingForSession
-    waitingForSession = waiting
-    if (pick && selected && samePick(pick, selected.pick)) return
-    if (!pick && !selected) {
-      if (waitChanged) pushNow()
+    const waitChanged = waiting !== v.waiting
+    v.waiting = waiting
+    if (pick && v.session && samePick(pick, v.session.pick)) return
+    if (!pick && !v.session) {
+      if (waitChanged) pushNow([v])
       return
     }
-    await switchTo(pick)
+    await attach(v, pick)
+  }
+
+  /** One re-pick pass over every viewer in auto mode (the pick is shared per project key). */
+  async function repickAll(): Promise<void> {
+    const memo = new Map<string, ReturnType<SessionIndex['pickAuto']>>()
+    for (const v of [...viewers.values()]) if (v.selection.mode === 'auto') await applyAuto(v, false, memo)
   }
 
   function scheduleRepick(): void {
-    if (repickQueued || selection.mode !== 'auto') return
+    if (repickQueued || ![...viewers.values()].some((v) => v.selection.mode === 'auto')) return
     repickQueued = true
     bg(async () => {
       repickQueued = false
-      if (selection.mode === 'auto') await applyAuto()
+      await repickAll()
     })
+  }
+
+  /** The viewer of a window; created on first use in auto mode (with a background pick once the service runs). */
+  function viewerFor(id: ViewerId, autoPick = true): Viewer {
+    let v = viewers.get(id)
+    if (!v) {
+      const fresh: Viewer = { id, selection: { mode: 'auto' }, session: null, waiting: false }
+      v = fresh
+      viewers.set(id, fresh)
+      if (autoPick && started && !disposed) bg(() => applyAuto(fresh))
+    }
+    return v
   }
 
   // ---- sessions / usage pushes -------------------------------------------------------------------------------
@@ -680,8 +783,9 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
         void enumerateUsage(r)
       }
     }
-    if (selected && !roots.some((r) => r.accountId === selected!.pick.accountId && norm(r.configDirAbs) === norm(selected!.pick.configDirAbs))) {
-      await switchTo(null)
+    for (const sess of [...sessions.values()]) {
+      if (roots.some((r) => r.accountId === sess.pick.accountId && norm(r.configDirAbs) === norm(sess.pick.configDirAbs))) continue
+      for (const v of viewersOf(sess)) await attach(v, null)
     }
   }
 
@@ -692,10 +796,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     if (cmp.startsWith(regDir + '/')) {
       scheduleSessions()
       scheduleRepick()
-      if (selected) {
-        const sel = selected
-        bg(() => refreshRegistry(sel))
-      }
+      for (const sel of sessions.values()) bg(() => refreshRegistry(sel))
       return
     }
     const info = classifyTranscriptPath(path, projectsRoot(root.configDirAbs))
@@ -709,38 +810,38 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       scheduleSessions()
       if (kind === 'add') scheduleRepick()
     }
-    const sel = selected
-    if (!sel || kind === 'unlink') return
-    if (info.sessionId !== sel.pick.sessionId || sel.pick.accountId !== root.accountId) return
-    if (norm(sel.pick.configDirAbs) !== norm(root.configDirAbs)) return
+    if (kind === 'unlink') return
+    const sel = sessions.get(`${root.accountId}|${info.sessionId}|${norm(root.configDirAbs)}`)
+    if (!sel) return
     let rec = sel.files.get(cmp)
     if (!rec) {
       if (info.kind === 'main') return // the main file is registered at selection time
       rec = registerSubPath(sel, path) ?? undefined
     }
-    if (rec) enqueue(rec)
+    if (rec) enqueue(sel, rec)
   }
 
   // ---- polling backup ----------------------------------------------------------------------------------------
   async function pollOnce(): Promise<void> {
-    const sel = selected
-    if (!sel) return
+    if (sessions.size === 0) return
     pollTick++
-    for (const rec of [...sel.files.values()]) {
-      if (sel !== selected) return
-      let st
-      try {
-        st = await fs.stat(rec.path)
-      } catch {
-        continue
+    for (const sel of [...sessions.values()]) {
+      for (const rec of [...sel.files.values()]) {
+        if (!isActive(sel)) break
+        let st
+        try {
+          st = await fs.stat(rec.path)
+        } catch {
+          continue
+        }
+        if (st && (st.size !== rec.size || st.mtimeMs !== rec.mtimeMs)) enqueue(sel, rec)
       }
-      if (st && (st.size !== rec.size || st.mtimeMs !== rec.mtimeMs)) enqueue(rec)
-    }
-    if (pollTick % 2 === 0 && sel === selected) {
-      const found: FileRec[] = []
-      await scanSubagents(sel, sel.subDir, 0, found)
-      for (const rec of found) enqueue(rec)
-      await refreshRegistry(sel)
+      if (pollTick % 2 === 0 && isActive(sel)) {
+        const found: FileRec[] = []
+        await scanSubagents(sel, sel.subDir, 0, found)
+        for (const rec of found) enqueue(sel, rec)
+        await refreshRegistry(sel)
+      }
     }
   }
   function schedulePoll(): void {
@@ -762,57 +863,70 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     start() {
       return run(async () => {
         await syncRoots()
-        if (selection.mode === 'auto') await applyAuto()
+        started = true
+        await applyAuto(viewerFor(DEFAULT_VIEWER))
         schedulePoll()
         scheduleMidnight()
       })
     },
-    snapshot: () => currentSnapshot(),
+    snapshot: (viewer = DEFAULT_VIEWER) => viewerSnapshot(viewerFor(viewer)),
     listSessions: () => listAll(),
-    select(sel) {
+    select(sel, viewer = DEFAULT_VIEWER) {
+      const existed = viewers.has(viewer)
+      const v = viewerFor(viewer, false)
       return run(async () => {
         if (sel.mode === 'auto') {
-          selection = sel.projectKey !== undefined ? { mode: 'auto', projectKey: sel.projectKey } : { mode: 'auto' }
-          await applyAuto(true)
+          v.selection = sel.projectKey !== undefined ? { mode: 'auto', projectKey: sel.projectKey } : { mode: 'auto' }
+          await applyAuto(v, true)
         } else {
           const r = await index.resolve(roots, sel.accountId, sel.sessionId)
-          if (r) {
-            selection = { mode: 'session', accountId: sel.accountId, sessionId: sel.sessionId }
-            waitingForSession = false
-            const pick: AutoPick = { accountId: sel.accountId, sessionId: sel.sessionId, configDirAbs: r.configDirAbs, projectDir: r.projectDir }
-            if (selected && samePick(pick, selected.pick)) pushNow()
-            else await switchTo(pick)
-          }
+          if (r && isLiveViewer(v)) {
+            v.selection = { mode: 'session', accountId: sel.accountId, sessionId: sel.sessionId }
+            v.waiting = false
+            await attach(v, { accountId: sel.accountId, sessionId: sel.sessionId, configDirAbs: r.configDirAbs, projectDir: r.projectDir })
+          } else if (!existed && started) await applyAuto(v)
         }
-        return currentSnapshot()
+        return viewerSnapshot(v)
       })
     },
-    getSelection: () => ({ ...selection }) as TeamSelection,
+    getSelection: (viewer = DEFAULT_VIEWER) => ({ ...viewerFor(viewer).selection }) as TeamSelection,
+    releaseViewer(viewer) {
+      if (viewer === DEFAULT_VIEWER) return
+      const v = viewers.get(viewer)
+      if (!v) return
+      viewers.delete(viewer)
+      pushQueue.delete(viewer)
+      detach(v)
+    },
+    viewing: () =>
+      [...viewers.values()].flatMap((v) => (v.session ? [{ viewer: v.id, accountId: v.session.pick.accountId, sessionId: v.session.pick.sessionId }] : [])),
     usageToday: () => counter.today(),
     usageByProject: () => counter.todayByProject(),
     refreshRoots() {
       return run(async () => {
         await syncRoots()
         scheduleSessions()
-        if (selection.mode === 'auto') await applyAuto()
+        await repickAll()
       })
     },
     ingestHook(e) {
       if (disposed) return
-      const sel = selected
-      if (sel && e.sessionId === sel.pick.sessionId) {
+      let hit = false
+      for (const sel of [...sessions.values()]) {
+        if (e.sessionId !== sel.pick.sessionId) continue
+        hit = true
         sel.model.applyHook(e)
         afterIngest(sel)
         // same lane as the poll: pick up whatever the hook just announced without waiting for the next tick
         bg(async () => {
-          if (sel !== selected) return
+          if (!isActive(sel)) return
           for (const rec of [...sel.files.values()]) {
-            if (sel !== selected) return
+            if (!isActive(sel)) return
             await processFile(sel, rec)
           }
         })
-        return
       }
+      if (hit) return
       if (!knownSessions.has(e.sessionId) && sessionsTimer === null) scheduleSessions()
     },
     onActivity(cb) {
@@ -847,8 +961,10 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       rootWatches.clear()
       for (const t of [pushTimer, sessionsTimer, usageTimer, pollTimer, midnightTimer, activityTimer]) clear(t)
       pushTimer = sessionsTimer = usageTimer = pollTimer = midnightTimer = activityTimer = null
-      selected = null
+      sessions.clear()
+      viewers.clear()
       pendingTail.clear()
+      pushQueue.clear()
       teamCbs.clear()
       sessionCbs.clear()
       usageCbs.clear()
