@@ -227,15 +227,15 @@ describe('R-12 grid empty states', () => {
         <AgentGrid />
       </>
     )
-    expect(screen.getByText('No Claude Code session found')).toBeInTheDocument()
+    expect(screen.getByText('No agents yet - start a session or pick one above')).toBeInTheDocument()
     expect(screen.getByText(/Raw terminal, or open a project in VS Code/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Show demo data' }))
     expect(useConsoleStore.getState().teamMode).toBe('demo')
     expect(screen.getByText(/DEMO/)).toBeInTheDocument()
-    expect(screen.queryByText('No Claude Code session found')).toBeNull()
+    expect(screen.queryByText('No agents yet - start a session or pick one above')).toBeNull()
     expect(document.querySelectorAll('.ac-card').length).toBe(mockTeamSnapshot.agents.length)
     await userEvent.click(screen.getByRole('button', { name: 'Back to live' }))
-    expect(screen.getByText('No Claude Code session found')).toBeInTheDocument()
+    expect(screen.getByText('No agents yet - start a session or pick one above')).toBeInTheDocument()
   })
 
   it('the demo button is a real focusable button', () => {
@@ -252,7 +252,7 @@ describe('R-12 grid empty states', () => {
     render(<AgentGrid />)
     expect(screen.getByText(/Waiting for the session to start/)).toHaveTextContent('after the first prompt')
     expect(screen.queryByRole('button', { name: 'Show demo data' })).toBeNull()
-    expect(screen.queryByText('No Claude Code session found')).toBeNull()
+    expect(screen.queryByText('No agents yet - start a session or pick one above')).toBeNull()
   })
 })
 
