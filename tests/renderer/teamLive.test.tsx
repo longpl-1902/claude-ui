@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import './jestDom'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -304,5 +306,32 @@ describe('R-12 Phase 5 placeholders', () => {
       screen.getByText(`#${mockTeamSnapshot.tasks[0]!.id} ${mockTeamSnapshot.tasks[0]!.title}`)
     ).toBeInTheDocument()
     expect(screen.getAllByRole('img', { name: /activity, last 20 minutes/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('P3-C header actions and title', () => {
+  it('live mode: Pause all and + New teammate are disabled with a title', () => {
+    seedLive()
+    render(<TeamHeader />)
+    for (const n of ['Pause all', '+ New teammate']) {
+      const b = screen.getByRole('button', { name: n })
+      expect(b).toBeDisabled()
+      expect(b).toHaveAttribute('title', 'Arrives in Phase 4')
+    }
+  })
+  it('demo mode: both are enabled', () => {
+    useConsoleStore.setState({ teamMode: 'demo' })
+    render(<TeamHeader />)
+    expect(screen.getByRole('button', { name: 'Pause all' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '+ New teammate' })).toBeEnabled()
+  })
+  it('repo element carries the full title and CSS gives it width first', () => {
+    const snap = seedLive()
+    const { container } = render(<TeamHeader />)
+    expect(container.querySelector('.ac-header__repo')).toHaveAttribute('title', `${snap.repo} / team: ${snap.teamName}`)
+    const css = readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/teamLeft.css'), 'utf8')
+    expect(css).toMatch(/\.ac-header__repo \{ flex: 1 1 auto; min-width: 120px/)
+    expect(css).toMatch(/\.ac-header__picker \{ flex-shrink: 3/)
+    expect(css).toMatch(/\.ac-header__team \{[^}]*text-overflow: ellipsis/)
   })
 })

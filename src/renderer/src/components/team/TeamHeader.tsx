@@ -54,7 +54,7 @@ export function TeamHeader() {
         <TerminalIcon size={22} color="var(--ac-accent)" />
         <span className="ac-header__title">Agent Console</span>
       </div>
-      <div className="ac-header__repo">
+      <div className="ac-header__repo" title={`${team.repo} / team: ${team.teamName}`}>
         <span>{team.repo}</span>
         <span className="ac-header__sep" aria-hidden="true">/</span>
         <span className="ac-header__team">team: {team.teamName}</span>
@@ -126,10 +126,17 @@ export function TeamHeader() {
         </span>
       </div>
       <div className="ac-header__actions">
-        <Button variant="secondary" onClick={() => void window.api?.team.pauseAll()}>
+        <Button
+          variant="secondary"
+          disabled={!demo}
+          title={demo ? undefined : 'Arrives in Phase 4'}
+          onClick={() => void window.api?.team.pauseAll()}
+        >
           Pause all
         </Button>
-        <Button variant="primary">+ New teammate</Button>
+        <Button variant="primary" disabled={!demo} title={demo ? undefined : 'Arrives in Phase 4'}>
+          + New teammate
+        </Button>
       </div>
     </header>
   )
