@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import type { Agent, AgentStatus } from '../../../../shared/types'
 import { Button } from '../ui/Button'
-import { useAgentStatuses, useAgentStatusInfo, useConsoleStore } from '../../store/useConsoleStore'
+import { useAgentStatuses, useAgentStatusInfo, useConsoleStore, useScrollMemory } from '../../store/useConsoleStore'
 import { AgentCard } from './AgentCard'
 import './teamCenter.css'
 
@@ -35,10 +35,12 @@ export function AgentGrid(): JSX.Element {
   const waiting = useConsoleStore((s) => s.team.waitingForSession)
   const showDemo = useConsoleStore((s) => s.showDemo)
   const live = teamMode === 'live'
+  const sectionRef = useRef<HTMLElement>(null)
+  useScrollMemory('grid', sectionRef)
   const statuses = useAgentStatuses()
   const ordered = useMemo(() => sortAgentsByStatus(agents, statuses), [agents, statuses])
   return (
-    <section className="ac-tc-grid-section">
+    <section className="ac-tc-grid-section" ref={sectionRef}>
       <div className="ac-tc-head">
         <h1>Team</h1>
         <span className="ac-tc-hint">Click an agent to inspect what it is doing</span>

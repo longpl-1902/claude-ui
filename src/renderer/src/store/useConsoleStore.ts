@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
+import type { RefObject } from 'react'
 import { create } from 'zustand'
 import type { StoreApi, UseBoundStore } from 'zustand'
 import { EMPTY_ACCOUNTS_SNAPSHOT } from '@shared/accountsDefaults'
@@ -26,6 +27,8 @@ import type {
   UsageToday
 } from '@shared/types'
 
+import { selectControlForSession, useControlStore } from './useControlStore'
+
 type AccountsApi = ConsoleApi['accounts']
 
 export type Screen = 'team' | 'accounts'
@@ -46,6 +49,17 @@ export interface LeadPtyState {
 }
 
 export type TeamMode = 'live' | 'demo'
+
+/** View state remembered per project (UX M5), restored by setProject. */
+export interface ProjectViewState {
+  selection: TeamSelection
+  selectedAgentId: string
+  inspectorTab: InspectorTab
+  consoleDraft: string
+  consoleFilter: string
+  scroll: { console: number; grid: number }
+  autoHeld?: boolean
+}
 
 export interface ConsoleState {
   screen: Screen
@@ -68,8 +82,24 @@ export interface ConsoleState {
   consoleDraft: string
   signIn: SignInState
   leadPty: LeadPtyState
+  /** Console filter chip ('' = default); saved per project. */
+  consoleFilter: string
+  perProject: Record<string, ProjectViewState>
+  /** Auto selection is pinned to the current session because a draft or approval is open. */
+  autoHeld: boolean
+  /** A permission card or inbox row has keyboard focus (holds Auto like a draft does). */
+  approvalFocused: boolean
+  shortcutsOpen: boolean
   navigate(screen: Screen): void
   selectAgent(id: string): void
+  /** Select the next (1) or previous (-1) agent in tree order, wrapping. */
+  selectAdjacentAgent(dir: 1 | -1): void
+  setConsoleFilter(f: string): void
+  setScroll(kind: 'console' | 'grid', px: number): void
+  setApprovalFocused(on: boolean): void
+  /** Re-evaluate the Auto hold (draft, open approvals, focus). */
+  syncAutoHold(): void
+  setShortcutsOpen(v: boolean): void
   setInspectorTab(tab: InspectorTab): void
   toggleRawTerminal(): void
   setConsoleDraft(text: string): void
@@ -128,9 +158,70 @@ function initialData() {
     rawTerminalOpen: false,
     consoleDraft: '',
     signIn: { step: 'none', panelOpen: false } as SignInState,
-    leadPty: {} as LeadPtyState
+    leadPty: {} as LeadPtyState,
+    consoleFilter: '',
+    perProject: {} as Record<string, ProjectViewState>,
+    autoHeld: false,
+    approvalFocused: false,
+    shortcutsOpen: false
   }
 }
+
+const VIEW_KEY = 'ac.viewState'
+const MAX_PROJECTS = 50
+
+function loadViewState(): Record<string, ProjectViewState> {
+  try {
+    const raw = window.localStorage.getItem(VIEW_KEY)
+    if (!raw) return {}
+    const p = JSON.parse(raw) as unknown
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return {}
+    const out: Record<string, ProjectViewState> = {}
+    for (const [k, v] of Object.entries(p as Record<string, ProjectViewState>)) {
+      if (v && typeof v === 'object' && v.selection && typeof v.selectedAgentId === 'string' && v.scroll) out[k] = v
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function saveViewState(v: Record<string, ProjectViewState>): void {
+  try {
+    window.localStorage.setItem(VIEW_KEY, JSON.stringify(v))
+  } catch {
+    /* storage unavailable: the view just is not remembered */
+  }
+}
+
+function sameView(a: ProjectViewState | undefined, b: ProjectViewState): boolean {
+  return (
+    !!a &&
+    a.selectedAgentId === b.selectedAgentId &&
+    a.inspectorTab === b.inspectorTab &&
+    a.consoleDraft === b.consoleDraft &&
+    a.consoleFilter === b.consoleFilter &&
+    a.scroll.console === b.scroll.console &&
+    a.scroll.grid === b.scroll.grid &&
+    (a.autoHeld ?? false) === (b.autoHeld ?? false) &&
+    JSON.stringify(a.selection) === JSON.stringify(b.selection)
+  )
+}
+
+/** Fields a project's remembered view restores (defaults for a project never seen). */
+function restoredFields(entry: ProjectViewState | undefined, key: string) {
+  return {
+    selection: entry?.selection ?? ({ mode: 'auto', projectKey: key } as TeamSelection),
+    selectedAgentId: entry?.selectedAgentId ?? LEAD_ID,
+    inspectorTab: entry?.inspectorTab ?? ('activity' as InspectorTab),
+    consoleDraft: entry?.consoleDraft ?? '',
+    consoleFilter: entry?.consoleFilter ?? '',
+    autoHeld: entry?.autoHeld ?? false
+  }
+}
+
+/** True while selectSession is called by the Auto hold / project restore (it must not clear `autoHeld`). */
+let holding = false
 
 export interface ProjectGroup {
   key: string
@@ -231,6 +322,15 @@ function adoptProject(list: SessionSummary[]): void {
     (remembered !== null && projects.some((p) => p.key === remembered) ? remembered : null) ??
     (pick ? sessionProjectKey(pick) : null) ??
     projects[0]!.key
+  const saved = st.perProject[key]
+  if (saved) {
+    const f = restoredFields(saved, key)
+    useConsoleStore.setState({ projectKey: key, ...f })
+    holding = f.autoHeld
+    void st.selectSession(f.selection)
+    holding = false
+    return
+  }
   useConsoleStore.setState({ projectKey: key })
   if (st.selection.mode === 'auto') void st.selectSession({ mode: 'auto', projectKey: key })
 }
@@ -238,33 +338,70 @@ function adoptProject(list: SessionSummary[]): void {
 export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<ConsoleState>()(
   (set, get) => ({
     ...initialData(),
+    perProject: loadViewState(),
     navigate: (screen) => set({ screen }),
     selectAgent: (id) => {
       if (get().team.agents.some((a) => a.id === id)) set({ selectedAgentId: id })
     },
+    selectAdjacentAgent: (dir) => {
+      const { team, selectedAgentId } = get()
+      const n = team.agents.length
+      if (n === 0) return
+      const i = team.agents.findIndex((a) => a.id === selectedAgentId)
+      const next = i < 0 ? (dir === 1 ? 0 : n - 1) : (i + dir + n) % n
+      set({ selectedAgentId: team.agents[next]!.id })
+    },
+    setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+    setConsoleFilter: (consoleFilter) => set({ consoleFilter }),
+    setScroll: (kind, px) => {
+      const { projectKey, perProject } = get()
+      const cur = projectKey === null ? undefined : perProject[projectKey]
+      if (projectKey === null || !cur || cur.scroll[kind] === px) return
+      const next = { ...perProject, [projectKey]: { ...cur, scroll: { ...cur.scroll, [kind]: px } } }
+      set({ perProject: next })
+      saveViewState(next)
+    },
+    setApprovalFocused: (approvalFocused) => {
+      set({ approvalFocused })
+      get().syncAutoHold()
+    },
+    syncAutoHold: () => {
+      const st = get()
+      const sid = st.team.sessionId
+      const ctl = useControlStore.getState()
+      const bound = sid ? selectControlForSession(sid)(ctl) : undefined
+      const pending = bound ? (ctl.streams[bound.id]?.permissions.length ?? bound.pendingPermissions) : 0
+      const wantHold = st.consoleDraft.trim() !== '' || st.approvalFocused || pending > 0
+      if (wantHold && !st.autoHeld && st.selection.mode === 'auto' && st.teamMode === 'live' && sid) {
+        const accountId = st.sessions.find((x) => x.sessionId === sid)?.accountId
+        if (accountId === undefined) return
+        holding = true
+        void st.selectSession({ mode: 'session', accountId, sessionId: sid })
+        holding = false
+        set({ autoHeld: true })
+      } else if (!wantHold && st.autoHeld) {
+        set({ autoHeld: false })
+        if (st.selection.mode === 'session') {
+          void st.selectSession({ mode: 'auto', ...(st.projectKey !== null ? { projectKey: st.projectKey } : {}) })
+        }
+      }
+    },
     setInspectorTab: (inspectorTab) => set({ inspectorTab }),
     toggleRawTerminal: () => set((s) => ({ rawTerminalOpen: !s.rawTerminalOpen })),
-    setConsoleDraft: (consoleDraft) => set({ consoleDraft }),
+    setConsoleDraft: (consoleDraft) => {
+      set({ consoleDraft })
+      get().syncAutoHold()
+    },
+    /** Demo only: live sending goes through useControlStore.send (LeadConsole). */
     submitConsole: () => {
       const { consoleDraft, team } = get()
       const text = consoleDraft.trim()
       if (!text) return
-      let target = 'lead'
-      const m = /^@(\S+)\s/.exec(text)
-      if (m) {
-        const found = team.agents.find((a) => a.name === m[1])
-        if (found) target = found.id
-      }
       set({
         team: { ...team, console: [...team.console, { time: localTime(new Date()), who: 'you', text }] },
         consoleDraft: ''
       })
-      try {
-        // fire-and-forget
-        window.api?.agent.sendMessage(target, text)?.catch?.(() => {})
-      } catch {
-        // ignore send failures
-      }
+      get().syncAutoHold()
     },
     hydrateTeam: (snap) =>
       set((s) =>
@@ -293,7 +430,7 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
       }
     },
     selectSession: async (sel) => {
-      set({ selection: sel })
+      set(holding ? { selection: sel } : { selection: sel, autoHeld: false })
       const api = window.api?.transcripts
       if (!api) return
       const snap = await callTeamApi(() => api.select(sel), undefined)
@@ -307,8 +444,11 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
     },
     setProject: (key) => {
       rememberProject(key)
-      set({ projectKey: key })
-      void get().selectSession({ mode: 'auto', projectKey: key })
+      const f = restoredFields(get().perProject[key], key)
+      set({ projectKey: key, ...f, approvalFocused: false })
+      holding = f.autoHeld
+      void get().selectSession(f.selection)
+      holding = false
     },
     setSelection: (selection) => set({ selection }),
     applyUsage: (usageToday) => set({ usageToday }),
@@ -382,6 +522,72 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
   })
 )
 
+/** Keep the current project's remembered view in step with the live fields; persist (max 50 projects). */
+useConsoleStore.subscribe((s) => {
+  const key = s.projectKey
+  if (key === null) return
+  const prev = s.perProject[key]
+  const next: ProjectViewState = {
+    selection: s.selection,
+    selectedAgentId: s.selectedAgentId,
+    inspectorTab: s.inspectorTab,
+    consoleDraft: s.consoleDraft,
+    consoleFilter: s.consoleFilter,
+    scroll: prev?.scroll ?? { console: 0, grid: 0 },
+    ...(s.autoHeld ? { autoHeld: true } : {})
+  }
+  if (sameView(prev, next)) return
+  const rest = { ...s.perProject }
+  delete rest[key]
+  let perProject: Record<string, ProjectViewState> = { ...rest, [key]: next }
+  const keys = Object.keys(perProject)
+  if (keys.length > MAX_PROJECTS) {
+    const kept = keys.slice(keys.length - MAX_PROJECTS)
+    perProject = Object.fromEntries(kept.map((k) => [k, perProject[k]!]))
+  }
+  useConsoleStore.setState({ perProject })
+  saveViewState(perProject)
+})
+
+// A permission prompt opening or closing on the viewed session holds / releases Auto.
+useControlStore.subscribe((c, p) => {
+  if (c.sessions === p.sessions && c.streams === p.streams) return
+  useConsoleStore.getState().syncAutoHold()
+})
+
+/**
+ * Restore and save the scroll position of the element in `ref` for the current project. For 'grid' the nearest
+ * `.ac-pane--fixed` ancestor (the pane that clips the grid) scrolls, else the element itself.
+ */
+export function useScrollMemory(kind: 'console' | 'grid', ref: RefObject<HTMLElement>, active = true): void {
+  const projectKey = useConsoleStore((s) => s.projectKey)
+  useEffect(() => {
+    const host = ref.current
+    if (!active || !host) return
+    const el = kind === 'grid' ? (host.closest<HTMLElement>('.ac-pane--fixed') ?? host) : host
+    const st = useConsoleStore.getState()
+    const stored = st.projectKey === null ? undefined : st.perProject[st.projectKey]?.scroll[kind]
+    el.scrollTop = stored ?? 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const flush = (): void => {
+      timer = undefined
+      useConsoleStore.getState().setScroll(kind, el.scrollTop)
+    }
+    const onScroll = (): void => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(flush, 150)
+    }
+    el.addEventListener('scroll', onScroll)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (timer) {
+        clearTimeout(timer)
+        flush()
+      }
+    }
+  }, [kind, ref, projectKey, active])
+}
+
 export function resetConsoleStore(): void {
   useConsoleStore.setState(initialData())
 }
@@ -430,16 +636,31 @@ export function useAgentStatusInfo(id: string): { status: AgentStatus; reason?: 
   }, [team, nowMs, id])
 }
 
+/** Needs-you count: agents that need you plus the open permission prompts of the app-controlled session. */
+export function selectNeedsYouCount(agentNeedsYou: number, pendingByControl: number): number {
+  return agentNeedsYou + pendingByControl
+}
+
+/** Open permission prompts of the controlled session bound to the viewed team (0 in demo). */
+export function usePendingForTeam(): number {
+  const sessionId = useConsoleStore((s) => (s.teamMode === 'live' ? s.team.sessionId : undefined))
+  return useControlStore((s) => {
+    const c = selectControlForSession(sessionId)(s)
+    return c ? (s.streams[c.id]?.permissions.length ?? c.pendingPermissions) : 0
+  })
+}
+
 export function useTeamCounters(): { agents: number; running: number; needsYou: number; tokens: number } {
   const team = useConsoleStore((s) => s.team)
   const statuses = useAgentStatuses()
+  const pending = usePendingForTeam()
   return useMemo(() => {
     const vals = Object.values(statuses)
     return {
       agents: team.agents.length,
       running: vals.filter((v) => v === 'running').length,
-      needsYou: vals.filter((v) => v === 'needs-you').length,
+      needsYou: selectNeedsYouCount(vals.filter((v) => v === 'needs-you').length, pending),
       tokens: team.agents.reduce((n, a) => n + a.tokens, 0)
     }
-  }, [team, statuses])
+  }, [team, statuses, pending])
 }
