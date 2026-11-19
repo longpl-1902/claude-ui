@@ -246,6 +246,67 @@ describe('Phase 2 real handlers delegate to the services', () => {
   })
 })
 
+describe('R-01 Phase 3 real handlers delegate to the transcript service', () => {
+  function withTranscripts(extra: Record<string, unknown> = {}) {
+    const live = { ...structuredClone(mockTeamSnapshot), source: 'live' as const, sessionId: 'sess-1' }
+    const transcripts = {
+      snapshot: vi.fn(() => live),
+      listSessions: vi.fn(async () => [{ sessionId: 'sess-1' }]),
+      select: vi.fn(async () => live),
+      getSelection: vi.fn(() => ({ mode: 'session', accountId: 'a', sessionId: 'sess-1' })),
+      usageToday: vi.fn(() => ({ day: '2026-11-19', byAccount: { a: { input: 1, output: 2, cacheCreation: 3, cacheRead: 4 } } }))
+    }
+    const handle = vi.fn()
+    registerIpcHandlers({ handle } as never, createHandlers({ transcripts, ...extra } as never))
+    const listeners = new Map<string, Listener>()
+    for (const call of handle.mock.calls) listeners.set(call[0] as string, call[1] as Listener)
+    const invoke = async (channel: InvokeChannel, ...args: unknown[]) => listeners.get(channel)!({}, ...args)
+    return { transcripts, live, invoke }
+  }
+
+  it('team:get-snapshot returns the live snapshot instead of the mock', async () => {
+    const { invoke, live } = withTranscripts()
+    expect(await invoke('team:get-snapshot')).toBe(live)
+  })
+
+  it('list-sessions, get-selection and usage:get-today delegate', async () => {
+    const { invoke, transcripts } = withTranscripts()
+    expect(await invoke('transcripts:list-sessions')).toEqual([{ sessionId: 'sess-1' }])
+    expect(await invoke('transcripts:get-selection')).toEqual({ mode: 'session', accountId: 'a', sessionId: 'sess-1' })
+    expect(((await invoke('usage:get-today')) as { day: string }).day).toBe('2026-11-19')
+    expect(transcripts.usageToday).toHaveBeenCalled()
+  })
+
+  it('transcripts:select delegates valid selections and answers the empty snapshot to invalid ones', async () => {
+    const { invoke, transcripts, live } = withTranscripts()
+    expect(await invoke('transcripts:select', { mode: 'auto' })).toBe(live)
+    expect(transcripts.select).toHaveBeenLastCalledWith({ mode: 'auto' })
+    await invoke('transcripts:select', { mode: 'session', accountId: 'a', sessionId: 's' })
+    expect(transcripts.select).toHaveBeenLastCalledWith({ mode: 'session', accountId: 'a', sessionId: 's' })
+    transcripts.select.mockClear()
+    for (const bad of [null, 'auto', { mode: 'session' }, { mode: 'session', accountId: 1, sessionId: 's' }, { mode: 'x' }]) {
+      expect(await invoke('transcripts:select', bad)).toMatchObject({ source: 'empty', agents: [] })
+    }
+    expect(transcripts.select).not.toHaveBeenCalled()
+  })
+
+  it('pty:spawn calls onPtySpawned only for an ok result', async () => {
+    const fake = fakeDeps()
+    const onPtySpawned = vi.fn()
+    const handle = vi.fn()
+    registerIpcHandlers({ handle } as never, createHandlers({ ...fake.deps, onPtySpawned } as never))
+    const spawn = handle.mock.calls.find((c) => c[0] === 'pty:spawn')![1] as Listener
+    const req = { cwd: 'C:/x', accountId: 'a', cols: 80, rows: 24 }
+    expect(await spawn({}, req)).toMatchObject({ ok: true, ptyId: 'p1' })
+    expect(onPtySpawned).toHaveBeenCalledTimes(1)
+    expect(onPtySpawned).toHaveBeenCalledWith('p1')
+    fake.accounts.launchClaude.mockResolvedValueOnce({ ok: false, reason: 'spawn-failed' } as never)
+    await spawn({}, req)
+    await spawn({}, { cwd: 1 })
+    expect(onPtySpawned).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('R-17 handlers.ts has no fs / network / child_process / credential access', () => {
   const src = readFileSync(resolve(__dirname, '../../src/main/ipc/handlers.ts'), 'utf8')
 
