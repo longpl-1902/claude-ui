@@ -7,13 +7,18 @@ import { formatTokens } from '@shared/format'
 import { AccountEditor } from './AccountEditor'
 import './manage.css'
 
-export function AccountCards(): JSX.Element {
+export interface AccountCardsProps {
+  adding: boolean
+  onAdd(): void
+  onCloseAdd(): void
+}
+
+export function AccountCards({ adding, onAdd, onCloseAdd }: AccountCardsProps): JSX.Element {
   const accounts = useConsoleStore((s) => s.accounts)
   const setDefaultAccount = useConsoleStore((s) => s.setDefaultAccount)
   const startSignIn = useConsoleStore((s) => s.startSignIn)
   const removeProfile = useConsoleStore((s) => s.removeProfile)
   const [editingId, setEditingId] = useState<string>()
-  const [adding, setAdding] = useState(false)
   const [removeError, setRemoveError] = useState<string>()
 
   async function remove(id: string, name: string): Promise<void> {
@@ -25,7 +30,14 @@ export function AccountCards(): JSX.Element {
   return (
     <section className="ac-acc-cards" aria-label="Accounts">
       {accounts.accounts.length === 0 && !adding && (
-        <p className="ac-acc-empty">No accounts yet. Use a detected login above, or add one.</p>
+        <div className="ac-acc-empty-block">
+          <p className="ac-acc-empty">No accounts yet. Use a detected login above, or add one.</p>
+          <div>
+            <Button variant="dashed" onClick={onAdd}>
+              + Add account
+            </Button>
+          </div>
+        </div>
       )}
       {accounts.accounts.map((a) => {
         const isDefault = a.id === accounts.defaultAccountId
@@ -95,16 +107,10 @@ export function AccountCards(): JSX.Element {
           </div>
         )
       })}
-      {adding ? (
+      {adding && (
         <div className="ac-acc-card ac-acc-card--edit">
           <h2 className="ac-acc-h2 ac-acc-h2--sm">Add account</h2>
-          <AccountEditor mode="create" onClose={() => setAdding(false)} />
-        </div>
-      ) : (
-        <div>
-          <Button variant="dashed" onClick={() => setAdding(true)}>
-            + Add another account
-          </Button>
+          <AccountEditor mode="create" onClose={onCloseAdd} />
         </div>
       )}
       {removeError && (

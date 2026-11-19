@@ -2,7 +2,7 @@ import { Button } from '@renderer/components/ui/Button'
 import { ChevronLeftIcon } from '@renderer/components/ui/Icons'
 import { selectActiveAccount, useConsoleStore } from '@renderer/store/useConsoleStore'
 
-export function AccountsHeader(): JSX.Element {
+export function AccountsHeader({ onAdd }: { onAdd(): void }): JSX.Element {
   const navigate = useConsoleStore((s) => s.navigate)
   const active = useConsoleStore(selectActiveAccount)
   return (
@@ -16,7 +16,7 @@ export function AccountsHeader(): JSX.Element {
       </span>
       <span className="ac-acc-header__title">Accounts</span>
       <div className="ac-acc-spacer" />
-      <Button variant="accent2">+ Add account</Button>
+      <Button variant="accent2" onClick={onAdd}>+ Add account</Button>
     </header>
   )
 }

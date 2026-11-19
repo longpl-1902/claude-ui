@@ -19,3 +19,5 @@
 .ac-acc-rule-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; margin-top: 8px; }
 .ac-acc-rule-form__actions { display: flex; gap: 8px; }
 .ac-acc-table__fixed td { color: var(--ac-text-muted); font-style: italic; }
+.ac-acc-empty-block { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ac-acc-error--banner { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid currentColor; border-radius: 6px; }

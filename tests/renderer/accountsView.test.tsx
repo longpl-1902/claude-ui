@@ -178,6 +178,9 @@ describe('Sign-in panel', () => {
 
   it('a done push shows the signed-in view, Use this and Done', async () => {
     const { container } = await openPanel()
+    const unlinked = structuredClone(mockAccountsSnapshot)
+    unlinked.accounts = unlinked.accounts.filter((a) => a.configDir !== PERSONAL)
+    act(() => useConsoleStore.getState().hydrateAccounts(unlinked))
     push({ configDir: PERSONAL, step: 'done', email: 'you@gmail.com' })
     expect(screen.getByText('Signed in as you@gmail.com')).toBeInTheDocument()
     expect(screen.queryByText('Finish signing in your browser')).toBeNull()
@@ -187,6 +190,22 @@ describe('Sign-in panel', () => {
     expect(api.linkDetected).toHaveBeenCalledWith({ configDir: PERSONAL })
     await userEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByText('Signed in as you@gmail.com')).toBeNull()
+  })
+
+  it('shows Saved as for an account matched by configDir even when not detected', async () => {
+    await openPanel()
+    const snap = structuredClone(mockAccountsSnapshot)
+    snap.detected = []
+    act(() => useConsoleStore.getState().hydrateAccounts(snap))
+    push({ configDir: PERSONAL, step: 'done', email: 'you@gmail.com' })
+    expect(screen.getByText(/Saved as/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Use this' })).toBeNull()
+  })
+
+  it('keeps aria-live off the whole panel (terminal stays outside any live region)', async () => {
+    const { container } = await openPanel()
+    expect(container.querySelector('.ac-acc-flow')).not.toHaveAttribute('aria-live')
+    expect(container.querySelector('.ac-acc-flow [aria-live="polite"]')).not.toBeNull()
   })
 
   it('a done push for a linked dir shows Saved as the profile name', async () => {

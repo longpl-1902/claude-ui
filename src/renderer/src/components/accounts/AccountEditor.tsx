@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@renderer/components/ui/Button'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { ACCOUNT_COLORS } from '@shared/accountsDefaults'
@@ -20,7 +20,8 @@ const slug = (s: string): string =>
     .replace(/^-+|-+$/g, '')
 
 const REASONS: Record<string, string> = {
-  'api-unavailable': 'The app backend is not available.'
+  'api-unavailable': 'The app backend is not available.',
+  'invalid-folder': 'Config folder must be an absolute path'
 }
 
 export function AccountEditor({ mode, initial, onClose }: AccountEditorProps): JSX.Element {
@@ -32,6 +33,10 @@ export function AccountEditor({ mode, initial, onClose }: AccountEditorProps): J
   const [errors, setErrors] = useState<{ name?: string; color?: string; dir?: string }>({})
   const [saveError, setSaveError] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (mode === 'create') nameRef.current?.focus()
+  }, [mode])
   const idp = `ac-acc-ed-${initial?.id ?? 'new'}`
 
   const shownDir =
@@ -75,6 +80,7 @@ export function AccountEditor({ mode, initial, onClose }: AccountEditorProps): J
         </label>
         <input
           id={`${idp}-name`}
+          ref={nameRef}
           className="ac-acc-text"
           value={name}
           aria-invalid={errors.name ? true : undefined}

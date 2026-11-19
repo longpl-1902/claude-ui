@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { AccountCards } from '@renderer/components/accounts/AccountCards'
 import { AccountPolicies } from '@renderer/components/accounts/AccountPolicies'
 import { AccountsHeader } from '@renderer/components/accounts/AccountsHeader'
@@ -7,9 +9,14 @@ import { RunningNow } from '@renderer/components/accounts/RunningNow'
 import './AccountsView.css'
 
 export function AccountsView() {
+  const [adding, setAdding] = useState(false)
+  const accountsError = useConsoleStore((s) => s.accountsError)
+  const clearAccountsError = useConsoleStore(
+    (s) => (s as { clearAccountsError?: () => void }).clearAccountsError
+  )
   return (
     <div className="ac-accounts">
-      <AccountsHeader />
+      <AccountsHeader onAdd={() => setAdding(true)} />
       <main className="ac-acc-main">
         <div className="ac-acc-intro">
           <h1 className="ac-acc-h1">Claude accounts</h1>
@@ -18,8 +25,18 @@ export function AccountsView() {
             on one account, so company work and personal work never mix.
           </p>
         </div>
+        {accountsError && (
+          <div className="ac-acc-error ac-acc-error--banner" role="alert">
+            <span>{accountsError}</span>
+            {clearAccountsError && (
+              <button type="button" className="ac-acc-back" onClick={() => clearAccountsError()}>
+                Dismiss
+              </button>
+            )}
+          </div>
+        )}
         <DetectedLogins />
-        <AccountCards />
+        <AccountCards adding={adding} onAdd={() => setAdding(true)} onCloseAdd={() => setAdding(false)} />
         <FolderRules />
         <AccountPolicies />
         <RunningNow />
