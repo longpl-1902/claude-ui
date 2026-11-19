@@ -9,9 +9,11 @@ import { SharedTaskList } from '@renderer/components/team/SharedTaskList'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { mockAccountsSnapshot } from '@shared/mock'
 import { seedMockAccounts } from './seedAccounts'
+import { seedDemoTeam } from './seedTeam'
 
 beforeEach(() => {
   resetConsoleStore()
+  seedDemoTeam()
   seedMockAccounts()
 })
 afterEach(() => {

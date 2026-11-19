@@ -12,6 +12,7 @@ import { LeadConsole } from '@renderer/components/team/LeadConsole'
 import { RawTerminalPane } from '@renderer/components/team/RawTerminalPane'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { seedMockAccounts } from './seedAccounts'
+import { seedDemoTeam } from './seedTeam'
 
 const xterm = vi.hoisted(() => ({
   open: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 
 beforeEach(() => {
   resetConsoleStore()
+  seedDemoTeam()
   Object.values(xterm).forEach((f) => f.mockClear())
 })
 
@@ -53,7 +55,7 @@ describe('R-10 OverlapBanner', () => {
   })
 
   it('renders nothing when there are no overlaps', () => {
-    useConsoleStore.getState().hydrateTeam({ ...mockTeamSnapshot, overlaps: [] })
+    useConsoleStore.setState({ team: { ...mockTeamSnapshot, overlaps: [] } })
     const { container } = render(<OverlapBanner />)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(container).toBeEmptyDOMElement()

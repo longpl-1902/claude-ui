@@ -7,6 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TeamView } from '@renderer/screens/TeamView'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { seedDemoTeam } from './seedTeam'
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
@@ -23,7 +24,10 @@ vi.mock('@xterm/addon-fit', () => ({
 }))
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 
-beforeEach(() => resetConsoleStore())
+beforeEach(() => {
+  resetConsoleStore()
+  seedDemoTeam()
+})
 
 describe('R-15 TeamView smoke', () => {
   it('renders the key texts from every section', () => {
