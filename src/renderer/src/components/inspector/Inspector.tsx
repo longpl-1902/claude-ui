@@ -136,7 +136,12 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
 
       <div className="insp__spacer" />
       <div className="insp__actions">
-        <Button size="lg" onClick={messageAgent}>
+        <Button
+          size="lg"
+          disabled={live}
+          title={live ? "Arrives in Phase 3b" : undefined}
+          onClick={messageAgent}
+        >
           Message agent
         </Button>
         <Button
@@ -152,6 +157,8 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
         </Button>
         <Button
           size="lg"
+          disabled={live}
+          title={live ? "Arrives in Phase 4" : undefined}
           onClick={() => void window.api?.agent.pause(agent.id)}
         >
           Pause
@@ -159,6 +166,8 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
         <Button
           size="lg"
           variant="danger"
+          disabled={live}
+          title={live ? "Arrives in Phase 4" : undefined}
           onClick={() => void window.api?.agent.stop(agent.id)}
         >
           Stop

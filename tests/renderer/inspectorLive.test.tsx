@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import './jestDom'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -7,6 +9,7 @@ import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import type { Agent } from '@shared/types'
 import { AccountCards } from '@renderer/components/accounts/AccountCards'
 import { Inspector } from '@renderer/components/inspector/Inspector'
+import { seedDemoTeam } from './seedTeam'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 
 function liveAgent(over: Partial<Agent> = {}): Agent {
@@ -143,5 +146,29 @@ describe('AccountCards tokens used today', () => {
     expect(row.querySelector('[title]')!.getAttribute('title')).toBe(
       'input + output + cache writes; cache reads shown separately'
     )
+  })
+})
+
+describe('P3-C inspector actions and wrapping', () => {
+  it('live: Message agent, Pause and Stop are disabled with titles', () => {
+    seedLive([liveAgent()])
+    render(<Inspector />)
+    expect(screen.getByRole('button', { name: 'Message agent' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Message agent' })).toHaveAttribute('title', 'Arrives in Phase 3b')
+    for (const n of ['Pause', 'Stop']) {
+      expect(screen.getByRole('button', { name: n })).toBeDisabled()
+      expect(screen.getByRole('button', { name: n })).toHaveAttribute('title', 'Arrives in Phase 4')
+    }
+  })
+  it('demo: the three actions are enabled', () => {
+    seedDemoTeam()
+    render(<Inspector />)
+    for (const n of ['Message agent', 'Pause', 'Stop']) expect(screen.getByRole('button', { name: n })).toBeEnabled()
+  })
+  it('activity CSS wraps long text without a horizontal scrollbar', () => {
+    const css = readFileSync(resolve(__dirname, '../../src/renderer/src/components/inspector/inspector.css'), 'utf8')
+    expect(css).toMatch(/\.insp-activity \{[^}]*overflow-x: hidden/)
+    expect(css).toMatch(/\.insp-event__result \{[^}]*overflow-wrap: anywhere/)
+    expect(css).toMatch(/\.insp-event__target \{[^}]*overflow-wrap: anywhere/)
   })
 })

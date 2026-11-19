@@ -3,7 +3,7 @@
 .ac-header__title { font-weight: 700; font-size: 15px; letter-spacing: 0.2px; }
 .ac-header__repo { display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--ac-text-muted); }
 .ac-header__sep { color: var(--ac-text-sep); }
-.ac-header__team { color: var(--ac-text); }
+.ac-header__team { color: var(--ac-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-header__chip { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 8px; border-radius: 999px; border: 1px solid #2B3A5C; background: #151C2C; color: var(--ac-text); font: inherit; font-size: 12px; cursor: pointer; flex: 0 1 320px; max-width: 320px; min-width: 0; overflow: hidden; }
 .ac-header__chip:hover { border-color: var(--ac-border-hover); }
 .ac-header__name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -44,8 +44,9 @@
 @media (min-width: 1101px) {
   .ac-header { flex-wrap: nowrap; gap: 12px; }
   .ac-header > * { flex-shrink: 0; }
-  .ac-header > .ac-header__repo { flex-shrink: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .ac-header > .ac-header__picker, .ac-header > .ac-header__chip { flex-shrink: 1; }
-  .ac-header > .ac-header__spacer { flex-shrink: 1; min-width: 0; }
+  .ac-header > .ac-header__repo { flex: 1 1 auto; min-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ac-header > .ac-header__picker { flex-shrink: 3; }
+  .ac-header > .ac-header__chip { flex-shrink: 1; }
+  .ac-header > .ac-header__spacer { flex: 0 1 0; min-width: 0; }
   .ac-header__counters { flex-wrap: nowrap; white-space: nowrap; }
 }
