@@ -3,7 +3,8 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { INVOKE_CHANNELS, type InvokeChannel } from '@shared/ipc'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
-import { createHandlers, registerIpcHandlers, type HandlerDeps } from '../../src/main/ipc/handlers'
+import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
+import { createHandlers, createViewerHandlers, registerIpcHandlers, type HandlerDeps } from '../../src/main/ipc/handlers'
 
 type Listener = (event: unknown, ...args: unknown[]) => unknown
 
@@ -855,5 +856,69 @@ describe('T26 main wiring', () => {
     const src = readFileSync(resolve(__dirname, '../../src/main/ipc/handlers.ts'), 'utf8')
     expect(src).not.toMatch(/from\s+['"](node:)?(fs|fs\/promises|child_process|net|http|https|os|path)['"]/)
     expect(src).not.toMatch(/\bfetch\(|https?:\/\//)
+  })
+})
+
+describe('T36 viewer-scoped channels and attention:focus-item', () => {
+  function scoped(withScope: boolean) {
+    const viewerHandlers = {
+      'team:get-snapshot': vi.fn((_v: string) => ({ source: 'live' })),
+      'transcripts:select': vi.fn((_v: string, _s: unknown) => ({ source: 'live' })),
+      'transcripts:get-selection': vi.fn((_v: string) => ({ mode: 'auto' }))
+    }
+    const viewerOf = vi.fn((id: number) => `wc:${id}`)
+    const select = vi.fn(async () => ({ source: 'live' }))
+    const plain = { snapshot: vi.fn(() => ({ source: 'plain' })), listSessions: vi.fn(async () => []), select, getSelection: vi.fn(() => ({ mode: 'auto' })) }
+    const handle = vi.fn()
+    registerIpcHandlers({ handle } as never, createHandlers({ transcripts: plain } as never), withScope ? { handlers: viewerHandlers as never, viewerOf } : undefined)
+    const listeners = new Map<string, Listener>()
+    for (const call of handle.mock.calls) listeners.set(call[0] as string, call[1] as Listener)
+    return { viewerHandlers, viewerOf, listeners, handle, plain }
+  }
+
+  it('with a scope, the three channels call the viewer handler with the viewer of the sender', async () => {
+    const t = scoped(true)
+    expect(t.handle).toHaveBeenCalledTimes(INVOKE_CHANNELS.length)
+    await t.listeners.get('team:get-snapshot')!({ sender: { id: 7 } })
+    expect(t.viewerHandlers['team:get-snapshot']).toHaveBeenCalledWith('wc:7')
+    const sel = { mode: 'auto' }
+    await t.listeners.get('transcripts:select')!({ sender: { id: 8 } }, sel)
+    expect(t.viewerHandlers['transcripts:select']).toHaveBeenCalledWith('wc:8', sel)
+    await t.listeners.get('transcripts:get-selection')!({ sender: { id: 9 } })
+    expect(t.viewerHandlers['transcripts:get-selection']).toHaveBeenCalledWith('wc:9')
+    await t.listeners.get('team:get-snapshot')!({})
+    expect(t.viewerOf).toHaveBeenLastCalledWith(-1)
+    await t.listeners.get('team:get-snapshot')!(undefined)
+    expect(t.viewerOf).toHaveBeenLastCalledWith(-1)
+    expect(t.plain.snapshot).not.toHaveBeenCalled()
+  })
+
+  it('createViewerHandlers rejects an invalid selection with an empty snapshot and does not select', async () => {
+    const select = vi.fn(async () => ({ source: 'live' }) as never)
+    const h = createViewerHandlers({ snapshot: vi.fn(), select, getSelection: vi.fn() } as never)
+    const r = await h['transcripts:select']('wc:2', { mode: 'bogus' } as never)
+    expect(r).toEqual(EMPTY_TEAM_SNAPSHOT)
+    expect(select).not.toHaveBeenCalled()
+    await h['transcripts:select']('wc:2', { mode: 'auto' })
+    expect(select).toHaveBeenCalledWith({ mode: 'auto' }, 'wc:2')
+  })
+
+  it('without a scope the channels behave as before (default viewer)', async () => {
+    const t = scoped(false)
+    expect(await t.listeners.get('team:get-snapshot')!({ sender: { id: 7 } })).toEqual({ source: 'plain' })
+    expect(t.plain.snapshot).toHaveBeenCalledWith()
+  })
+
+  it('attention:focus-item validates, delegates, and the mock answers not-implemented', async () => {
+    const focusItem = vi.fn((_id: string) => ({ ok: true }) as const)
+    const { invoke } = register({ attention: { snapshot: () => ({}) as never, getPrefs: () => ({}) as never, setPrefs: async () => OK, focusItem } })
+    expect(await invoke('attention:focus-item', 'item-1')).toEqual(OK)
+    expect(focusItem).toHaveBeenCalledWith('item-1')
+    for (const bad of [5, '', null, undefined, 'x'.repeat(513)]) expect(await invoke('attention:focus-item', bad)).toEqual({ ok: false, reason: 'invalid-args' })
+    const noFocus = register({ attention: { snapshot: () => ({}) as never, getPrefs: () => ({}) as never, setPrefs: async () => OK } })
+    expect(await noFocus.invoke('attention:focus-item', 'item-1')).toEqual({ ok: false, reason: 'not-implemented' })
+    const mock = register()
+    expect(await mock.invoke('attention:focus-item', 'item-1')).toEqual({ ok: false, reason: 'not-implemented' })
+    expect(await mock.invoke('attention:focus-item', '')).toEqual({ ok: false, reason: 'invalid-args' })
   })
 })

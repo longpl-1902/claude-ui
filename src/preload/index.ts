@@ -132,7 +132,8 @@ const api: ConsoleApi = {
     getPrefs: () => invoke(IPC.attentionGetPrefs),
     setPrefs: (p) => invoke(IPC.attentionSetPrefs, p),
     onChanged: (cb) => on<AttentionSnapshot>(IPC.attentionChanged, cb),
-    onFocus: (cb) => on<{ itemId: string }>(IPC.attentionFocus, cb)
+    onFocus: (cb) => on<{ itemId: string }>(IPC.attentionFocus, cb),
+    focusItem: (id) => invoke(IPC.attentionFocusItem, id)
   },
   catalog: {
     list: (root, accountId) => invoke(IPC.catalogList, root, accountId),
@@ -163,6 +164,8 @@ const api: ConsoleApi = {
     list: () => ipcRenderer.invoke(WINDOW_IPC.list),
     focus: (id) => ipcRenderer.invoke(WINDOW_IPC.focus, id),
     close: () => ipcRenderer.invoke(WINDOW_IPC.close),
+    getPrefs: () => ipcRenderer.invoke(WINDOW_IPC.getPrefs),
+    setPrefs: (p) => ipcRenderer.invoke(WINDOW_IPC.setPrefs, p),
     onChanged: (cb) => on<WindowInfo[]>(WINDOW_IPC.changed, cb)
   },
   app: {

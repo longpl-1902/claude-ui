@@ -4,7 +4,7 @@ import { parseOpenRequest, parseWindowSpec, specFromSearch, specToQuery, windowK
 
 describe('window specs and channels', () => {
   it('window channels follow the naming pattern and stay apart from the theme channels', () => {
-    expect(WINDOW_IPC).toEqual({ open: 'window:open', list: 'window:list', focus: 'window:focus', close: 'window:close', changed: 'window:changed' })
+    expect(WINDOW_IPC).toEqual({ open: 'window:open', list: 'window:list', focus: 'window:focus', close: 'window:close', changed: 'window:changed', getPrefs: 'window:get-prefs', setPrefs: 'window:set-prefs' })
     for (const c of Object.values(WINDOW_IPC)) expect(c).toMatch(/^window:[a-z-]+$/)
     expect(Object.values(THEME_IPC)).not.toContain(WINDOW_IPC.changed)
   })

@@ -63,6 +63,7 @@ class FakeWin implements ManagedWindow {
 function setup(initial: Partial<WindowsState> = {}, displays: DisplayInfo[] = [D1, D2]) {
   const wins: FakeWin[] = []
   const saved: WindowsState[] = []
+  const closed: Array<{ senderId: number; spec: WindowSpec }> = []
   const handlers = new Map<string, (e: { sender: { id: number } }, ...a: unknown[]) => unknown>()
   const screenCbs = new Map<string, () => void>()
   const timers: Array<() => void> = []
@@ -91,9 +92,10 @@ function setup(initial: Partial<WindowsState> = {}, displays: DisplayInfo[] = [D
       return timers.length
     },
     clearTimer: () => undefined,
-    ipc: { handle: (c, fn) => void handlers.set(c, fn) }
+    ipc: { handle: (c, fn) => void handlers.set(c, fn) },
+    onClosed: (w, spec) => void closed.push({ senderId: w.senderId, spec })
   })
-  return { m, wins, saved, handlers, screenCbs, timers, setDisplays: (d: DisplayInfo[]) => (current = d) }
+  return { m, wins, saved, closed, handlers, screenCbs, timers, setDisplays: (d: DisplayInfo[]) => (current = d) }
 }
 
 const acme: WindowSpec = { kind: 'project', projectKey: 'c:/users/u/acme' }
@@ -259,6 +261,45 @@ describe('windowManager', () => {
     expect(focus({ sender: { id: 1 } }, 'x')).toEqual({ ok: false, reason: 'invalid-args' })
     expect(focus({ sender: { id: 1 } }, t.wins[0]!.id)).toEqual({ ok: true })
     expect((t.handlers.get(WINDOW_IPC.list)!({ sender: { id: 1 } }) as unknown[]).length).toBe(1)
+  })
+})
+
+describe('windowManager per-window selection support (T36)', () => {
+  it('onClosed is called once with the closed secondary window and its spec', async () => {
+    const t = setup()
+    await t.m.start()
+    t.m.open({ spec: chat })
+    const w = t.wins[1]!
+    w.close()
+    expect(t.closed).toEqual([{ senderId: w.senderId, spec: chat }])
+  })
+
+  it('focusProject prefers the chat window of that exact session, then the project window, then main', async () => {
+    const t = setup()
+    await t.m.start()
+    t.m.open({ spec: acme })
+    t.m.open({ spec: chat })
+    const [main, proj, chatWin] = t.wins as [FakeWin, FakeWin, FakeWin]
+    expect(t.m.focusProject(acme.projectKey, 'a1|s1')).toBe(chatWin)
+    expect(t.m.focusProject(acme.projectKey, 'a1|other')).toBe(proj)
+    expect(t.m.focusProject(acme.projectKey)).toBe(proj)
+    expect(t.m.focusProject('c:/users/u/demo', 'a1|s1')).toBe(chatWin)
+    expect(t.m.focusProject('c:/users/u/demo', 'x|y')).toBe(main)
+  })
+
+  it('window:get-prefs / window:set-prefs read, validate and persist reopenOnStart', async () => {
+    const t = setup()
+    await t.m.start()
+    t.m.registerIpc()
+    const call = (c: string, ...a: unknown[]) => t.handlers.get(c)!({ sender: { id: 1 } }, ...a)
+    expect(call(WINDOW_IPC.getPrefs)).toEqual({ reopenOnStart: true })
+    expect(call(WINDOW_IPC.setPrefs, { reopenOnStart: false })).toEqual({ ok: true })
+    expect(t.saved.at(-1)!.reopenOnStart).toBe(false)
+    expect(call(WINDOW_IPC.getPrefs)).toEqual({ reopenOnStart: false })
+    for (const bad of [undefined, null, 'x', [], {}, { reopenOnStart: 'yes' }]) {
+      expect(call(WINDOW_IPC.setPrefs, bad)).toEqual({ ok: false, reason: 'invalid-args' })
+    }
+    expect(call(WINDOW_IPC.getPrefs)).toEqual({ reopenOnStart: false })
   })
 })
 
