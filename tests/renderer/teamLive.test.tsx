@@ -70,10 +70,21 @@ const sessions: SessionSummary[] = [
     configDir: 'C:/c',
     projectDir: 'proj-a',
     cwd: 'D:/work/alpha',
+    project: { key: 'd:/work/alpha', name: 'alpha', root: 'D:/work/alpha', git: true },
     title: 'Fix bug',
     mtimeMs: NOW - 5 * 60_000,
     sizeBytes: 10,
     live: true
+  },
+  {
+    sessionId: 'second000001',
+    accountId: 'acc1',
+    configDir: 'C:/c',
+    projectDir: 'proj-a',
+    cwd: 'D:/work/alpha/sub',
+    project: { key: 'd:/work/alpha', name: 'alpha', root: 'D:/work/alpha', git: true },
+    mtimeMs: NOW - 2 * 3600_000,
+    sizeBytes: 10
   },
   {
     sessionId: 'zzzzzzzz9999',
@@ -87,6 +98,7 @@ const sessions: SessionSummary[] = [
 
 beforeEach(() => {
   resetConsoleStore()
+  window.localStorage.clear()
 })
 afterEach(() => {
   delete (window as unknown as { api?: unknown }).api
@@ -127,9 +139,9 @@ describe('R-12 header badge', () => {
 })
 
 describe('R-12 session picker', () => {
-  it('lists Auto then one option per session with the documented label and value', () => {
+  it('lists Auto then only the chosen project sessions, labelled without the project name', () => {
     seedLive()
-    useConsoleStore.setState({ sessions })
+    useConsoleStore.setState({ sessions, projectKey: 'd:/work/alpha' })
     render(<TeamHeader />)
     const sel = screen.getByRole('combobox', { name: 'Session' })
     const opts = within(sel).getAllByRole('option') as HTMLOptionElement[]
@@ -137,18 +149,27 @@ describe('R-12 session picker', () => {
     expect(opts[0]).toHaveTextContent('Auto (latest)')
     expect(opts[0]!.value).toBe('auto')
     expect(opts[1]!.value).toBe('acc1|abcdef123456')
-    expect(opts[1]).toHaveTextContent('Fix bug · alpha · 5m ago · live')
-    expect(opts[2]!.value).toBe('acc2|zzzzzzzz9999')
-    expect(opts[2]).toHaveTextContent('zzzzzzzz · proj-b · 3h ago')
+    expect(opts[1]).toHaveTextContent('Fix bug · 5m ago · live')
+    expect(opts[2]!.value).toBe('acc1|second000001')
+    expect(opts[2]).toHaveTextContent('second00 · 2h ago')
     expect(opts[2]!.textContent).not.toContain('live')
     expect(sel).toHaveValue('auto')
+  })
+
+  it('switching project lists the other project sessions', () => {
+    seedLive()
+    useConsoleStore.setState({ sessions, projectKey: 'proj-b' })
+    render(<TeamHeader />)
+    const opts = within(screen.getByRole('combobox', { name: 'Session' })).getAllByRole('option') as HTMLOptionElement[]
+    expect(opts.map((o) => o.value)).toEqual(['auto', 'acc2|zzzzzzzz9999'])
+    expect(opts[1]).toHaveTextContent('zzzzzzzz · 3h ago')
   })
 
   it('calls selectSession on change and reflects the store selection', async () => {
     seedLive()
     const select = vi.fn().mockResolvedValue(undefined)
     ;(window as unknown as { api: unknown }).api = { transcripts: { select } }
-    useConsoleStore.setState({ sessions })
+    useConsoleStore.setState({ sessions, projectKey: 'd:/work/alpha' })
     render(<TeamHeader />)
     const sel = screen.getByRole('combobox', { name: 'Session' })
     fireEvent.change(sel, { target: { value: 'acc1|abcdef123456' } })
@@ -160,7 +181,44 @@ describe('R-12 session picker', () => {
     })
     expect(await screen.findByRole('combobox', { name: 'Session' })).toHaveValue('acc1|abcdef123456')
     fireEvent.change(sel, { target: { value: 'auto' } })
-    expect(select).toHaveBeenLastCalledWith({ mode: 'auto' })
+    expect(select).toHaveBeenLastCalledWith({ mode: 'auto', projectKey: 'd:/work/alpha' })
+  })
+})
+
+describe('P3-T11 project picker', () => {
+  it('shows name with the live count, the root in the title, newest project first', () => {
+    seedLive()
+    useConsoleStore.setState({ sessions, projectKey: 'd:/work/alpha' })
+    render(<TeamHeader />)
+    const sel = screen.getByRole('combobox', { name: 'Project' })
+    const opts = within(sel).getAllByRole('option') as HTMLOptionElement[]
+    expect(opts.map((o) => o.value)).toEqual(['d:/work/alpha', 'proj-b'])
+    expect(opts[0]).toHaveTextContent('alpha · 1 live')
+    expect(opts[0]!.title).toBe('D:/work/alpha')
+    expect(opts[1]).toHaveTextContent('proj-b')
+    expect(opts[1]!.textContent).not.toContain('live')
+    expect(sel).toHaveValue('d:/work/alpha')
+    expect(sel).toHaveAttribute('title', 'D:/work/alpha')
+  })
+
+  it('choosing a project selects auto with that key and remembers it', () => {
+    seedLive()
+    const select = vi.fn().mockResolvedValue(undefined)
+    ;(window as unknown as { api: unknown }).api = { transcripts: { select } }
+    useConsoleStore.setState({ sessions, projectKey: 'd:/work/alpha' })
+    render(<TeamHeader />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'proj-b' } })
+    expect(select).toHaveBeenCalledWith({ mode: 'auto', projectKey: 'proj-b' })
+    expect(useConsoleStore.getState().projectKey).toBe('proj-b')
+    expect(useConsoleStore.getState().selection).toEqual({ mode: 'auto', projectKey: 'proj-b' })
+    expect(window.localStorage.getItem('ac.projectKey')).toBe('proj-b')
+  })
+
+  it('a project that vanished from the list keeps showing until another is chosen', () => {
+    seedLive()
+    useConsoleStore.setState({ sessions, projectKey: 'd:/gone/old-repo' })
+    render(<TeamHeader />)
+    expect(screen.getByRole('combobox', { name: 'Project' })).toHaveValue('d:/gone/old-repo')
   })
 })
 

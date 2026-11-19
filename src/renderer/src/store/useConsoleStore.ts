@@ -54,6 +54,8 @@ export interface ConsoleState {
   liveTeam: TeamSnapshot
   sessions: SessionSummary[]
   selection: TeamSelection
+  /** Git project the Team view is scoped to (SessionProject.key); null until chosen. */
+  projectKey: string | null
   usageToday: UsageToday | null
   nowMs: number
   teamError?: string
@@ -81,6 +83,7 @@ export interface ConsoleState {
   applyUsage(u: UsageToday): void
   tick(nowMs?: number): void
   setSelection(sel: TeamSelection): void
+  setProject(key: string): void
   hydrateAccounts(s: AccountsSnapshot): void
   refreshAccounts(): Promise<void>
   scanAccounts(): Promise<void>
@@ -113,6 +116,7 @@ function initialData() {
     liveTeam: structuredClone(EMPTY_TEAM_SNAPSHOT),
     sessions: [] as SessionSummary[],
     selection: { mode: 'auto' } as TeamSelection,
+    projectKey: null as string | null,
     usageToday: null as UsageToday | null,
     nowMs: Date.now(),
     teamError: undefined as string | undefined,
@@ -125,6 +129,52 @@ function initialData() {
     consoleDraft: '',
     signIn: { step: 'none', panelOpen: false } as SignInState,
     leadPty: {} as LeadPtyState
+  }
+}
+
+export interface ProjectGroup {
+  key: string
+  name: string
+  root: string
+  liveCount: number
+  lastActivityMs: number
+}
+
+/** Project key of a session: the resolved one, else a cwd/projectDir fallback. */
+export function sessionProjectKey(s: SessionSummary): string {
+  return s.project?.key ?? (s.cwd ?? s.projectDir ?? '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+/** Sessions grouped by git project, most recently active first. */
+export function deriveProjects(sessions: SessionSummary[]): ProjectGroup[] {
+  const map = new Map<string, ProjectGroup>()
+  for (const s of sessions) {
+    const key = sessionProjectKey(s)
+    let g = map.get(key)
+    if (!g) {
+      const root = s.project?.root ?? s.cwd ?? s.projectDir ?? ''
+      g = { key, name: s.project?.name ?? (root.split(/[/\\]/).filter(Boolean).pop() ?? root), root, liveCount: 0, lastActivityMs: 0 }
+      map.set(key, g)
+    }
+    if (s.live) g.liveCount++
+    if (s.mtimeMs > g.lastActivityMs) g.lastActivityMs = s.mtimeMs
+  }
+  return [...map.values()].sort((a, b) => b.lastActivityMs - a.lastActivityMs)
+}
+
+const PROJECT_STORAGE_KEY = 'ac.projectKey'
+function rememberedProject(): string | null {
+  try {
+    return window.localStorage.getItem(PROJECT_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+function rememberProject(key: string): void {
+  try {
+    window.localStorage.setItem(PROJECT_STORAGE_KEY, key)
+  } catch {
+    /* storage unavailable: the choice just is not remembered */
   }
 }
 
@@ -168,6 +218,21 @@ async function writeOptimistic(fn: (a: AccountsApi) => Promise<OkResult>): Promi
   if (error === undefined) return
   await useConsoleStore.getState().refreshAccounts() // hydrate clears accountsError
   useConsoleStore.setState({ accountsError: error })
+}
+
+/** First project once sessions are known: remembered one if it still exists, else the current pick's, else the newest. */
+function adoptProject(list: SessionSummary[]): void {
+  const st = useConsoleStore.getState()
+  if (st.projectKey !== null || list.length === 0) return
+  const projects = deriveProjects(list)
+  const remembered = rememberedProject()
+  const pick = list.find((s) => s.sessionId === st.team.sessionId)
+  const key =
+    (remembered !== null && projects.some((p) => p.key === remembered) ? remembered : null) ??
+    (pick ? sessionProjectKey(pick) : null) ??
+    projects[0]!.key
+  useConsoleStore.setState({ projectKey: key })
+  if (st.selection.mode === 'auto') void st.selectSession({ mode: 'auto', projectKey: key })
 }
 
 export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<ConsoleState>()(
@@ -222,7 +287,10 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
       const api = window.api?.transcripts
       if (!api) return
       const list = await callTeamApi(() => api.listSessions(), undefined)
-      if (list) set({ sessions: list })
+      if (list) {
+        set({ sessions: list })
+        adoptProject(list)
+      }
     },
     selectSession: async (sel) => {
       set({ selection: sel })
@@ -233,7 +301,15 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
       get().exitDemo()
       get().hydrateTeam(snap)
     },
-    setSessions: (sessions) => set({ sessions }),
+    setSessions: (sessions) => {
+      set({ sessions })
+      adoptProject(sessions)
+    },
+    setProject: (key) => {
+      rememberProject(key)
+      set({ projectKey: key })
+      void get().selectSession({ mode: 'auto', projectKey: key })
+    },
     setSelection: (selection) => set({ selection }),
     applyUsage: (usageToday) => set({ usageToday }),
     tick: (nowMs) => set({ nowMs: nowMs ?? Date.now() }),

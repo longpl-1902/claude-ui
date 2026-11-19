@@ -6,6 +6,7 @@ import type { HostEnv } from '../contracts'
 import { expandHome, normalizeForCompare, samePath } from '../accounts/paths'
 import { classifyTranscriptPath, projectsRoot, sessionsRegistryDir } from './layout'
 import { parseLine, shouldSkipRaw } from './parseLine'
+import { createProjectResolver, type ExecFn } from './projectResolver'
 import type { TranscriptRecord } from './records'
 import { createSessionIndex, type AutoPick, type ConfigRoot, type PtyHint, type SessionIndex } from './sessionIndex'
 import { createSessionModel, parseSubagentMeta, type SessionModel } from './sessionModel'
@@ -33,6 +34,8 @@ export interface TranscriptServiceDeps {
   localDay(ms: number): string
   setTimer: (fn: () => void, ms: number) => unknown
   clearTimer: (t: unknown) => void
+  /** execFile-shaped runner used for `git rev-parse` (project grouping). Absent: sessions group by cwd only. */
+  execGit?: ExecFn
 }
 
 export interface TranscriptService {
@@ -105,8 +108,11 @@ const MAX_SUB_DEPTH = 4
 /** Pushed snapshots trim activity: finished agents always, running ones too in a large team (the model keeps more). */
 const LARGE_TEAM = 12
 const FINISHED_ACTIVITY_CAP = 30
-const LARGE_FINISHED_ACTIVITY_CAP = 10
-const LARGE_RUNNING_ACTIVITY_CAP = 50
+const LARGE_FINISHED_ACTIVITY_CAP = 25
+/** Finished agents of a large team share this many activity items, so a push stays small however many finish. */
+const LARGE_FINISHED_ITEM_BUDGET = 750
+const MIN_LARGE_FINISHED_ACTIVITY_CAP = 10
+const LARGE_RUNNING_ACTIVITY_CAP = 30
 /** A push carries the newest part of the feed only (the model keeps more for history). */
 const SNAPSHOT_EVENTS_CAP = 150
 const SNAPSHOT_CONSOLE_CAP = 100
@@ -140,7 +146,9 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   const { fs, host } = deps
   const platform = host.platform
   const norm = (p: string): string => normalizeForCompare(p, platform)
-  const index: SessionIndex = createSessionIndex({ fs, platform, home: host.home, isPidAlive: deps.isPidAlive, nowMs: deps.nowMs })
+  // a git answer re-pushes the session list (its projects were provisional until then)
+  const projects = deps.execGit ? createProjectResolver({ exec: deps.execGit, platform, onResolved: () => scheduleSessions() }) : undefined
+  const index: SessionIndex = createSessionIndex({ fs, platform, home: host.home, isPidAlive: deps.isPidAlive, nowMs: deps.nowMs, ...(projects ? { projects } : {}) })
   const counter = createUsageCounter({ fs, nowMs: deps.nowMs, localDay: deps.localDay })
 
   let disposed = false
@@ -206,8 +214,13 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     if (selected) {
       const snap = selected.model.snapshot(deps.nowMs())
       const large = snap.agents.length > LARGE_TEAM
+      const finishedCount = snap.agents.filter((a) => a.runtime?.finished).length
+      const largeFinishedCap = Math.max(
+        MIN_LARGE_FINISHED_ACTIVITY_CAP,
+        Math.min(LARGE_FINISHED_ACTIVITY_CAP, Math.floor(LARGE_FINISHED_ITEM_BUDGET / Math.max(1, finishedCount)))
+      )
       for (const a of snap.agents) {
-        const cap = a.runtime?.finished ? (large ? LARGE_FINISHED_ACTIVITY_CAP : FINISHED_ACTIVITY_CAP) : large ? LARGE_RUNNING_ACTIVITY_CAP : Infinity
+        const cap = a.runtime?.finished ? (large ? largeFinishedCap : FINISHED_ACTIVITY_CAP) : large ? LARGE_RUNNING_ACTIVITY_CAP : Infinity
         if (a.activity.length > cap) a.activity = a.activity.slice(-cap)
       }
       if (snap.events.length > SNAPSHOT_EVENTS_CAP) snap.events = snap.events.slice(-SNAPSHOT_EVENTS_CAP)
@@ -410,12 +423,13 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     return (await index.readRegistry(roots)).some((l) => l.accountId === pick.accountId && l.entry.sessionId === pick.sessionId)
   }
 
-  async function applyAuto(): Promise<void> {
-    const { pick, waitingForSession: waiting } = await index.pickAuto(roots, deps.ptyHint())
+  /** `force`: a user's choice of project/auto, which must not be held back by the keep-current-pick stability rule. */
+  async function applyAuto(force = false): Promise<void> {
+    const { pick, waitingForSession: waiting } = await index.pickAuto(roots, deps.ptyHint(), selection.mode === 'auto' ? selection.projectKey : undefined)
     if (selection.mode !== 'auto' || disposed) return
     // Stability: without a pty (the highest tier) keep the current pick while it is still live, so two busy
     // sessions do not make the view flip (each flip re-backfills every sub-agent file).
-    if (selected && deps.ptyHint() === null && (await isLive(selected.pick))) {
+    if (!force && selected && deps.ptyHint() === null && (await isLive(selected.pick))) {
       if (selection.mode !== 'auto' || disposed) return
       if (waitingForSession) {
         waitingForSession = false
@@ -697,8 +711,8 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     select(sel) {
       return run(async () => {
         if (sel.mode === 'auto') {
-          selection = { mode: 'auto' }
-          await applyAuto()
+          selection = sel.projectKey !== undefined ? { mode: 'auto', projectKey: sel.projectKey } : { mode: 'auto' }
+          await applyAuto(true)
         } else {
           const r = await index.resolve(roots, sel.accountId, sel.sessionId)
           if (r) {

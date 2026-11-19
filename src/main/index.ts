@@ -10,6 +10,7 @@ import type { HostEnv } from './contracts'
 import { createHandlers, registerIpcHandlers } from './ipc/handlers'
 import { resolveClaudeCommand } from './pty/claudeBinary'
 import { createPtyManager, loadNodePty } from './pty/ptyManager'
+import { createExecFn } from './transcripts/projectResolver'
 import { transcriptNodeFs } from './transcripts/transcriptFs'
 import { buildRoots, createChokidarWatchDir, createTranscriptService } from './transcripts/transcriptService'
 
@@ -97,7 +98,8 @@ app.whenReady().then(() => {
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
     },
     setTimer: (fn, ms) => setTimeout(fn, ms),
-    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+    execGit: createExecFn()
   })
   transcripts.onTeam((s) => broadcast(IPC.teamChanged, s))
   transcripts.onSessions((list) => broadcast(IPC.transcriptsSessionsChanged, list))

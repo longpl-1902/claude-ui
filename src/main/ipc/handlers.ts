@@ -116,7 +116,7 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
 export function isTeamSelection(v: unknown): v is TeamSelection {
   if (typeof v !== 'object' || v === null) return false
   const o = v as Record<string, unknown>
-  if (o.mode === 'auto') return true
+  if (o.mode === 'auto') return o.projectKey === undefined || (typeof o.projectKey === 'string' && o.projectKey.length <= 1024)
   return o.mode === 'session' && typeof o.accountId === 'string' && typeof o.sessionId === 'string'
 }
 

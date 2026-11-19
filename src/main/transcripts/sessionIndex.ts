@@ -1,7 +1,8 @@
-import type { RegistryStatus, SessionSummary } from '../../shared/types'
+import type { RegistryStatus, SessionProject, SessionSummary } from '../../shared/types'
 import { samePath } from '../accounts/paths'
 import { encodeProjectDir, parseRegistryEntry, sameProjectDir, type RegistryEntry } from './layout'
 import { parseLine } from './parseLine'
+import { provisionalProject, type ProjectResolver } from './projectResolver'
 import type { ByteReadFs } from './transcriptFs'
 
 export interface ConfigRoot {
@@ -25,6 +26,8 @@ export interface SessionIndexDeps {
   home: string
   isPidAlive(pid: number): boolean
   nowMs(): number
+  /** Git project resolution; without it sessions are grouped by cwd only. */
+  projects?: ProjectResolver
 }
 export interface AutoPick {
   accountId: string
@@ -35,7 +38,11 @@ export interface AutoPick {
 export interface SessionIndex {
   listSessions(roots: ConfigRoot[], limit?: number): Promise<SessionSummary[]>
   readRegistry(roots: ConfigRoot[]): Promise<LiveRegistry[]>
-  pickAuto(roots: ConfigRoot[], pty: PtyHint | null): Promise<{ pick: AutoPick | null; waitingForSession: boolean }>
+  pickAuto(
+    roots: ConfigRoot[],
+    pty: PtyHint | null,
+    projectKey?: string
+  ): Promise<{ pick: AutoPick | null; waitingForSession: boolean }>
   resolve(roots: ConfigRoot[], accountId: string, sessionId: string): Promise<{ configDirAbs: string; projectDir: string } | null>
 }
 
@@ -183,6 +190,26 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
     return null
   }
 
+  /** Resolved project when known, else the cwd-only one; kicks git off in the background for unknown cwds. */
+  function projectNow(cwd: string | undefined, projectDir: string): SessionProject {
+    const r = deps.projects
+    if (cwd !== undefined && r) {
+      const hit = r.cached(cwd)
+      if (hit) return hit
+      void r.resolve(cwd)
+    }
+    return provisionalProject(cwd, projectDir, platform)
+  }
+  async function projectOf(f: FileInfo): Promise<SessionProject> {
+    const cwd = (await readMeta(f)).cwd
+    if (cwd !== undefined && deps.projects) return deps.projects.resolve(cwd)
+    return provisionalProject(cwd, f.projectDir, platform)
+  }
+  async function ptyInProject(pty: PtyHint, projectKey: string): Promise<boolean> {
+    const p = deps.projects ? await deps.projects.resolve(pty.cwd) : provisionalProject(pty.cwd, "", platform)
+    return p.key === projectKey
+  }
+
   async function listSessions(roots: ConfigRoot[], limit = 50): Promise<SessionSummary[]> {
     const kept = (await scanAll(roots)).slice(0, limit)
     const live = new Map<string, RegistryEntry>()
@@ -199,6 +226,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
         sizeBytes: f.sizeBytes
       }
       if (meta.cwd !== undefined) s.cwd = meta.cwd
+      s.project = projectNow(meta.cwd, f.projectDir)
       if (meta.title !== undefined) s.title = meta.title
       const reg = live.get(`${f.accountId}|${f.sessionId}`)
       if (reg) {
@@ -234,8 +262,8 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
     return null
   }
 
-  async function pickAuto(roots: ConfigRoot[], pty: PtyHint | null): Promise<{ pick: AutoPick | null; waitingForSession: boolean }> {
-    if (pty) {
+  async function pickAuto(roots: ConfigRoot[], pty: PtyHint | null, projectKey?: string): Promise<{ pick: AutoPick | null; waitingForSession: boolean }> {
+    if (pty && (projectKey === undefined || (await ptyInProject(pty, projectKey)))) {
       const pick = await pickFromPty(roots, pty)
       return { pick, waitingForSession: pick === null }
     }
@@ -248,9 +276,16 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
       if (f) ranked.push({ f, stamp: stamp(l.entry) })
     }
     ranked.sort((a, b) => b.f.mtimeMs - a.f.mtimeMs || b.stamp - a.stamp)
-    if (ranked[0]) return { pick: toPick(ranked[0].f), waitingForSession: false }
-    const newest = files[0]
-    if (newest && newest.mtimeMs >= deps.nowMs() - DAY_MS) return { pick: toPick(newest), waitingForSession: false }
+    if (projectKey === undefined) {
+      if (ranked[0]) return { pick: toPick(ranked[0].f), waitingForSession: false }
+      const newest = files[0]
+      if (newest && newest.mtimeMs >= deps.nowMs() - DAY_MS) return { pick: toPick(newest), waitingForSession: false }
+      return { pick: null, waitingForSession: false }
+    }
+    const inProject = async (f: FileInfo): Promise<boolean> => (await projectOf(f)).key === projectKey
+    for (const r of ranked) if (await inProject(r.f)) return { pick: toPick(r.f), waitingForSession: false }
+    // no live session here: the newest of the project, however old (files are newest first)
+    for (const f of files) if (await inProject(f)) return { pick: toPick(f), waitingForSession: false }
     return { pick: null, waitingForSession: false }
   }
 
