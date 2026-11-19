@@ -522,3 +522,6 @@ Window sizes to support: 900×600 (min) · 1100×700 · 1440×900 · 1920×1080 
   scaling without clipped buttons.
 - Every UI task's tests include at least one narrow-width case (jsdom + matchMedia mock / container width) and T32's
   review screenshots cover all five sizes in both themes.
+
+## Chat view + copy (user request, 2026-11-19)
+- **Wave 8: T33** chat as a first-class "Chat" tab in the center column (markdown, collapsible tool calls, inline permission cards, auto-growing composer with extension slots for T28), maximize lead console (Ctrl+Shift+M), right-click context menu + hover copy buttons everywhere. Wave 8 = T19, T20, T33.
