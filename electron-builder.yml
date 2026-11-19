@@ -1,0 +1,9 @@
+appId: com.longpl.agentconsole
+productName: Agent Console
+files:
+  - out/**
+npmRebuild: true
+asarUnpack:
+  - node_modules/node-pty/**
+win:
+  target: nsis
