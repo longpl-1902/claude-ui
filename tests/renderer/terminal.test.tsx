@@ -172,6 +172,8 @@ describe('R-13 RawTerminalPane', () => {
     setApi(h.api)
     render(<RawTerminalPane />)
     const select = await screen.findByRole('combobox', { name: 'Account' })
+    expect(screen.getByLabelText('Account', { selector: 'select' })).toBe(select)
+    expect(select.closest('.ac-tc-raw__row')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Start claude' })).toBeDisabled()
     await userEvent.selectOptions(select, 'personal')
     await userEvent.click(screen.getByRole('button', { name: 'Start claude' }))

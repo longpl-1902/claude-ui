@@ -42,6 +42,23 @@ describe('R-11 TeamHeader without an account', () => {
   })
 })
 
+describe('R-11 TeamHeader chip truncation', () => {
+  it('puts the full name and email in title and ellipsis classes on the spans', () => {
+    const snap = structuredClone(mockAccountsSnapshot)
+    snap.accounts = snap.accounts.map((a) =>
+      a.id === snap.activeAccountId
+        ? { ...a, name: "someone@example.vn's Organization", email: 'someone@example.vn' }
+        : a
+    )
+    useConsoleStore.getState().hydrateAccounts(snap)
+    const { container } = render(<TeamHeader />)
+    const chip = container.querySelector('.ac-header__chip')!
+    expect(chip).toHaveAttribute('title', "someone@example.vn's Organization · someone@example.vn")
+    expect(container.querySelector('.ac-header__email')).toHaveTextContent('someone@example.vn')
+    expect(container.querySelector('.ac-header__name')).toBeInTheDocument()
+  })
+})
+
 describe('R-08 TeamHeader', () => {
   it('shows the app name, repo, team and account chip', () => {
     render(<TeamHeader />)

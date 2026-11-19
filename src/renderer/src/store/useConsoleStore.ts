@@ -76,8 +76,7 @@ export interface ConsoleState {
   closeSignInPanel(): void
   applySignInStatus(s: SignInStatus): void
   setLeadPty(p: LeadPtyState): void
-  /** @deprecated alias of checkSignIn (DetectedLogins still calls it until T09 removes that) */
-  finishSignIn(): Promise<void>
+  clearAccountsError(): void
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -112,6 +111,17 @@ async function callApi<T>(fn: (a: AccountsApi) => Promise<T>, fallback: T): Prom
     useConsoleStore.setState({ accountsError: errMsg(e) })
     return fallback
   }
+}
+
+/** Optimistic write: on !ok or rejection, resync from main and surface the reason. */
+async function writeOptimistic(fn: (a: AccountsApi) => Promise<OkResult>): Promise<void> {
+  let error: string | undefined
+  const r = await callApi<OkResult | undefined>(fn, undefined)
+  if (r && !r.ok) error = r.reason
+  else if (!r && useConsoleStore.getState().accountsError) error = useConsoleStore.getState().accountsError
+  if (error === undefined) return
+  await useConsoleStore.getState().refreshAccounts() // hydrate clears accountsError
+  useConsoleStore.setState({ accountsError: error })
 }
 
 export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<ConsoleState>()(
@@ -157,23 +167,23 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
     },
     setDefaultAccount: (id) => {
       set((s) => ({ accounts: { ...s.accounts, defaultAccountId: id } }))
-      void callApi((a) => a.setDefault(id), NO_API)
+      void writeOptimistic((a) => a.setDefault(id))
     },
     linkDetected: (configDir) => callApi((a) => a.linkDetected({ configDir }), NO_API as OkWithId),
     saveProfile: (p) => callApi((a) => a.saveProfile(p), NO_API as OkWithId),
     removeProfile: (id) => callApi((a) => a.removeProfile(id), NO_API),
     setRules: (rules) => {
       set((s) => ({ accounts: { ...s.accounts, rules } }))
-      void callApi((a) => a.setRules(rules), NO_API)
+      void writeOptimistic((a) => a.setRules(rules))
     },
     setLimitPolicy: (limitPolicy) => {
       set((s) => ({ accounts: { ...s.accounts, limitPolicy } }))
-      void callApi((a) => a.setLimitPolicy(limitPolicy), NO_API)
+      void writeOptimistic((a) => a.setLimitPolicy(limitPolicy))
     },
     toggleSafety: (key) => {
       const safety = { ...get().accounts.safety, [key]: !get().accounts.safety[key] }
       set((s) => ({ accounts: { ...s.accounts, safety } }))
-      void callApi((a) => a.setSafety(safety), NO_API)
+      void writeOptimistic((a) => a.setSafety(safety))
     },
     startSignIn: async (configDir) => {
       set({ signIn: { step: 'waiting', configDir, panelOpen: true } })
@@ -211,7 +221,7 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
       }))
     },
     setLeadPty: (leadPty) => set({ leadPty }),
-    finishSignIn: () => get().checkSignIn()
+    clearAccountsError: () => set({ accountsError: undefined })
   })
 )
 
