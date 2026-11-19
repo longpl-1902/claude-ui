@@ -401,3 +401,28 @@ export interface ThemeState {
   accent: string | null
   highContrast: boolean
 }
+
+// ---- Windows (T34) ----
+
+/** What a window shows. 'main' is the full app; secondary windows are pinned to a project or one session. */
+export type WindowSpec =
+  | { kind: 'main' }
+  | { kind: 'project'; projectKey: string }
+  /** sessionRef = `${accountId}|${sessionId}` (same shape the switcher uses) */
+  | { kind: 'chat'; projectKey: string; sessionRef: string }
+
+export interface WindowInfo {
+  id: number
+  /** Stable identity: 'main', 'project:<key>' or 'chat:<key>:<ref>'. */
+  key: string
+  spec: WindowSpec
+  focused: boolean
+}
+
+export interface WindowOpenRequest {
+  spec: WindowSpec
+  /** Screen point (DIP) the window should open around, e.g. where a tab was dropped. */
+  at?: { x: number; y: number }
+}
+
+export type WindowOpenResult = OkResult & { id?: number }

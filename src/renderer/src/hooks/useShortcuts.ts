@@ -20,6 +20,8 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: 'Ctrl+Shift+E', action: 'Extensions (MCP servers, plugins, skills)' },
   { keys: 'Ctrl+Shift+C', action: 'Switch between Team and Chat view' },
   { keys: 'Ctrl+Shift+L', action: 'Cycle the theme: System / Light / Dark' },
+  { keys: 'Ctrl+Shift+N', action: 'Open the current chat (or project) in a new window' },
+  { keys: 'Ctrl+W', action: 'Close this window (pop-out windows only)' },
   { keys: 'Ctrl+Shift+M', action: 'Maximize / restore the lead console' },
   { keys: 'Ctrl+B', action: 'Collapse / expand the left column' },
   { keys: 'Ctrl+I', action: 'Collapse / expand the inspector' },
@@ -44,6 +46,10 @@ export interface ShortcutBridge {
   focusPrev?(): void
   /** useSwitcherStore.open() */
   openSwitcher?(): void
+  /** Ctrl+Shift+N: open the current chat / project in a new window (T34). */
+  popOut?(): void
+  /** Ctrl+W: close this window; only set in secondary windows (T34). */
+  closeWindow?: (() => void) | undefined
 }
 
 let bridge: ShortcutBridge = {}
@@ -117,6 +123,10 @@ export function handleShortcut(e: KeyboardEvent): boolean {
       case 'l':
         useThemeStore.getState().cycle()
         return done()
+      case 'n':
+        if (!bridge.popOut) return false
+        bridge.popOut()
+        return done()
       case 'j':
         if (!bridge.focusPrev) return false
         bridge.focusPrev()
@@ -133,6 +143,10 @@ export function handleShortcut(e: KeyboardEvent): boolean {
   }
 
   switch (key) {
+    case 'w':
+      if (!bridge.closeWindow || inInput) return false
+      bridge.closeWindow()
+      return done()
     case 'k':
       if (!bridge.openSwitcher) return false
       bridge.openSwitcher()

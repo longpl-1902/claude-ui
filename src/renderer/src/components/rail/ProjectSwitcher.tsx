@@ -5,16 +5,18 @@ import { sessionProjectKey, useConsoleStore } from '../../store/useConsoleStore'
 import { useSwitcherStore } from '../../store/useSwitcherStore'
 import { mergeProjects } from '../../store/useRailStore'
 import { useAttentionStore } from '../../store/useAttentionStore'
+import { useWindowsStore } from '../../store/useWindowsStore'
 import './rail.css'
 
 interface Entry {
   id: string
-  kind: 'project' | 'session'
+  kind: 'project' | 'session' | 'window'
   label: string
   detail: string
   projectKey: string
   accountId?: string
   sessionId?: string
+  windowId?: number
 }
 
 /** Ctrl+K: filter over projects and their live sessions. Open it with useSwitcherStore.open(). */
@@ -23,6 +25,7 @@ export function ProjectSwitcher(): JSX.Element | null {
   const close = useSwitcherStore((s) => s.close)
   const sessions = useConsoleStore((s) => s.sessions)
   const hubProjects = useAttentionStore((s) => s.snapshot.projects)
+  const windowList = useWindowsStore((s) => s.list)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
@@ -56,12 +59,28 @@ export function ProjectSwitcher(): JSX.Element | null {
         }
       }
     }
+    // Open windows (T34): "Window: Chat · acme / lead". The main window is where you already are.
+    for (const w of windowList) {
+      const spec = w.spec
+      if (spec.kind === 'main') continue
+      const projectName = mergeProjects(hubProjects, sessions).find((p) => p.key === spec.projectKey)?.name ?? spec.projectKey
+      const sid = spec.kind === 'chat' ? (spec.sessionRef.split('|')[1] ?? '') : ''
+      const title = spec.kind === 'chat' ? (sessions.find((s) => s.sessionId === sid)?.title ?? sid.slice(0, 8)) : ''
+      const label = spec.kind === 'chat' ? `Chat · ${projectName} / ${title}` : `Project · ${projectName}`
+      if (q === '' || label.toLowerCase().includes(q) || 'window'.startsWith(q)) {
+        out.push({ id: `w:${w.id}`, kind: 'window', label: `Window: ${label}`, detail: w.focused ? 'focused' : 'open window', projectKey: spec.projectKey, windowId: w.id })
+      }
+    }
     return out
-  }, [query, sessions, hubProjects])
+  }, [query, sessions, hubProjects, windowList])
 
   const activate = (e: Entry): void => {
     const c = useConsoleStore.getState()
     close()
+    if (e.kind === 'window') {
+      useWindowsStore.getState().focus(e.windowId!)
+      return
+    }
     c.navigate('team')
     if (c.projectKey !== e.projectKey) c.setProject(e.projectKey)
     if (e.kind === 'session') void c.selectSession({ mode: 'session', accountId: e.accountId!, sessionId: e.sessionId! })
@@ -111,7 +130,7 @@ export function ProjectSwitcher(): JSX.Element | null {
               onMouseEnter={() => setActive(i)}
               onClick={() => activate(e)}
             >
-              <span className="ac-switch__kind">{e.kind === 'project' ? 'Project' : 'Session'}</span>
+              <span className="ac-switch__kind">{e.kind === 'project' ? 'Project' : e.kind === 'window' ? 'Window' : 'Session'}</span>
               <span className="ac-switch__label">{e.label}</span>
               <span className="ac-switch__detail">{e.detail}</span>
             </li>

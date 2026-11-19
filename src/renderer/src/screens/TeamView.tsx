@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent } from 'react'
 import { ChatView } from '@renderer/components/chat/ChatView'
 import { AgentGrid } from '@renderer/components/team/AgentGrid'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
@@ -24,6 +24,8 @@ import {
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { useCenterView, useCenterViewShortcuts, useCenterViewStore } from '@renderer/store/useCenterViewStore'
 import { useLayoutStore, useMaxWidth } from '@renderer/store/useLayoutStore'
+import { useWindowsStore } from '@renderer/store/useWindowsStore'
+import { chatSpecForCurrent } from '@renderer/windowActions'
 import './TeamView.css'
 
 /** At or below this width the inspector becomes an overlay drawer. */
@@ -53,6 +55,16 @@ export function TeamView() {
       e.preventDefault()
       setMaximized(false)
     }
+  }
+  // Dragging the Chat tab out of the window pops the chat out into its own window, where it was dropped.
+  const onChatTabDragStart = (e: DragEvent<HTMLElement>) => {
+    e.dataTransfer.setData('application/x-agent-console-chat', '1')
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  const onChatTabDragEnd = (e: DragEvent<HTMLElement>) => {
+    const outside = e.clientX < 0 || e.clientY < 0 || e.clientX > window.innerWidth || e.clientY > window.innerHeight
+    const spec = chatSpecForCurrent()
+    if (outside && spec) void useWindowsStore.getState().open(spec, { x: e.screenX, y: e.screenY })
   }
   const onTabKey = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
@@ -264,6 +276,7 @@ export function TeamView() {
                 aria-controls="ac-center-panel"
                 tabIndex={view === v ? 0 : -1}
                 onClick={() => setView(v)}
+                {...(v === 'chat' ? { draggable: true, onDragStart: onChatTabDragStart, onDragEnd: onChatTabDragEnd } : {})}
               >
                 {v === 'team' ? 'Team' : 'Chat'}
               </button>

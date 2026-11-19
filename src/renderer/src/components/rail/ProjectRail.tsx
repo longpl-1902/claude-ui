@@ -6,6 +6,7 @@ import { WarningIcon } from '../ui/Icons'
 import { useAttentionStore } from '../../store/useAttentionStore'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { IDLE_AFTER_MS, mergeProjects, useRailStore } from '../../store/useRailStore'
+import { useWindowsStore } from '../../store/useWindowsStore'
 import './rail.css'
 
 export type WorstState = 'needs' | 'running' | 'waiting' | 'none'
@@ -298,6 +299,16 @@ export function ProjectRail({ compact = false, inDrawer = false, onPicked }: Pro
             }}
           >
             {pins.includes(menu.key) ? 'Unpin' : 'Pin'}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              void useWindowsStore.getState().open({ kind: 'project', projectKey: menu.key })
+              closeMenu()
+            }}
+          >
+            Open in new window
           </button>
           <button
             type="button"

@@ -11,6 +11,11 @@ import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { useThemeStore } from '@renderer/theme/useThemeStore'
 import { useControlStore } from '@renderer/store/useControlStore'
 import { useWorkspaceStore } from '@renderer/store/useWorkspaceStore'
+import { useWindowsStore } from '@renderer/store/useWindowsStore'
+import { ChatWindow, usePinnedProject } from '@renderer/windowKinds'
+import { getWindowSpec, popOutCurrent } from '@renderer/windowActions'
+
+const windowSpec = getWindowSpec()
 
 export default function App() {
   const screen = useConsoleStore((s) => s.screen)
@@ -23,6 +28,7 @@ export default function App() {
   })
 
   useShortcuts()
+  usePinnedProject(windowSpec.kind === 'project' ? windowSpec.projectKey : null)
 
   // Follow the Windows theme / accent (and the persisted Light/Dark override).
   useEffect(() => useThemeStore.getState().init(), [])
@@ -33,9 +39,14 @@ export default function App() {
       goToPinned: (n) => useRailStore.getState().goToPinned(n),
       focusNext: () => useAttentionStore.getState().focusNext(),
       focusPrev: () => useAttentionStore.getState().focusPrev(),
-      openSwitcher: () => useSwitcherStore.getState().open()
+      openSwitcher: () => useSwitcherStore.getState().open(),
+      popOut: () => popOutCurrent(),
+      // Secondary windows close with Ctrl+W; the main window only closes through its normal close button.
+      closeWindow: windowSpec.kind === 'main' ? undefined : () => void window.api?.windows?.close()
     })
   }, [])
+
+  useEffect(() => useWindowsStore.getState().init(), [])
 
   useEffect(() => {
     const offControl = useControlStore.getState().init()
@@ -84,7 +95,15 @@ export default function App() {
 
   return (
     <>
-      {screen === 'team' ? <TeamView /> : screen === 'extensions' ? <ExtensionsView /> : <AccountsView />}
+      {windowSpec.kind === 'chat' ? (
+        <ChatWindow spec={windowSpec} />
+      ) : screen === 'team' ? (
+        <TeamView />
+      ) : screen === 'extensions' ? (
+        <ExtensionsView />
+      ) : (
+        <AccountsView />
+      )}
       <ShortcutsHelp />
     </>
   )

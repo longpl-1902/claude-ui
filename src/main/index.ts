@@ -1,11 +1,13 @@
 import { execFile, spawn as nodeSpawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { watch as chokidarWatch } from 'chokidar'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, systemPreferences } from 'electron'
-import { existsSync, promises as fsp, readFileSync, writeFileSync } from 'node:fs'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, systemPreferences } from 'electron'
+import { existsSync, promises as fsp, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir, release as osRelease } from 'node:os'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
+import type { WindowSpec } from '@shared/types'
+import { specToQuery } from '@shared/windowSpec'
 import { createAccountsService } from './accounts/accountsService'
 import { expandHome, isAbsoluteFor, isDefaultConfigDir, toDisplayPath } from './accounts/paths'
 import { isDeniedPath, safeNodeFs } from './accounts/safeFs'
@@ -30,6 +32,9 @@ import { createHookServer } from './hooks/hookServer'
 import { createHooksService } from './hooks/hooksService'
 import { createHandlers, registerIpcHandlers } from './ipc/handlers'
 import { createThemeController, isThemeSource, type ThemeController } from './theme'
+import { createWindowsStore } from './windows/persistence'
+import { MIN_SIZE, type DisplayInfo, type ResolvedPlacement } from './windows/placement'
+import { createWindowManager, type ManagedWindow, type WindowManager } from './windows/windowManager'
 import { resolveClaudeCommand } from './pty/claudeBinary'
 import { createPtyManager, loadNodePty } from './pty/ptyManager'
 import { createExecFn } from './transcripts/projectResolver'
@@ -112,17 +117,22 @@ const nodeTextFs = {
   }
 } satisfies AttentionPrefsFs & { remove(p: string): Promise<void> }
 
-const mainWindow = (): BrowserWindow | undefined => BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+const mainWindow = (): BrowserWindow | undefined => windows?.main() ? BrowserWindow.fromId(windows.main()!.id) ?? undefined : undefined
 
 // Theme wiring (T31): created when the app is ready, before the first window.
 let theme: ThemeController | undefined
+// Window wiring (T34): main + pop-out windows. All data and sessions are app-wide; a window only subscribes.
+let windows: WindowManager | undefined
 
-function createWindow(): void {
+const toDisplayInfo = (d: Electron.Display): DisplayInfo => ({ id: d.id, workArea: d.workArea, scaleFactor: d.scaleFactor })
+
+/** One BrowserWindow for a spec. Same theme options, preload and hardening for every window. */
+function createBrowserWindow(spec: WindowSpec, placement: ResolvedPlacement): ManagedWindow {
+  const min = MIN_SIZE[spec.kind]
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 900,
-    minHeight: 600,
+    ...placement.bounds,
+    minWidth: min.width,
+    minHeight: min.height,
     ...theme?.windowOptions(),
     title: 'Agent Console',
     show: false,
@@ -138,7 +148,11 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => {
     theme?.applyToWindow(win)
+    if (placement.maximized) win.maximize()
     win.show()
+  })
+  win.webContents.on('did-finish-load', () => {
+    if (placement.zoom !== 1) win.webContents.setZoomFactor(placement.zoom)
   })
   registerContextMenu(win.webContents, {
     buildMenu: (t) => Menu.buildFromTemplate(t as Electron.MenuItemConstructorOptions[]),
@@ -150,11 +164,36 @@ function createWindow(): void {
     if (url !== win.webContents.getURL()) event.preventDefault()
   })
 
+  const query = specToQuery(spec)
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (!app.isPackaged && devUrl) {
-    void win.loadURL(devUrl)
+    const qs = new URLSearchParams(query).toString()
+    void win.loadURL(qs ? `${devUrl}?${qs}` : devUrl)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { query })
+  }
+
+  return {
+    id: win.id,
+    senderId: win.webContents.id,
+    isDestroyed: () => win.isDestroyed(),
+    isMinimized: () => win.isMinimized(),
+    isMaximized: () => win.isMaximized(),
+    isFocused: () => win.isFocused(),
+    show: () => win.show(),
+    focus: () => win.focus(),
+    restore: () => win.restore(),
+    close: () => win.close(),
+    getBounds: () => win.getBounds(),
+    getNormalBounds: () => win.getNormalBounds(),
+    setBounds: (r) => win.setBounds(r),
+    getZoom: () => (win.webContents.isDestroyed() ? 1 : win.webContents.getZoomFactor()),
+    send: (channel, payload) => {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(channel, payload)
+    },
+    on: (event, cb) => {
+      win.on(event as 'move', cb)
+    }
   }
 }
 
@@ -363,18 +402,18 @@ app.whenReady().then(async () => {
       note.on('close', () => liveNotifications.delete(note))
       note.show()
     },
-    flash: (on) => mainWindow()?.flashFrame(on),
-    overlay: (c) => mainWindow()?.setOverlayIcon(c > 0 ? redDot : null, c > 0 ? `${c} need you` : ''),
-    isFocusedAndVisible: () => {
-      const w = mainWindow()
-      return !!w && w.isFocused() && w.isVisible()
+    flash: (on) => {
+      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.flashFrame(on)
     },
+    overlay: (c) => mainWindow()?.setOverlayIcon(c > 0 ? redDot : null, c > 0 ? `${c} need you` : ''),
+    isFocusedAndVisible: () => BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused() && w.isVisible()),
     prefs: () => prefs.get(),
     onFocusItem: (itemId) => {
-      const w = mainWindow()
-      w?.show()
-      w?.focus()
-      broadcast(IPC.attentionFocus, { itemId })
+      // The window that shows the item's project (its project window, else main) comes to the front and handles it.
+      const projectKey = hub.snapshot().items.find((i) => i.id === itemId)?.projectKey
+      const target = projectKey !== undefined ? windows?.focusProject(projectKey) : windows?.main()
+      if (!target) return
+      if (!target.isDestroyed()) target.send(IPC.attentionFocus, { itemId })
     }
   })
   hub.onChanged((snap) => {
@@ -480,6 +519,7 @@ app.whenReady().then(async () => {
   })
 
   app.on('before-quit', () => {
+    windows?.beginQuit()
     control.disposeAll()
     hub.dispose()
     worktrees.dispose()
@@ -533,10 +573,38 @@ app.whenReady().then(async () => {
     // details are not logged; the app continues without hooks
     console.error('hook server failed to start')
   }
-  createWindow()
+  const windowsFile = join(app.getPath('userData'), 'windows.json')
+  windows = createWindowManager({
+    create: createBrowserWindow,
+    screen: {
+      getAllDisplays: () => screen.getAllDisplays().map(toDisplayInfo),
+      getPrimaryDisplay: () => toDisplayInfo(screen.getPrimaryDisplay()),
+      on: (event, cb) => {
+        if (event === 'display-added') screen.on('display-added', cb)
+        else if (event === 'display-removed') screen.on('display-removed', cb)
+        else screen.on('display-metrics-changed', cb)
+      }
+    },
+    // windows.json is tiny; a synchronous write also lands while the app is quitting.
+    store: createWindowsStore(windowsFile, {
+      readText: nodeTextFs.readText,
+      writeTextAtomic: async (p, text) => {
+        const tmp = `${p}.${process.pid}.tmp`
+        writeFileSync(tmp, text, 'utf8')
+        renameSync(tmp, p)
+      }
+    }),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+    ipc: { handle: (channel, fn) => ipcMain.handle(channel, (e, ...args) => fn(e, ...args)) }
+  })
+  windows.registerIpc()
+  // Opens the main window and the pop-out windows that were open at the last quit.
+  const createWindow = (): Promise<void> => windows!.start()
+  await createWindow()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow()
   })
 })
 
