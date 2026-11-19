@@ -241,7 +241,7 @@ describe('Folder rules', () => {
     setup()
     const r = rows()
     expect(r).toHaveLength(3)
-    expect(r[0]).toHaveTextContent('~/work/hicas/**')
+    expect(r[0]).toHaveTextContent('~/work/acme/**')
     expect(r[1]).toHaveTextContent('~/code/personal/**')
     expect(r[2]).toHaveTextContent('Anything else')
     expect(r[2]).toHaveTextContent('Ask me')
@@ -276,13 +276,13 @@ describe('Folder rules', () => {
     expect(rows()[0]).toHaveTextContent('~/code/personal/**')
     await userEvent.click(screen.getByRole('button', { name: 'Move down ~/code/personal/**' }))
     expect(api.setRules).toHaveBeenLastCalledWith([company, personal])
-    await userEvent.click(screen.getByRole('button', { name: 'Remove ~/work/hicas/**' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove ~/work/acme/**' }))
     expect(api.setRules).toHaveBeenLastCalledWith([personal])
   })
 
   it('disables Move up on the first and Move down on the last rule', () => {
     setup()
-    expect(screen.getByRole('button', { name: 'Move up ~/work/hicas/**' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move up ~/work/acme/**' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Move down ~/code/personal/**' })).toBeDisabled()
   })
 })
@@ -314,7 +314,7 @@ describe('Policies', () => {
 describe('Running now', () => {
   it('lists sessions with folder, account and agent count', () => {
     setup()
-    expect(screen.getByText('~/work/hicas/sheet-automation')).toBeInTheDocument()
+    expect(screen.getByText('~/work/acme/sheet-automation')).toBeInTheDocument()
     expect(screen.getByText('Company · 6 agents')).toBeInTheDocument()
     expect(screen.getByText('Personal · 1 agent')).toBeInTheDocument()
   })
@@ -331,9 +331,9 @@ describe('Running now', () => {
 describe('FolderRules keyboard focus', () => {
   it('keeps focus on the moved row action after Move down', async () => {
     setup()
-    const btn = screen.getByRole('button', { name: 'Move down ~/work/hicas/**' })
+    const btn = screen.getByRole('button', { name: 'Move down ~/work/acme/**' })
     await userEvent.click(btn)
     await new Promise((r) => requestAnimationFrame(() => r(null)))
-    expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Move (down|up) ~\/work\/hicas\/\*\*$/)
+    expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Move (down|up) ~\/work\/acme\/\*\*$/)
   })
 })

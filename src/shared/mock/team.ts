@@ -198,7 +198,7 @@ const consoleLines: ConsoleLine[] = [
 ]
 
 export const mockTeamSnapshot: TeamSnapshot = {
-  repo: 'hicas/sheet-automation',
+  repo: 'acme/sheet-automation',
   teamName: 'sheet-export',
   accountId: 'company',
   now: '2026-11-19T10:44:20.000Z',

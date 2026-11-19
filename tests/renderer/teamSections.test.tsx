@@ -67,7 +67,7 @@ describe('R-08 TeamHeader', () => {
   it('shows the app name, repo, team and account chip', () => {
     render(<TeamHeader />)
     expect(screen.getByText('Agent Console')).toBeInTheDocument()
-    expect(screen.getByText(/hicas\/sheet-automation/)).toBeInTheDocument()
+    expect(screen.getByText(/acme\/sheet-automation/)).toBeInTheDocument()
     expect(screen.getByText(/team: sheet-export/)).toBeInTheDocument()
     expect(screen.getByText('you@company.com')).toBeInTheDocument()
     const chip = screen.getByRole('button', { name: 'Account: Company (you@company.com). Manage accounts' })

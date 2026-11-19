@@ -19,4 +19,4 @@ None.
 
 - `npm run rebuild:pty` not run. No real `claude auth login` run. The GUI was not re-run; orchestrator-findings-1.md items O-1..O-3 are UI and are not covered by these checks.
 - Build writes `out/` (git-ignored). Working tree otherwise clean; nothing committed.
-- Logs: `C:/Users/lephi/AppData/Local/Temp/claude/89cdb1b1fc379b22/253ead12-2b57-4f09-a653-b85dda96b710/scratchpad/` (test-lower.log, test-upper.log, typecheck.log, build.log, check-pty.log).
+- Logs: `C:/Users/<user>/AppData/Local/Temp/claude/89cdb1b1fc379b22/253ead12-2b57-4f09-a653-b85dda96b710/scratchpad/` (test-lower.log, test-upper.log, typecheck.log, build.log, check-pty.log).

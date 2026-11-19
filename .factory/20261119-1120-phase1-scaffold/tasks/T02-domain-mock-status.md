@@ -60,7 +60,7 @@ export function teamCounters(snapshot: TeamSnapshot): { agents: number; running:
 - `teamCounters` uses `deriveAllStatuses`.
 
 ### mock/team.ts: `export const mockTeamSnapshot: TeamSnapshot`
-- repo `hicas/sheet-automation`, teamName `sheet-export`, accountId `company`, now `2026-11-19T10:44:20.000Z`.
+- repo `acme/sheet-automation`, teamName `sheet-export`, accountId `company`, now `2026-11-19T10:44:20.000Z`.
 - `timelineTicks`: ['10:24', '10:29', '10:34', '10:39', 'now'].
 - agents: the 6 agents from mockup lines 629-658, in that order, with ids lead, api, be, ui, test, rev. Copy name, initials, avatar color (as avatarColor), role, model, `wt` (as worktree), task (as taskTitle), tool and target (as current), segs, events, files and msgs verbatim.
   - Elapsed in seconds: '18m 42s' is 1122.
@@ -106,12 +106,12 @@ export function teamCounters(snapshot: TeamSnapshot): { agents: number; running:
   - `{configDir: '~/.claude', email: 'you@company.com', org: '[COMPANY ORG]', sources: ['VS Code extension', 'Claude Code CLI (default folder)'], signedIn: true, suggestedAccountId: 'company'}`. Not linked yet, so the UI shows "Use this".
   - `{configDir: '~/.claude-personal', sources: ['.vscode/settings.json in ~/code/personal/revit-playground'], signedIn: false, suggestedAccountId: 'personal'}`.
 - rules:
-  - `~/work/hicas/**` maps to company, note 'All company repos'.
+  - `~/work/acme/**` maps to company, note 'All company repos'.
   - `~/code/personal/**` maps to personal, note 'Side projects'.
   - `anything else` maps to 'ask', note 'Prompt when opening a new folder'.
 - safety: all true. limitPolicy 'pause'.
 - sessions:
-  - sheet-export, `~/work/hicas/sheet-automation`, company, 6.
+  - sheet-export, `~/work/acme/sheet-automation`, company, 6.
   - scratch, `~/code/personal/revit-playground`, personal, 1.
 
 ### mock/index.ts

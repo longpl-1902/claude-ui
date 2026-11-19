@@ -9,7 +9,7 @@ const matches = (pattern: string, folder: string, o = win): boolean => !!globToR
 
 describe('R-07 normalizeFolder', () => {
   it('R-07 expands ~, normalizes separators, strips trailing slash, lowercases when insensitive', () => {
-    expect(normalizeFolder('~\\Work//Hicas\\', win)).toBe('c:/users/u/work/hicas')
+    expect(normalizeFolder('~\\Work//Acme\\', win)).toBe('c:/users/u/work/acme')
     expect(normalizeFolder('~/Work', posix)).toBe('/home/u/Work')
   })
 })
@@ -20,11 +20,11 @@ describe('R-07 globToRegExp', () => {
     expect(globToRegExp('   ', win)).toBeNull()
   })
 
-  it('R-07 ~/work/hicas/** matches the folder itself and anything below, not a sibling prefix', () => {
-    const p = '~/work/hicas/**'
-    expect(matches(p, 'C:\\Users\\u\\work\\hicas')).toBe(true)
-    expect(matches(p, 'C:\\Users\\u\\work\\hicas\\repo\\src')).toBe(true)
-    expect(matches(p, 'C:/Users/u/work/hicasx')).toBe(false)
+  it('R-07 ~/work/acme/** matches the folder itself and anything below, not a sibling prefix', () => {
+    const p = '~/work/acme/**'
+    expect(matches(p, 'C:\\Users\\u\\work\\acme')).toBe(true)
+    expect(matches(p, 'C:\\Users\\u\\work\\acme\\repo\\src')).toBe(true)
+    expect(matches(p, 'C:/Users/u/work/acmex')).toBe(false)
     expect(matches(p, 'C:/Users/u/work')).toBe(false)
   })
 
@@ -90,7 +90,7 @@ describe('R-07 matchFolder', () => {
       ruleIndex: 0,
       pattern: '~/work/personal/**'
     })
-    expect(matchFolder(rules, 'C:/Users/u/work/hicas', win)).toEqual({ accountId: 'work', ruleIndex: 1, pattern: '~/work/**' })
+    expect(matchFolder(rules, 'C:/Users/u/work/acme', win)).toEqual({ accountId: 'work', ruleIndex: 1, pattern: '~/work/**' })
   })
 
   it('R-07 rule order, not specificity, decides', () => {

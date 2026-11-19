@@ -11,7 +11,7 @@ const byId = (id: string) => team.agents.find((a) => a.id === id)!
 
 describe('R-05 mock team snapshot: identity and shape', () => {
   it('has the mockup header data', () => {
-    expect(team.repo).toBe('hicas/sheet-automation')
+    expect(team.repo).toBe('acme/sheet-automation')
     expect(team.teamName).toBe('sheet-export')
     expect(team.accountId).toBe('company')
     expect(team.now).toBe('2026-11-19T10:44:20.000Z')
@@ -279,7 +279,7 @@ describe('R-05 mock accounts snapshot', () => {
     expect(acc.detected[1]!.sources).toEqual(['.vscode/settings.json in ~/code/personal/revit-playground'])
 
     expect(acc.rules).toEqual([
-      { pattern: '~/work/hicas/**', accountId: 'company', note: 'All company repos' },
+      { pattern: '~/work/acme/**', accountId: 'company', note: 'All company repos' },
       { pattern: '~/code/personal/**', accountId: 'personal', note: 'Side projects' },
       { pattern: 'anything else', accountId: 'ask', note: 'Prompt when opening a new folder' }
     ])
@@ -290,7 +290,7 @@ describe('R-05 mock accounts snapshot', () => {
     })
     expect(acc.limitPolicy).toBe('pause')
     expect(acc.sessions).toEqual([
-      { teamName: 'sheet-export', path: '~/work/hicas/sheet-automation', accountId: 'company', agentCount: 6 },
+      { teamName: 'sheet-export', path: '~/work/acme/sheet-automation', accountId: 'company', agentCount: 6 },
       { teamName: 'scratch', path: '~/code/personal/revit-playground', accountId: 'personal', agentCount: 1 }
     ])
   })

@@ -53,4 +53,4 @@ Orchestrator one-liners: a plain `'\n'` in parseLine, no repeated model in the i
 ## Known limits / still manual
 - In teams of more than 12 agents, a finished agent keeps its last 15–25 activity items (a shared budget).
 - Manual: real file-watch latency on a fresh session, and confirming nothing under `~/.claude` changed (the code never writes there; grep-verified).
-- "hicas" appears in the mock/demo data and the design mockups (from the user's own mockup). Check before any public push.
+- Demo data and mockups use the neutral placeholder org "acme" (personal project; no company names).

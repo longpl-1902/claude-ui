@@ -112,7 +112,7 @@ Everything runs on mock state, with no file or network access.
   - Rows: a colored dot, the team name (500), the path in mono, a spacer, and `{account name} · {n} agent(s)`.
 - Styles go in AccountsView.css with `ac-acc-` prefixed classes.
 - Test (jsdom). Call `resetConsoleStore()`, set the screen to accounts, and render `<AccountsView/>`.
-  - Expect the texts 'Claude accounts', 'Detected logins', '~/.claude', '~/.claude-personal', 'Use this', 'Sign in', the privacy line, 'Company', 'Personal', 'Default', 'Pick the account by folder', '~/work/hicas/**', 'Ask me', 'Safety', 'Pause the team and ask me', 'Running now', 'sheet-export' and '6 agents'.
+  - Expect the texts 'Claude accounts', 'Detected logins', '~/.claude', '~/.claude-personal', 'Use this', 'Sign in', the privacy line, 'Company', 'Personal', 'Default', 'Pick the account by folder', '~/work/acme/**', 'Ask me', 'Safety', 'Pause the team and ask me', 'Running now', 'sheet-export' and '6 agents'.
   - No element text matches /\d+%/ (no fake percentages).
   - Click 'Use this': 'Linked as Company' appears.
   - Click 'Sign in': 'Finish signing in your browser' appears. Then 'Check now': 'Signed in as you@gmail.com' appears. Then 'Done': the panel is gone.

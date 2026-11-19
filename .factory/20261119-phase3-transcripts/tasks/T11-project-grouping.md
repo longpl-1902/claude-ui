@@ -1,7 +1,7 @@
 # T11 — Organize sessions by git project (user request, 2026-11-19)
 
 User feedback: "put all session chat in one screen is not appropriate and very hard to manage task. you should organize
-it by git project". The flat session picker mixes every project (hawee-shop-revit, sdlc-kit, claude-ui…).
+it by git project". The flat session picker mixes every project (several work and personal repos).
 
 ## Goal
 The Team view is scoped to one **git project** at a time:

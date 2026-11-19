@@ -55,7 +55,7 @@ Replace the T04 stubs for TeamHeader, WorktreeList and SharedTaskList with compo
 - Use CSS classes in teamLeft.css. Use inline style only for data colors.
 - Test (jsdom):
   - Call `resetConsoleStore()`, then render each component.
-  - Expect the texts 'Agent Console', 'hicas/sheet-automation', 'team: sheet-export', 'you@company.com', '6' and 'agents', '1.12M', 'Pause all', '+ New teammate', 'feat/api-schema', 'overlaps feat/api-schema', 'clean', '#4 Sheet panel UI', 'Blocked by #2 · ui-builder' and '2 failing · test-writer'.
+  - Expect the texts 'Agent Console', 'acme/sheet-automation', 'team: sheet-export', 'you@company.com', '6' and 'agents', '1.12M', 'Pause all', '+ New teammate', 'feat/api-schema', 'overlaps feat/api-schema', 'clean', '#4 Sheet panel UI', 'Blocked by #2 · ui-builder' and '2 failing · test-writer'.
   - Clicking the account chip sets the store screen to 'accounts'.
 
 ## Acceptance commands

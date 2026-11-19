@@ -652,12 +652,12 @@ class Component extends DCLogic {
       active: { color: COMPANY },
       limitOpts: opts,
       rules: [
-        { pattern: '~/work/hicas/**', account: 'Company', color: COMPANY, note: 'All company repos' },
+        { pattern: '~/work/acme/**', account: 'Company', color: COMPANY, note: 'All company repos' },
         { pattern: '~/code/personal/**', account: 'Personal', color: PERSONAL, note: 'Side projects' },
         { pattern: 'anything else', account: 'Ask me', color: '#5C636E', note: 'Prompt when opening a new folder' }
       ],
       sessions: [
-        { team: 'sheet-export', path: '~/work/hicas/sheet-automation', account: 'Company', color: COMPANY, agents: '6 agents' },
+        { team: 'sheet-export', path: '~/work/acme/sheet-automation', account: 'Company', color: COMPANY, agents: '6 agents' },
         { team: 'scratch', path: '~/code/personal/revit-playground', account: 'Personal', color: PERSONAL, agents: '1 agent' }
       ]
     });

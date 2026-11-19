@@ -1,6 +1,6 @@
 import type { AccountsSnapshot, FolderRule } from '../types'
 
-const companyRule: FolderRule = { pattern: '~/work/hicas/**', accountId: 'company', note: 'All company repos' }
+const companyRule: FolderRule = { pattern: '~/work/acme/**', accountId: 'company', note: 'All company repos' }
 const personalRule: FolderRule = { pattern: '~/code/personal/**', accountId: 'personal', note: 'Side projects' }
 
 // SPEC GAP: the mockup's usage % bars are intentionally not mocked.
@@ -52,7 +52,7 @@ export const mockAccountsSnapshot: AccountsSnapshot = {
   safety: { warnPersonalInCompanyFolder: true, showAccountColorEdge: true, lockAccountOnTeamStart: true },
   limitPolicy: 'pause',
   sessions: [
-    { teamName: 'sheet-export', path: '~/work/hicas/sheet-automation', accountId: 'company', agentCount: 6 },
+    { teamName: 'sheet-export', path: '~/work/acme/sheet-automation', accountId: 'company', agentCount: 6 },
     { teamName: 'scratch', path: '~/code/personal/revit-playground', accountId: 'personal', agentCount: 1 }
   ]
 }

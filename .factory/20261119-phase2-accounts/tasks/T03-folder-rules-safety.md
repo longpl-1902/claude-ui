@@ -57,7 +57,7 @@ Order of checks:
 4. Otherwise allowed. `matched` is always the `matchFolder` result. Warnings do not block (the caller requires `confirmed`).
 
 ### Tests (minimum)
-folderRules: `~/work/hicas/**` matches `C:\Users\u\work\hicas` and `.../hicas/repo/src`, not `.../hicasx`; case-insensitive vs sensitive; `*` stays in a segment; `?`; `**/company-*/**`; plain prefix; regex chars in pattern (`a+b (1)`); first match wins with overlapping rules; `ask` rule; fallback rule skipped; empty rules → ask/-1; empty pattern ignored.
+folderRules: `~/work/acme/**` matches `C:\Users\u\work\acme` and `.../acme/repo/src`, not `.../acmex`; case-insensitive vs sensitive; `*` stays in a segment; `?`; `**/company-*/**`; plain prefix; regex chars in pattern (`a+b (1)`); first match wins with overlapping rules; `ask` rule; fallback rule skipped; empty rules → ask/-1; empty pattern ignored.
 safety: each block and warning path, toggles off disable them, nested session paths both directions, unknown account, no kind → no warning, company account in company folder → no warning.
 
 ## Acceptance commands

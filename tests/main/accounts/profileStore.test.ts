@@ -224,7 +224,7 @@ describe('R-06 loadAccountsFile / saveAccountsFile', () => {
 describe('R-06 makeProfileId', () => {
   it('R-06 slugs the name to [a-z0-9-]', () => {
     expect(makeProfileId('My Work Acct!', [])).toBe('my-work-acct')
-    expect(makeProfileId('  Hicas  ', [])).toBe('hicas')
+    expect(makeProfileId('  Acme  ', [])).toBe('acme')
   })
   it('R-06 falls back to "account" for an empty slug', () => {
     expect(makeProfileId('!!!', [])).toBe('account')
