@@ -2,8 +2,11 @@
 // Usage: node scripts/check-bundle.mjs [rendererOutDir]   (default: out/renderer)
 //  - exactly one copy of React. Two copies (see scripts/electron-vite.mjs) make hooks
 //    throw at startup and the window stays blank.
+//  - the hook script resources/hook/agent-console-hook.cjs (shipped via extraResources): present, CommonJS,
+//    no console output and no file writes (it must never print or write anything).
+//    Override the path with the HOOK_SCRIPT env var (tests).
 //  - production CSP: connect-src is exactly 'self' and nothing mentions localhost (R-18).
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const dir = resolve(process.argv[2] ?? 'out/renderer')
@@ -36,8 +39,18 @@ const connect = csp
 if (connect !== "connect-src 'self'") errors.push(`expected connect-src 'self', found ${connect}`)
 if (/localhost/i.test(html)) errors.push('index.html mentions localhost')
 
+const hookPath = resolve(process.env.HOOK_SCRIPT ?? 'resources/hook/agent-console-hook.cjs')
+if (!existsSync(hookPath)) {
+  errors.push(`hook script missing: ${hookPath}`)
+} else {
+  const hook = readFileSync(hookPath, 'utf8')
+  if (!/\brequire\(/.test(hook)) errors.push('hook script is not CommonJS (no require( call)')
+  if (/\bconsole\./.test(hook)) errors.push('hook script contains console. calls')
+  if (/writeFile/.test(hook)) errors.push('hook script contains writeFile')
+}
+
 if (errors.length) {
   for (const e of errors) console.error(`check-bundle: ${e}`)
   process.exit(1)
 }
-console.log(`check-bundle: OK (1 React copy, connect-src 'self') in ${dir}`)
+console.log(`check-bundle: OK (1 React copy, connect-src 'self', hook script) in ${dir}`)
