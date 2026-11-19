@@ -27,6 +27,7 @@ export function Inspector(): JSX.Element {
   const statuses = useAgentStatuses()
   const tab = useConsoleStore((s) => s.inspectorTab)
   const setInspectorTab = useConsoleStore((s) => s.setInspectorTab)
+  const worktrees = useConsoleStore((s) => s.team.worktrees)
   const setConsoleDraft = useConsoleStore((s) => s.setConsoleDraft)
   const status = statuses[agent.id] ?? 'waiting'
 
@@ -107,7 +108,9 @@ export function Inspector(): JSX.Element {
         <Button size="lg" onClick={messageAgent}>
           Message agent
         </Button>
-        <Button size="lg" onClick={() => void window.api?.worktree.openInEditor(agent.worktree)}>
+        <Button size="lg" onClick={() => void window.api?.worktree.openInEditor(
+              worktrees.find((w) => w.branch === agent.worktree)?.path ?? agent.worktree
+            )}>
           Open worktree
         </Button>
         <Button size="lg" onClick={() => void window.api?.agent.pause(agent.id)}>

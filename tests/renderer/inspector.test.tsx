@@ -139,6 +139,7 @@ describe('R-11 Inspector actions', () => {
     expect(api.agent.stop).toHaveBeenCalledWith('be')
     await userEvent.click(screen.getByRole('button', { name: 'Open worktree' }))
     expect(api.worktree.openInEditor).toHaveBeenCalledTimes(1)
+    expect(api.worktree.openInEditor).toHaveBeenCalledWith('.worktrees/backend')
   })
 
   it('actions do not throw without window.api', async () => {
