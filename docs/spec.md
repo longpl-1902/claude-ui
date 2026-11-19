@@ -160,6 +160,15 @@ type AgentEvent = {
 2. Accounts: detection, profiles, folder rules, launching `claude` in a pty with
    `CLAUDE_CONFIG_DIR`, sign-in flow.
 3. Transcript watcher + parser → live agent cards, inspector, and lead console. Tests.
+3b. **Session control (like the VS Code extension):** the lead console drives a real Claude Code
+   session through the CLI's structured mode (`claude -p --input-format stream-json
+   --output-format stream-json`, plus `--include-partial-messages`, `--resume`, `--model`,
+   `--permission-mode`, and the permission-prompt option; all verified against the installed
+   CLI/SDK before use). Send prompts and slash commands, stream replies and tool calls,
+   answer permission prompts (Allow / Deny) in the GUI, resume / continue sessions, pick model
+   and permission mode. Launched with the account's `CLAUDE_CONFIG_DIR`; auth stays in the CLI.
+   The raw xterm/pty terminal remains as a fallback toggle. Tests for the stream-json parser and
+   the control-message encoder.
 4. Hook installer + local event server + hook script → realtime updates. Tests.
 5. Worktrees + diff stats + overlap detection. Timeline swimlanes.
 6. Polish: empty states and error messages, keyboard shortcuts, packaging for Windows,
