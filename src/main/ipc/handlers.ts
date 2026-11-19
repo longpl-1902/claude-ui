@@ -12,6 +12,8 @@ const INVALID_ARGS: OkResult = { ok: false, reason: 'invalid-args' }
 
 const allStrings = (...args: unknown[]): boolean => args.every((a) => typeof a === 'string')
 
+const isObject = (v: unknown): boolean => typeof v === 'object' && v !== null
+
 /** Phase 1: mock-backed handlers. Never touches credentials, fs, network or processes. */
 export function createHandlers(deps: { version?: string } = {}): Handlers {
   let defaultAccountId = mockAccountsSnapshot.defaultAccountId
@@ -26,8 +28,7 @@ export function createHandlers(deps: { version?: string } = {}): Handlers {
     },
     'accounts:start-sign-in': (configDir) => (allStrings(configDir) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
     'accounts:check-sign-in': (configDir) => {
-      void configDir
-      return { step: 'waiting' }
+      return { configDir, step: 'waiting' }
     },
     'accounts:cancel-sign-in': (configDir) => (allStrings(configDir) ? { ok: true } : { ...INVALID_ARGS }),
     'agent:send-message': (agentId, text) => (allStrings(agentId, text) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
@@ -35,7 +36,32 @@ export function createHandlers(deps: { version?: string } = {}): Handlers {
     'agent:stop': (agentId) => (allStrings(agentId) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
     'team:pause-all': () => ({ ...NOT_IMPLEMENTED }),
     'worktree:open-in-editor': (path) => (allStrings(path) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
-    'app:get-version': () => deps.version ?? '0.0.0'
+    'app:get-version': () => deps.version ?? '0.0.0',
+    // Phase 2 stubs; replaced by the real implementations in later tasks.
+    'accounts:scan': () => structuredClone(mockAccountsSnapshot),
+    'accounts:link-detected': (req) => (isObject(req) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'accounts:save-profile': (p) => (isObject(p) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'accounts:remove-profile': (accountId) => (allStrings(accountId) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'accounts:set-rules': (rules) => (Array.isArray(rules) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'accounts:set-safety': (s) => (isObject(s) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'accounts:set-limit-policy': (p) => (allStrings(p) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'accounts:resolve-folder': () => ({ accountId: 'ask', ruleIndex: -1 }),
+    'accounts:check-launch': () => ({
+      allowed: false,
+      warnings: [],
+      blockedReason: 'pty-unavailable',
+      matched: { accountId: 'ask', ruleIndex: -1 }
+    }),
+    'accounts:reopen-sign-in': (configDir) => (allStrings(configDir) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'pty:spawn': (req) => (isObject(req) ? { ok: false, reason: 'pty-unavailable' } : { ok: false, reason: 'invalid-args' }),
+    'pty:write': (ptyId, data) => (allStrings(ptyId, data) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'pty:resize': (ptyId, cols, rows) =>
+      allStrings(ptyId) && typeof cols === 'number' && typeof rows === 'number' ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS },
+    'pty:kill': (ptyId) => (allStrings(ptyId) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'pty:list': () => [],
+    'pty:get-buffer': () => '',
+    'app:pick-folder': () => null,
+    'app:get-default-cwd': () => ''
   }
 }
 

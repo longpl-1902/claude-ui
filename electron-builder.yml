@@ -2,7 +2,7 @@ appId: com.longpl.agentconsole
 productName: Agent Console
 files:
   - out/**
-npmRebuild: true
+npmRebuild: false
 asarUnpack:
   - node_modules/node-pty/**
 win:
