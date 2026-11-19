@@ -10,6 +10,8 @@ import type { HostEnv } from './contracts'
 import { createHandlers, registerIpcHandlers } from './ipc/handlers'
 import { resolveClaudeCommand } from './pty/claudeBinary'
 import { createPtyManager, loadNodePty } from './pty/ptyManager'
+import { transcriptNodeFs } from './transcripts/transcriptFs'
+import { buildRoots, createChokidarWatchDir, createTranscriptService } from './transcripts/transcriptService'
 
 function broadcast(channel: string, payload: unknown): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -69,11 +71,47 @@ app.whenReady().then(() => {
       resolveClaudeCommand({ platform: host.platform, env: process.env, home: host.home, exists: existsSync }) !== null
   })
 
-  accounts.onChanged((s) => broadcast(IPC.accountsChanged, s))
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const transcripts = createTranscriptService({
+    fs: transcriptNodeFs,
+    host,
+    roots: async () => buildRoots((await accounts.snapshot()).accounts, host),
+    ptyHint: () => {
+      const claude = pty.list().filter((p) => p.purpose === 'claude' && p.exitCode === undefined)
+      const newest = claude.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0]
+      if (!newest) return null
+      return { pid: newest.pid, cwd: newest.cwd, startedAtMs: Date.parse(newest.startedAt), accountId: newest.accountId ?? '' }
+    },
+    watchDir: createChokidarWatchDir(),
+    isPidAlive: (pid) => {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch (e) {
+        return (e as NodeJS.ErrnoException).code === 'EPERM'
+      }
+    },
+    nowMs: () => Date.now(),
+    localDay: (ms) => {
+      const d = new Date(ms)
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    },
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+  })
+  transcripts.onTeam((s) => broadcast(IPC.teamChanged, s))
+  transcripts.onSessions((list) => broadcast(IPC.transcriptsSessionsChanged, list))
+  transcripts.onUsage((u) => broadcast(IPC.usageChanged, u))
+
+  accounts.onChanged((s) => {
+    broadcast(IPC.accountsChanged, s)
+    void transcripts.refreshRoots()
+  })
   accounts.signIn.onStatus((s) => broadcast(IPC.accountsSignInStatus, s))
   pty.onExit((ptyId, exitCode) => {
     flushPtyData(ptyId)
     broadcast(IPC.ptyExit, { ptyId, exitCode })
+    transcripts.onPtyChanged()
   })
 
   // Coalesce pty output per id within one 16 ms tick.
@@ -99,6 +137,7 @@ app.whenReady().then(() => {
   })
 
   app.on('before-quit', () => {
+    transcripts.dispose()
     pty.disposeAll()
     accounts.signIn.disposeAll()
   })
@@ -109,6 +148,8 @@ app.whenReady().then(() => {
       version: app.getVersion(),
       accounts,
       pty,
+      transcripts,
+      onPtySpawned: () => transcripts.onPtyChanged(),
       pickFolder: async () => {
         const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
         const opts = { properties: ['openDirectory' as const] }
@@ -118,6 +159,7 @@ app.whenReady().then(() => {
       defaultCwd: () => (app.isPackaged ? host.home : (process.env['INIT_CWD'] ?? process.cwd()))
     })
   )
+  void transcripts.start()
   createWindow()
 
   app.on('activate', () => {

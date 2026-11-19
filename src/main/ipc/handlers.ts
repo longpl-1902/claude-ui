@@ -5,6 +5,7 @@ import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
 import type { OkResult, PtySpawnRequest, TeamSelection } from '@shared/types'
 import type { AccountsService } from '../accounts/accountsService'
 import type { PtyManagerApi } from '../pty/types'
+import type { TranscriptService } from '../transcripts/transcriptService'
 
 export type Handlers = {
   [C in InvokeChannel]: (...args: IpcInvokeMap[C]['args']) => Promise<IpcInvokeMap[C]['result']> | IpcInvokeMap[C]['result']
@@ -27,6 +28,9 @@ export interface HandlerDeps {
   pty?: PtyManagerApi
   pickFolder?: () => Promise<string | null>
   defaultCwd?: () => string
+  transcripts?: TranscriptService
+  /** called after a successful 'pty:spawn' */
+  onPtySpawned?: (ptyId: string) => void
 }
 
 /** Validate and clean a spawn request. The renderer never chooses a command or arguments. */
@@ -45,7 +49,7 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
   let defaultAccountId = mockAccountsSnapshot.defaultAccountId
   const mock = createMockHandlers(deps, () => defaultAccountId, (id) => void (defaultAccountId = id))
   const { accounts, pty } = deps
-  if (!accounts && !pty && !deps.pickFolder && !deps.defaultCwd) return mock
+  if (!accounts && !pty && !deps.pickFolder && !deps.defaultCwd && !deps.transcripts) return mock
   const real: Partial<Handlers> = {}
   if (accounts) {
     Object.assign(real, {
@@ -67,9 +71,12 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
       'accounts:check-sign-in': (dir) => accounts.signIn.check(allStrings(dir) ? dir : ''),
       'accounts:reopen-sign-in': (dir) => (allStrings(dir) ? accounts.signIn.reopen(dir) : { ...INVALID_ARGS }),
       'accounts:cancel-sign-in': (dir) => (allStrings(dir) ? accounts.signIn.cancel(dir) : { ...INVALID_ARGS }),
-      'pty:spawn': (req) => {
+      'pty:spawn': async (req) => {
         const r = parseSpawn(req)
-        return r ? accounts.launchClaude(r) : { ok: false, reason: 'invalid-args' }
+        if (!r) return { ok: false, reason: 'invalid-args' }
+        const result = await accounts.launchClaude(r)
+        if (result.ok) deps.onPtySpawned?.(result.ptyId ?? '')
+        return result
       }
     } satisfies Partial<Handlers>)
   }
@@ -91,7 +98,16 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
       'pty:get-buffer': (id) => (allStrings(id) ? pty.snapshot(id) : { data: '', end: 0 })
     } satisfies Partial<Handlers>)
   }
-  const { pickFolder, defaultCwd } = deps
+  const { pickFolder, defaultCwd, transcripts } = deps
+  if (transcripts) {
+    Object.assign(real, {
+      'team:get-snapshot': () => transcripts.snapshot(),
+      'transcripts:list-sessions': () => transcripts.listSessions(),
+      'transcripts:select': (sel) => (isTeamSelection(sel) ? transcripts.select(sel) : structuredClone(EMPTY_TEAM_SNAPSHOT)),
+      'transcripts:get-selection': () => transcripts.getSelection(),
+      'usage:get-today': () => transcripts.usageToday()
+    } satisfies Partial<Handlers>)
+  }
   if (pickFolder) real['app:pick-folder'] = () => pickFolder()
   if (defaultCwd) real['app:get-default-cwd'] = () => defaultCwd()
   return { ...mock, ...real }
