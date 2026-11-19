@@ -2,10 +2,11 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EMPTY_ACCOUNTS_SNAPSHOT } from '@shared/accountsDefaults'
-import type { Agent, AgentRuntime, TeamSnapshot } from '@shared/types'
+import type { Agent, AgentRuntime, SessionSummary, TeamSnapshot } from '@shared/types'
 import { EMPTY_TEAM_SNAPSHOT, PLACEHOLDER_AGENT } from '@shared/teamDefaults'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import {
+  deriveProjects,
   resetConsoleStore,
   selectActiveAccount,
   selectSelectedAgent,
@@ -518,5 +519,78 @@ describe('P3 live status, selectors', () => {
     s().applyUsage({ day: 'd', byAccount: { a: { input: 10, output: 20, cacheCreation: 30, cacheRead: 999 } } })
     expect(selectTokensToday('a')(s())).toEqual({ headline: 60, cacheRead: 999 })
     expect(selectTokensToday('zz')(s())).toBeUndefined()
+  })
+})
+
+describe('P3-T11 project grouping in the store', () => {
+  const mk = (id: string, key: string | null, mtimeMs: number, live = false): SessionSummary => ({
+    sessionId: id,
+    accountId: 'a',
+    configDir: 'C:/c',
+    projectDir: `dir-${key}`,
+    ...(key ? { project: { key, name: key.split('/').pop()!, root: key, git: true } } : {}),
+    mtimeMs,
+    sizeBytes: 1,
+    ...(live ? { live: true } : {})
+  })
+  const list = [mk('s1', 'd:/a', 1000), mk('s2', 'd:/b', 5000, true), mk('s3', 'd:/a', 3000, true), mk('s4', 'd:/b', 2000, true), mk('s5', 'd:/c', 4000)]
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('deriveProjects groups by project key with live counts and newest activity, sorted newest first', () => {
+    expect(deriveProjects(list)).toEqual([
+      { key: 'd:/b', name: 'b', root: 'd:/b', liveCount: 2, lastActivityMs: 5000 },
+      { key: 'd:/c', name: 'c', root: 'd:/c', liveCount: 0, lastActivityMs: 4000 },
+      { key: 'd:/a', name: 'a', root: 'd:/a', liveCount: 1, lastActivityMs: 3000 }
+    ])
+  })
+
+  it('sessions without a project fall back to their cwd/projectDir', () => {
+    const g = deriveProjects([{ ...mk('x', null, 1), cwd: 'D:/Work/Zed' }])
+    expect(g[0]).toMatchObject({ key: 'd:/work/zed', name: 'Zed' })
+  })
+
+  it('initial project: the remembered one when it still exists', () => {
+    window.localStorage.setItem('ac.projectKey', 'd:/a')
+    s().setSessions(list)
+    expect(s().projectKey).toBe('d:/a')
+    expect(s().selection).toEqual({ mode: 'auto', projectKey: 'd:/a' })
+  })
+
+  it('initial project: a remembered project that is gone is ignored; the current pick wins over the newest', () => {
+    window.localStorage.setItem('ac.projectKey', 'd:/gone')
+    useConsoleStore.setState({ team: { ...EMPTY_TEAM_SNAPSHOT, sessionId: 's5' } })
+    s().setSessions(list)
+    expect(s().projectKey).toBe('d:/c')
+  })
+
+  it('initial project: otherwise the most recently active project', () => {
+    s().setSessions(list)
+    expect(s().projectKey).toBe('d:/b')
+  })
+
+  it('does not change a chosen project and leaves a pinned session selection alone', () => {
+    useConsoleStore.setState({ projectKey: 'd:/a', selection: { mode: 'session', accountId: 'a', sessionId: 's1' } })
+    s().setSessions(list)
+    expect(s().projectKey).toBe('d:/a')
+    expect(s().selection).toEqual({ mode: 'session', accountId: 'a', sessionId: 's1' })
+  })
+
+  it('setProject selects auto with that key, remembers it, and survives a broken localStorage', async () => {
+    const select = vi.fn().mockResolvedValue({ ...EMPTY_TEAM_SNAPSHOT })
+    ;(window as unknown as { api: unknown }).api = { transcripts: { select } }
+    s().setProject('d:/c')
+    expect(s().projectKey).toBe('d:/c')
+    expect(select).toHaveBeenCalledWith({ mode: 'auto', projectKey: 'd:/c' })
+    expect(s().selection).toEqual({ mode: 'auto', projectKey: 'd:/c' })
+    expect(window.localStorage.getItem('ac.projectKey')).toBe('d:/c')
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('denied')
+    })
+    expect(() => s().setProject('d:/a')).not.toThrow()
+    expect(s().projectKey).toBe('d:/a')
+    spy.mockRestore()
   })
 })

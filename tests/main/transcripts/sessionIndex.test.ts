@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createProjectResolver, type ExecFn } from '../../../src/main/transcripts/projectResolver'
 import { createSessionIndex, type SessionIndexDeps } from '../../../src/main/transcripts/sessionIndex'
 import { customTitle, jsonl, registryEntry, userPrompt, at, T0_MS } from '../../fixtures/transcripts/builders'
 import {
@@ -277,5 +278,66 @@ describe('R-08 resolve (explicit pick)', () => {
     expect(await index.resolve(ROOTS, 'acme', 'nope')).toBeNull()
     expect(await index.resolve(ROOTS, '', S1)).toBeNull()
     expect(await index.resolve(ROOTS, 'ghost', S1)).toBeNull()
+  })
+})
+
+describe('P3-T11 project grouping', () => {
+  const DEMO_KEY = 'd:/repos/main'
+  const OTHER_KEY = 'c:/users/u/other'
+  // d:\work\demo is a linked worktree of d:/repos/main; C:\Users\u\other is not a git repo
+  const exec: ExecFn = vi.fn(async (_f, args) => {
+    if (String(args[1]).toLowerCase().startsWith('d:')) return { stdout: 'D:/repos/main/.git\n' }
+    throw new Error('not a git repository')
+  })
+  function withProjects(opts: Parameters<typeof setup>[0] = {}) {
+    const tree = buildTranscriptTree()
+    const fs = createMemoryByteFs(tree.files, { mtimes: tree.mtimes, caseInsensitive: true })
+    opts.mutate?.(fs, tree)
+    const alive = new Set(opts.alive ?? [PID_LIVE])
+    const projects = createProjectResolver({ exec, platform: 'win32' })
+    const index = createSessionIndex({ fs, platform: 'win32', home: HOME, isPidAlive: (p) => alive.has(p), nowMs: () => NOW_MS, projects })
+    return { fs, tree, index, projects }
+  }
+
+  it('listSessions carries a provisional project first, the git one once git answered', async () => {
+    const { index, projects } = withProjects()
+    const first = await index.listSessions(ROOTS)
+    expect(first.find((s) => s.sessionId === S1)!.project).toMatchObject({ key: 'd:/work/demo', git: false })
+    await projects.resolve('d:\\work\\demo')
+    await projects.resolve('C:\\Users\\u\\other')
+    const second = await index.listSessions(ROOTS)
+    expect(second.find((s) => s.sessionId === S1)!.project).toEqual({ key: DEMO_KEY, name: 'main', root: 'D:/repos/main', git: true })
+    expect(second.find((s) => s.sessionId === S2)!.project!.key).toBe(DEMO_KEY)
+    expect(second.find((s) => s.sessionId === S3)!.project).toMatchObject({ key: OTHER_KEY, name: 'other', git: false })
+  })
+
+  it('pickAuto with projectKey only considers that project (live first)', async () => {
+    const { index } = withProjects()
+    expect((await index.pickAuto(ROOTS, null, DEMO_KEY)).pick).toMatchObject({ sessionId: S1 })
+    // the other project has no live session: its newest (S4, 10 h) wins
+    expect((await index.pickAuto(ROOTS, null, OTHER_KEY)).pick).toMatchObject({ accountId: '', sessionId: S4 })
+  })
+
+  it('pickAuto without projectKey is unchanged', async () => {
+    const { index } = withProjects()
+    expect((await index.pickAuto(ROOTS, null)).pick).toMatchObject({ sessionId: S1 })
+  })
+
+  it('a project with no session in 24 h falls back to its newest session, however old', async () => {
+    const { index, fs, tree } = withProjects({ alive: [] })
+    fs.setMtime(tree.paths.s4, NOW_MS - 30 * 3_600_000)
+    fs.setMtime(tree.paths.s3, NOW_MS - 40 * 3_600_000)
+    expect((await index.pickAuto(ROOTS, null, OTHER_KEY)).pick).toMatchObject({ sessionId: S4 })
+    expect((await index.pickAuto(ROOTS, null, 'c:/nowhere')).pick).toBeNull()
+  })
+
+  it('the app pty wins only when it runs in the chosen project', async () => {
+    const { index } = withProjects()
+    const pty = { pid: 7777, cwd: 'C:\\Users\\u\\other', startedAtMs: NOW_MS - 11 * 3_600_000, accountId: '' }
+    expect((await index.pickAuto(ROOTS, pty, OTHER_KEY)).pick).toMatchObject({ sessionId: S4 })
+    // the pty is in another project: ignored, the demo project's live session is picked
+    const r = await index.pickAuto(ROOTS, pty, DEMO_KEY)
+    expect(r.pick).toMatchObject({ sessionId: S1 })
+    expect(r.waitingForSession).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ExecFn } from '../../../src/main/transcripts/projectResolver'
 import { createTranscriptService, type TranscriptService, type WatchDir } from '../../../src/main/transcripts/transcriptService'
 import type { PtyHint } from '../../../src/main/transcripts/sessionIndex'
 import type { SessionSummary, TeamSnapshot, UsageToday } from '../../../src/shared/types'
@@ -48,7 +49,7 @@ interface FakeWatcher {
   closed: boolean
 }
 
-function setup(opts: { pty?: () => PtyHint | null; alive?: number[]; roots?: () => Promise<typeof ROOTS>; extraFiles?: Record<string, string>; localDay?: (ms: number) => string } = {}) {
+function setup(opts: { pty?: () => PtyHint | null; alive?: number[]; roots?: () => Promise<typeof ROOTS>; extraFiles?: Record<string, string>; localDay?: (ms: number) => string; execGit?: ExecFn } = {}) {
   const tree = buildTranscriptTree()
   const fs = createMemoryByteFs({ ...tree.files, ...(opts.extraFiles ?? {}) }, { mtimes: tree.mtimes, caseInsensitive: true })
   const watchers: FakeWatcher[] = []
@@ -71,7 +72,8 @@ function setup(opts: { pty?: () => PtyHint | null; alive?: number[]; roots?: () 
     nowMs: () => Date.now(),
     localDay: opts.localDay ?? utcDay,
     setTimer: (fn, ms) => setTimeout(fn, ms),
-    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+    clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+    ...(opts.execGit ? { execGit: opts.execGit } : {})
   })
   const teams: TeamSnapshot[] = []
   const sessions: SessionSummary[][] = []
@@ -441,37 +443,88 @@ describe('P3-B usage at local midnight (R-09)', () => {
   })
 })
 
+/** `count` sub-agents with `calls` tool calls each; the first `finished` carry a finished meta. */
+function bigTeam(count: number, finished: number, calls: number) {
+  const tree = buildTranscriptTree()
+  const dir = tree.paths.sub1.replace(/\/[^/]+$/, '')
+  const extra: Record<string, string> = {}
+  const ids: string[] = []
+  for (let n = 0; n < count; n++) {
+    const id = `b${String(n).padStart(2, '0')}c3d4e5f6a7b81`.slice(0, 17)
+    ids.push(id)
+    const lines: unknown[] = [userPrompt(`Task ${n}`, { ts: at(0), parentUuid: null, agentId: id, sessionId: S1 })]
+    for (let i = 0; i < calls; i++) {
+      const tid = `toolu_${n}_${i}`
+      lines.push(
+        ...assistantBlocks([toolUseBlock(tid, 'Bash', { command: `npm run build --workspace=packages/pkg-${n}-${i} && echo done` })], {
+          ts: at(1 + i * 2), messageId: `msg_sz_${n}_${i}`, stopReason: 'tool_use', usage: usage(10, 5), agentId: id, sessionId: S1
+        }),
+        toolResult(tid, `ok ${i}: ` + 'x'.repeat(60), { ts: at(2 + i * 2), agentId: id, sessionId: S1 })
+      )
+    }
+    extra[`${dir}/agent-${id}.jsonl`] = jsonl(lines)
+    extra[`${dir}/agent-${id}.meta.json`] = JSON.stringify(subMeta({ toolUseId: `toolu_none_${n}`, description: `Worker number ${n} builds package ${n}`, ...(n < finished ? { finished: true } : {}) }))
+  }
+  return { extra, ids }
+}
+
 describe('P3-B snapshot size (advisory)', () => {
   it('a 55-agent team with 160 tool calls each stays well under 300 kB per push', async () => {
-    const tree = buildTranscriptTree()
-    const dir = tree.paths.sub1.replace(/\/[^/]+$/, '')
-    const extra: Record<string, string> = {}
-    const ids: string[] = []
-    for (let n = 0; n < 55; n++) {
-      const id = `b${String(n).padStart(2, '0')}c3d4e5f6a7b81`.slice(0, 17)
-      ids.push(id)
-      const lines: unknown[] = [userPrompt(`Task ${n}`, { ts: at(0), parentUuid: null, agentId: id, sessionId: S1 })]
-      for (let i = 0; i < 160; i++) {
-        const tid = `toolu_${n}_${i}`
-        lines.push(
-          ...assistantBlocks([toolUseBlock(tid, 'Bash', { command: `npm run build --workspace=packages/pkg-${n}-${i} && echo done` })], {
-            ts: at(1 + i * 2), messageId: `msg_sz_${n}_${i}`, stopReason: 'tool_use', usage: usage(10, 5), agentId: id, sessionId: S1
-          }),
-          toolResult(tid, `ok ${i}: ` + 'x'.repeat(60), { ts: at(2 + i * 2), agentId: id, sessionId: S1 })
-        )
-      }
-      extra[`${dir}/agent-${id}.jsonl`] = jsonl(lines)
-      // 50 finished, 5 still running
-      extra[`${dir}/agent-${id}.meta.json`] = JSON.stringify(subMeta({ toolUseId: `toolu_none_${n}`, description: `Worker number ${n} builds package ${n}`, ...(n < 50 ? { finished: true } : {}) }))
-    }
+    const { extra, ids } = bigTeam(55, 50, 160)
     const { svc } = track(await boot({ extraFiles: extra }))
     const snap = svc.snapshot()
     expect(snap.agents.length).toBeGreaterThanOrEqual(56)
     const fin = snap.agents.filter((a) => a.runtime?.finished && ids.includes(a.id))
     expect(fin.length).toBe(50)
-    for (const a of fin) expect(a.activity.length).toBeLessThanOrEqual(10)
+    // 50 finished agents share the item budget (750 / 50 = 15 each), so the push stays small
+    for (const a of fin) expect(a.activity.length).toBeLessThanOrEqual(15)
     const bytes = JSON.stringify(snap).length
     expect(bytes).toBeLessThan(300_000)
     expect(snap.events.length).toBeLessThanOrEqual(150)
+  })
+
+  it('finished agents of a large team (>12) keep up to 25 activity items; running ones are trimmed to 30', async () => {
+    const { extra, ids } = bigTeam(16, 14, 60)
+    const { svc } = track(await boot({ extraFiles: extra }))
+    const snap = svc.snapshot()
+    const mine = snap.agents.filter((a) => ids.includes(a.id))
+    const fin = mine.filter((a) => a.runtime?.finished)
+    const running = mine.filter((a) => !a.runtime?.finished)
+    expect(fin.length).toBe(14)
+    for (const a of fin) expect(a.activity.length).toBe(25)
+    expect(running.length).toBe(2)
+    for (const a of running) expect(a.activity.length).toBe(30)
+    expect(JSON.stringify(snap).length).toBeLessThan(300_000)
+  })
+})
+
+describe('P3-T11 project grouping', () => {
+  const execGit: ExecFn = async (_f, args) => {
+    if (String(args[1]).toLowerCase().startsWith('d:')) return { stdout: 'D:/repos/main/.git\n' }
+    throw new Error('not a git repository')
+  }
+
+  it('listSessions carries projects; a git answer re-pushes the session list with the git project', async () => {
+    const { svc, sessions } = track(await boot({ execGit }))
+    const before = sessions.length
+    const first = await svc.listSessions()
+    expect(first.find((s) => s.sessionId === S1)!.project).toBeDefined()
+    await flush(3000)
+    expect(sessions.length).toBeGreaterThan(before)
+    const last = sessions[sessions.length - 1]!
+    expect(last.find((s) => s.sessionId === S1)!.project).toMatchObject({ key: 'd:/repos/main', git: true })
+    expect(last.find((s) => s.sessionId === S4)!.project).toMatchObject({ key: 'c:/users/u/other', git: false })
+  })
+
+  it('select({auto, projectKey}) switches to that project and is remembered; plain auto releases it', async () => {
+    const { svc } = track(await boot({ execGit }))
+    expect(svc.snapshot().sessionId).toBe(S1)
+    const snap = await svc.select({ mode: 'auto', projectKey: 'c:/users/u/other' })
+    expect(snap.sessionId).toBe(S4)
+    expect(svc.getSelection()).toEqual({ mode: 'auto', projectKey: 'c:/users/u/other' })
+    await svc.select({ mode: 'auto', projectKey: 'd:/repos/main' })
+    expect(svc.snapshot().sessionId).toBe(S1)
+    await svc.select({ mode: 'auto' })
+    expect(svc.getSelection()).toEqual({ mode: 'auto' })
   })
 })

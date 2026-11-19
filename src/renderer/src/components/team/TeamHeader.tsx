@@ -1,8 +1,9 @@
+import { useMemo } from 'react'
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
 import { ChevronDownIcon, LockIcon, TerminalIcon } from '../ui/Icons'
 import { formatTokens } from '@shared/format'
-import { selectActiveAccount, useConsoleStore, useTeamCounters } from '../../store/useConsoleStore'
+import { deriveProjects, selectActiveAccount, sessionProjectKey, useConsoleStore, useTeamCounters } from '../../store/useConsoleStore'
 import './teamLeft.css'
 
 function relTime(mtimeMs: number, nowMs: number): string {
@@ -13,12 +14,6 @@ function relTime(mtimeMs: number, nowMs: number): string {
   const hr = Math.floor(min / 60)
   if (hr < 24) return `${hr}h ago`
   return `${Math.floor(hr / 24)}d ago`
-}
-
-function baseName(p: string | undefined): string {
-  if (!p) return ''
-  const parts = p.split(/[/\\]/).filter(Boolean)
-  return parts[parts.length - 1] ?? p
 }
 
 export function TeamHeader() {
@@ -33,10 +28,15 @@ export function TeamHeader() {
   const selectSession = useConsoleStore((s) => s.selectSession)
   const exitDemo = useConsoleStore((s) => s.exitDemo)
   const nowMs = useConsoleStore((s) => s.nowMs)
+  const projectKey = useConsoleStore((s) => s.projectKey)
+  const setProject = useConsoleStore((s) => s.setProject)
+  const projects = useMemo(() => deriveProjects(sessions), [sessions])
+  const current = projects.find((p) => p.key === projectKey)
+  const projectSessions = useMemo(() => sessions.filter((x) => sessionProjectKey(x) === projectKey), [sessions, projectKey])
   const selectedValue = selection.mode === 'session' ? `${selection.accountId}|${selection.sessionId}` : 'auto'
   const onPick = (value: string): void => {
     if (value === 'auto') {
-      void selectSession({ mode: 'auto' })
+      void selectSession(projectKey === null ? { mode: 'auto' } : { mode: 'auto', projectKey })
       return
     }
     const i = value.indexOf('|')
@@ -66,15 +66,25 @@ export function TeamHeader() {
       )}
       {live && <span className="ac-header__badge ac-header__badge--live">LIVE</span>}
       <select
-        className="ac-header__picker"
-        aria-label="Session"
-        value={selectedValue}
-        onChange={(e) => onPick(e.target.value)}
+        className="ac-header__picker ac-header__picker--project"
+        aria-label="Project"
+        title={current?.root ?? projectKey ?? undefined}
+        value={projectKey ?? ''}
+        onChange={(e) => setProject(e.target.value)}
       >
+        {projectKey === null && <option value="">{projects.length === 0 ? 'No projects' : 'Select project'}</option>}
+        {projectKey !== null && !current && <option value={projectKey}>{projectKey.split('/').filter(Boolean).pop() ?? projectKey}</option>}
+        {projects.map((p) => (
+          <option key={p.key} value={p.key} title={p.root}>
+            {p.liveCount > 0 ? `${p.name} · ${p.liveCount} live` : p.name}
+          </option>
+        ))}
+      </select>
+      <select className="ac-header__picker" aria-label="Session" value={selectedValue} onChange={(e) => onPick(e.target.value)}>
         <option value="auto">Auto (latest)</option>
-        {sessions.map((x) => {
+        {projectSessions.map((x) => {
           const v = `${x.accountId}|${x.sessionId}`
-          const label = `${[x.title ?? x.sessionId.slice(0, 8), baseName(x.cwd ?? x.projectDir), relTime(x.mtimeMs, nowMs)].filter(Boolean).join(' · ')}${x.live ? ' · live' : ''}`
+          const label = `${[x.title ?? x.sessionId.slice(0, 8), relTime(x.mtimeMs, nowMs)].join(' · ')}${x.live ? ' · live' : ''}`
           return (
             <option key={v} value={v}>
               {label}

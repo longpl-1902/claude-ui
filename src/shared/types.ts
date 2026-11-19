@@ -275,6 +275,12 @@ export interface PtyExitEvent {
   exitCode: number
 }
 
+export interface SessionProject {
+  key: string // normalized root (forward slashes, lower-cased on win32)
+  name: string // basename of root
+  root: string // display path
+  git: boolean
+}
 export interface SessionSummary {
   sessionId: string
   accountId: string // '' when the config dir is not linked to a profile
@@ -286,8 +292,9 @@ export interface SessionSummary {
   sizeBytes: number
   live?: boolean // registry entry with a live pid
   registryStatus?: RegistryStatus
+  project?: SessionProject // git project (linked worktrees map to the main repo); provisional until git answers
 }
-export type TeamSelection = { mode: 'auto' } | { mode: 'session'; accountId: string; sessionId: string }
+export type TeamSelection = { mode: 'auto'; projectKey?: string } | { mode: 'session'; accountId: string; sessionId: string }
 export interface TokenTotals { input: number; output: number; cacheCreation: number; cacheRead: number }
 export interface UsageToday {
   day: string // local YYYY-MM-DD

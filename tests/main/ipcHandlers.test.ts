@@ -283,8 +283,10 @@ describe('R-01 Phase 3 real handlers delegate to the transcript service', () => 
     expect(transcripts.select).toHaveBeenLastCalledWith({ mode: 'auto' })
     await invoke('transcripts:select', { mode: 'session', accountId: 'a', sessionId: 's' })
     expect(transcripts.select).toHaveBeenLastCalledWith({ mode: 'session', accountId: 'a', sessionId: 's' })
+    await invoke('transcripts:select', { mode: 'auto', projectKey: 'd:/repos/main' })
+    expect(transcripts.select).toHaveBeenLastCalledWith({ mode: 'auto', projectKey: 'd:/repos/main' })
     transcripts.select.mockClear()
-    for (const bad of [null, 'auto', { mode: 'session' }, { mode: 'session', accountId: 1, sessionId: 's' }, { mode: 'x' }]) {
+    for (const bad of [{ mode: 'auto', projectKey: 5 }, null, 'auto', { mode: 'session' }, { mode: 'session', accountId: 1, sessionId: 's' }, { mode: 'x' }]) {
       expect(await invoke('transcripts:select', bad)).toMatchObject({ source: 'empty', agents: [] })
     }
     expect(transcripts.select).not.toHaveBeenCalled()
