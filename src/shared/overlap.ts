@@ -77,17 +77,17 @@ export function toWorktreeViews(
       if (!o.worktrees.includes(w.path)) continue
       for (const p of o.worktrees) if (p !== w.path) others.add(branchOf.get(p) ?? p)
     }
-    const view = {
+    const view: Worktree = {
       branch: w.branch ?? '(detached)',
       path: w.path,
       agentIds: agentMap.get(w.path) ?? [],
       changedFiles: w.changedFiles,
       ahead: w.ahead ?? 0,
-      behind: w.behind,
       files: w.files.map((f) => f.path),
       isMain: w.isMain,
-      error: w.error,
-      overlapsWith: others.size ? [...others] : undefined
+      ...(w.behind != null ? { behind: w.behind } : {}),
+      ...(w.error !== undefined ? { error: w.error } : {}),
+      ...(others.size ? { overlapsWith: [...others] } : {})
     }
     return view
   })

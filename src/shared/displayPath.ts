@@ -25,7 +25,7 @@ export function shortenPath(p: string, o: PathOpts): { short: string; full: stri
     if (inRoot !== null) return { short: inRoot === '' ? '.' : inRoot, full }
     const tmp = /(?:^|\/)AppData\/Local\/Temp\/(.+)$/i.exec(n) ?? /^\/tmp\/(.+)$/.exec(n)
     if (tmp) {
-      const segs = tmp[1].split('/').filter(Boolean)
+      const segs = (tmp[1] ?? '').split('/').filter(Boolean)
       if (segs.length > 0) return { short: '‹tmp›/' + segs.slice(-2).join('/'), full }
     }
     const inHome = within(n, o.home, ci)
