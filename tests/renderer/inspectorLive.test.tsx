@@ -150,15 +150,13 @@ describe('AccountCards tokens used today', () => {
 })
 
 describe('P3-C inspector actions and wrapping', () => {
-  it('live: Message agent, Pause and Stop are disabled with titles', () => {
+  it('live without a controlled session: actions are disabled with reasons', () => {
     seedLive([liveAgent()])
     render(<Inspector />)
     expect(screen.getByRole('button', { name: 'Message agent' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Message agent' })).toHaveAttribute('title', 'Arrives in Phase 3b')
-    for (const n of ['Pause', 'Stop']) {
-      expect(screen.getByRole('button', { name: n })).toBeDisabled()
-      expect(screen.getByRole('button', { name: n })).toHaveAttribute('title', 'Arrives in Phase 4')
-    }
+    expect(screen.getByRole('button', { name: 'Message agent' })).toHaveAttribute('title', expect.stringContaining('VS Code'))
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Stop process…' })).toBeDisabled()
   })
   it('demo: the three actions are enabled', () => {
     seedDemoTeam()
