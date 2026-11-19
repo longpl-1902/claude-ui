@@ -636,9 +636,11 @@ export function useAgentStatusInfo(id: string): { status: AgentStatus; reason?: 
   }, [team, nowMs, id])
 }
 
-/** Needs-you count: agents that need you plus the open permission prompts of the app-controlled session. */
-export function selectNeedsYouCount(agentNeedsYou: number, pendingByControl: number): number {
-  return agentNeedsYou + pendingByControl
+/** Needs-you count: agents that need you plus the open permission prompts of the app-controlled session.
+ *  When the lead itself is already "needs-you" (e.g. AskUserQuestion / ExitPlanMode, which also arrive as a
+ *  permission prompt), its first pending prompt is the same item and is not counted twice. */
+export function selectNeedsYouCount(agentNeedsYou: number, pendingByControl: number, leadNeedsYou = false): number {
+  return agentNeedsYou + pendingByControl - (leadNeedsYou && pendingByControl > 0 ? 1 : 0)
 }
 
 /** Open permission prompts of the controlled session bound to the viewed team (0 in demo). */
@@ -659,7 +661,11 @@ export function useTeamCounters(): { agents: number; running: number; needsYou: 
     return {
       agents: team.agents.length,
       running: vals.filter((v) => v === 'running').length,
-      needsYou: selectNeedsYouCount(vals.filter((v) => v === 'needs-you').length, pending),
+      needsYou: selectNeedsYouCount(
+        vals.filter((v) => v === 'needs-you').length,
+        pending,
+        statuses[team.agents.find((a) => !a.parentId)?.id ?? ''] === 'needs-you'
+      ),
       tokens: team.agents.reduce((n, a) => n + a.tokens, 0)
     }
   }, [team, statuses, pending])

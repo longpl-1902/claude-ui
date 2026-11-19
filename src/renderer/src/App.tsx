@@ -2,7 +2,10 @@ import { useEffect } from 'react'
 import { AccountsView } from '@renderer/screens/AccountsView'
 import { TeamView } from '@renderer/screens/TeamView'
 import { ShortcutsHelp } from '@renderer/components/ui/ShortcutsHelp'
-import { useShortcuts } from '@renderer/hooks/useShortcuts'
+import { setShortcutBridge, useShortcuts } from '@renderer/hooks/useShortcuts'
+import { useAttentionStore } from '@renderer/store/useAttentionStore'
+import { useRailStore } from '@renderer/store/useRailStore'
+import { useSwitcherStore } from '@renderer/store/useSwitcherStore'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { useControlStore } from '@renderer/store/useControlStore'
 import { useWorkspaceStore } from '@renderer/store/useWorkspaceStore'
@@ -18,6 +21,16 @@ export default function App() {
   })
 
   useShortcuts()
+
+  // Connect the global shortcuts (T18) to the rail / inbox / switcher stores (T22). getState() at call time.
+  useEffect(() => {
+    setShortcutBridge({
+      goToPinned: (n) => useRailStore.getState().goToPinned(n),
+      focusNext: () => useAttentionStore.getState().focusNext(),
+      focusPrev: () => useAttentionStore.getState().focusPrev(),
+      openSwitcher: () => useSwitcherStore.getState().open()
+    })
+  }, [])
 
   useEffect(() => {
     const offControl = useControlStore.getState().init()
