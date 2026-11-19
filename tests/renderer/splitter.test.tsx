@@ -197,3 +197,83 @@ describe('Splitter unit', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+describe('Splitter horizontal unit', () => {
+  const setup = (side: 'top' | 'bottom', value = 100) => {
+    const onChange = vi.fn()
+    render(
+      <Splitter
+        label="h"
+        controls="y"
+        value={value}
+        min={50}
+        max={300}
+        defaultValue={120}
+        side={side}
+        onChange={onChange}
+      />
+    )
+    return { el: screen.getByRole('separator'), onChange }
+  }
+
+  it('is a horizontal separator with a row-resize class', () => {
+    const { el } = setup('top')
+    expect(el).toHaveAttribute('aria-orientation', 'horizontal')
+    expect(el.className).toContain('ac-splitter--h')
+  })
+
+  it('side=top: ArrowDown grows, ArrowUp shrinks, Shift is 64, Home/End/Enter', () => {
+    const { el, onChange } = setup('top')
+    fireEvent.keyDown(el, { key: 'ArrowDown' })
+    expect(onChange).toHaveBeenLastCalledWith(116)
+    fireEvent.keyDown(el, { key: 'ArrowUp', shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith(36)
+    fireEvent.keyDown(el, { key: 'Home' })
+    expect(onChange).toHaveBeenLastCalledWith(50)
+    fireEvent.keyDown(el, { key: 'End' })
+    expect(onChange).toHaveBeenLastCalledWith(300)
+    fireEvent.keyDown(el, { key: 'Enter' })
+    expect(onChange).toHaveBeenLastCalledWith(120)
+    onChange.mockClear()
+    fireEvent.keyDown(el, { key: 'ArrowLeft' })
+    fireEvent.keyDown(el, { key: 'ArrowRight' })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('side=bottom: ArrowUp grows, ArrowDown shrinks', () => {
+    const { el, onChange } = setup('bottom')
+    fireEvent.keyDown(el, { key: 'ArrowUp' })
+    expect(onChange).toHaveBeenLastCalledWith(116)
+    fireEvent.keyDown(el, { key: 'ArrowDown', shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith(36)
+  })
+
+  it('drags with clientY and resets on double click', () => {
+    const top = setup('top')
+    fireEvent.pointerDown(top.el, { clientY: 200, clientX: 0, button: 0, pointerId: 1 })
+    fireEvent.pointerMove(top.el, { clientY: 230, clientX: 999, pointerId: 1 })
+    expect(top.onChange).toHaveBeenLastCalledWith(130)
+    fireEvent.pointerUp(top.el, { pointerId: 1 })
+    fireEvent.doubleClick(top.el)
+    expect(top.onChange).toHaveBeenLastCalledWith(120)
+  })
+
+  it('side=bottom: dragging up grows', () => {
+    const { el, onChange } = setup('bottom')
+    fireEvent.pointerDown(el, { clientY: 200, button: 0, pointerId: 1 })
+    fireEvent.pointerMove(el, { clientY: 170, pointerId: 1 })
+    expect(onChange).toHaveBeenLastCalledWith(130)
+    fireEvent.pointerUp(el, { pointerId: 1 })
+  })
+
+  it('orientation=horizontal works with side left/right', () => {
+    const onChange = vi.fn()
+    render(
+      <Splitter label="o" controls="y" value={10} min={0} max={20} defaultValue={5} side="left" orientation="horizontal" onChange={onChange} />
+    )
+    const el = screen.getByRole('separator')
+    expect(el).toHaveAttribute('aria-orientation', 'horizontal')
+    fireEvent.keyDown(el, { key: 'ArrowDown' })
+    expect(onChange).toHaveBeenLastCalledWith(26)
+  })
+})

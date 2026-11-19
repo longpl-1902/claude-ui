@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { formatElapsed, formatTokens } from "@shared/format";
 import {
   selectSelectedAgentOrNull,
@@ -23,7 +23,16 @@ const TABS: { id: InspectorTab; label: string }[] = [
 const tabId = (t: InspectorTab): string => `insp-tab-${t}`;
 const PANEL_ID = "insp-panel";
 
-export function Inspector(): JSX.Element {
+export interface InspectorLayoutProps {
+  /** Height (px) of the top section (header, stats, task, actions); the tabs fill the rest. */
+  topHeight?: number;
+  /** Rendered between the top section and the tabs (the resize handle, owned by TeamView). */
+  splitter?: ReactNode;
+}
+
+export const INSPECTOR_TOP_ID = "ac-insp-top";
+
+export function Inspector({ topHeight, splitter }: InspectorLayoutProps = {}): JSX.Element {
   const agent = useConsoleStore(selectSelectedAgentOrNull);
   const agentCount = useConsoleStore((s) => s.team.agents.length);
   if (!agent) {
@@ -36,10 +45,14 @@ export function Inspector(): JSX.Element {
       </aside>
     );
   }
-  return <InspectorBody agent={agent} />;
+  return <InspectorBody agent={agent} topHeight={topHeight} splitter={splitter} />;
 }
 
-function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
+function InspectorBody({
+  agent,
+  topHeight,
+  splitter,
+}: { agent: Agent } & InspectorLayoutProps): JSX.Element {
   const info = useAgentStatusInfo(agent.id);
   const source = useConsoleStore((s) => s.team.source);
   const live = source !== "demo";
@@ -72,6 +85,11 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
 
   return (
     <aside className="insp" aria-label="Agent inspector">
+      <div
+        id={INSPECTOR_TOP_ID}
+        className="insp__top"
+        style={topHeight === undefined ? undefined : { height: topHeight }}
+      >
       <div className="insp__head">
         <Avatar initials={agent.initials} color={agent.avatarColor} size={40} />
         <div className="insp__who">
@@ -106,37 +124,6 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
         <span className="insp__task-title">{agent.taskTitle}</span>
         <span className="insp__task-wt">⎇ {live ? agent.worktree || "—" : agent.worktree}</span>
       </div>
-
-      <div
-        role="tablist"
-        aria-label="Agent details"
-        className="insp__tabs"
-        onKeyDown={onKeyDown}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            id={tabId(t.id)}
-            aria-selected={tab === t.id}
-            aria-controls={PANEL_ID}
-            tabIndex={tab === t.id ? 0 : -1}
-            className={tab === t.id ? "insp__tab insp__tab--on" : "insp__tab"}
-            onClick={() => setInspectorTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)}>
-        {tab === "activity" && <ActivityTab items={agent.activity} />}
-        {tab === "files" && <FilesTab files={agent.files} />}
-        {tab === "messages" && <MessagesTab messages={agent.messages} />}
-      </div>
-
-      <div className="insp__spacer" />
       <div className="insp__actions">
         <Button
           size="lg"
@@ -174,6 +161,38 @@ function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
         >
           Stop
         </Button>
+      </div>
+      </div>
+      {splitter}
+      <div className="insp__bottom">
+      <div
+        role="tablist"
+        aria-label="Agent details"
+        className="insp__tabs"
+        onKeyDown={onKeyDown}
+      >
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={tabId(t.id)}
+            aria-selected={tab === t.id}
+            aria-controls={PANEL_ID}
+            tabIndex={tab === t.id ? 0 : -1}
+            className={tab === t.id ? "insp__tab insp__tab--on" : "insp__tab"}
+            onClick={() => setInspectorTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)}>
+        {tab === "activity" && <ActivityTab items={agent.activity} />}
+        {tab === "files" && <FilesTab files={agent.files} />}
+        {tab === "messages" && <MessagesTab messages={agent.messages} />}
+      </div>
       </div>
     </aside>
   );

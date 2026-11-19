@@ -11,6 +11,13 @@
   min-height: 0;
 }
 
+/* T22 mounts the project rail here; empty and zero width until then. */
+.ac-team__rail-slot {
+  flex: 0 0 0;
+  width: 0;
+  min-height: 0;
+}
+
 .ac-team__left {
   flex: 1 1 240px;
   max-width: 100%;
@@ -19,7 +26,7 @@
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 8px;
 }
 
 .ac-team__center {
@@ -28,7 +35,7 @@
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  overflow-x: hidden;
 }
 
 .ac-team__right {
@@ -38,7 +45,7 @@
   padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
 .ac-team__skip {
@@ -66,15 +73,151 @@
   border-radius: 6px;
 }
 
-.ac-team__center {
-  overflow-x: hidden;
+/* Column content: the panes stack inside and share the measured height. */
+.ac-team__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ac-pane {
+  min-width: 0;
+}
+
+.ac-pane--fixed {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ac-pane--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ac-pane--timeline {
+  min-height: 60px;
+  overflow: auto;
+}
+
+/* Inspector: [top section][splitter][tabs + panel]; the top height comes from TeamView. */
+.ac-team__body .insp {
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
+
+.insp__top {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.insp__bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.insp__bottom > [role='tabpanel'] {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Collapse / expand controls. */
+.ac-team__collapse,
+.ac-team__strip-btn,
+.ac-team__drawer-toggle {
+  min-width: 28px;
+  min-height: 28px;
+  background: var(--ac-bg-btn);
+  color: var(--ac-text);
+  border: 1px solid var(--ac-border-btn);
+  border-radius: var(--ac-radius-sm, 6px);
+  font: 500 14px var(--ac-font-ui);
+  cursor: pointer;
+}
+
+.ac-team__collapse {
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.ac-team__collapse--right {
+  align-self: flex-end;
+}
+
+.ac-team__collapse:hover,
+.ac-team__strip-btn:hover,
+.ac-team__drawer-toggle:hover {
+  background: var(--ac-bg-btn-hover);
+}
+
+.ac-team__strip {
+  flex: 0 0 32px;
+  width: 32px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  background: var(--ac-bg-panel);
+}
+
+.ac-team__strip--left {
+  border-right: 1px solid var(--ac-border);
+}
+
+.ac-team__strip--right {
+  border-left: 1px solid var(--ac-border);
 }
 
 @media (max-width: 1100px) {
-  .ac-team__right {
-    flex-basis: 100%;
-    border-left: 0;
-    border-top: 1px solid var(--ac-border);
+  .ac-team__scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 140;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  /* The inspector is an overlay drawer instead of a column. */
+  .ac-team__right--drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    flex: none;
+    width: min(420px, 100%);
+    box-sizing: border-box;
+    overflow: hidden;
+    border-left: 1px solid var(--ac-border);
+    border-top: 0;
+  }
+
+  .ac-team__right--drawer:focus {
+    outline: none;
+  }
+
+  .ac-team__drawer-toggle {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 120;
+    min-height: 40px;
+    padding: 0 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -86,13 +229,7 @@
   }
 }
 
-.ac-team__scroll {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* Wide layout: fill the viewport; each column scrolls internally. */
+/* Wide layout: fill the viewport; each pane scrolls internally. */
 @media (min-width: 1101px) {
   .ac-team {
     height: 100vh;
@@ -108,6 +245,7 @@
   .ac-team__left,
   .ac-team__right {
     min-height: 0;
+    overflow: hidden;
   }
   .ac-team__left {
     flex: 0 0 var(--ac-left-w);
@@ -115,42 +253,17 @@
   .ac-team__right {
     flex: 0 0 var(--ac-right-w);
   }
-  .ac-team__left {
-    overflow-y: auto;
-  }
-  .ac-team__right {
-    overflow: hidden;
-  }
-  .ac-team__right > .insp {
-    flex: 1 1 0;
-    min-height: 0;
-    padding: 0;
-    border-left: 0;
-    background: transparent;
-  }
-  .ac-team__right .insp > [role='tabpanel'] {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
-  }
-  .ac-team__right .insp > .insp__spacer {
-    flex: 0 0 0;
-  }
-  .ac-team__right .insp > :not([role='tabpanel']) {
-    flex-shrink: 0;
-  }
   .ac-team__center {
     flex: 1 1 0;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
-  .ac-team__center > .ac-team__scroll {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
-  }
-  .ac-team__center > :not(.ac-team__scroll) {
+  .ac-team__center > .ac-tc-banner {
     flex-shrink: 0;
+    margin-bottom: 12px;
+  }
+  .ac-team__strip {
+    min-height: 0;
   }
 }

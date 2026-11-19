@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent } from 'react'
 import { AgentGrid } from '@renderer/components/team/AgentGrid'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
 import { OverlapBanner } from '@renderer/components/team/OverlapBanner'
@@ -7,13 +9,87 @@ import { Timeline } from '@renderer/components/team/Timeline'
 import { WorktreeList } from '@renderer/components/team/WorktreeList'
 import { Inspector } from '@renderer/components/inspector/Inspector'
 import { Splitter } from '@renderer/components/layout/Splitter'
+import { trapTab } from '@renderer/components/ui/Dialog'
 import { LEFT, RIGHT, usePanelWidths } from '@renderer/hooks/usePanelWidths'
-import type { CSSProperties } from 'react'
+import {
+  CONSOLE_MIN,
+  GRID_MIN,
+  INSPECTOR_TOP_MIN,
+  WORKTREES_MIN,
+  usePanelHeights
+} from '@renderer/hooks/usePanelHeights'
+import { useConsoleStore } from '@renderer/store/useConsoleStore'
+import { useLayoutStore, useMaxWidth } from '@renderer/store/useLayoutStore'
 import './TeamView.css'
 
+/** At or below this width the inspector becomes an overlay drawer. */
+const NARROW = 1100
+/** At or below this width the project rail (T22) shows icons only. */
+const COMPACT_RAIL = 1439
+
 export function TeamView() {
+  const narrow = useMaxWidth(NARROW)
+  const compactRail = useMaxWidth(COMPACT_RAIL)
   const w = usePanelWidths()
+  // Wide layout: columns fill the viewport, so panes are measured; otherwise the page scrolls.
+  const hh = usePanelHeights(!narrow)
+  const leftCollapsed = useLayoutStore((s) => s.leftCollapsed)
+  const rightCollapsed = useLayoutStore((s) => s.rightCollapsed)
+  const toggleLeft = useLayoutStore((s) => s.toggleLeft)
+  const toggleRight = useLayoutStore((s) => s.toggleRight)
+  const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
+
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const drawerToggle = useRef<HTMLButtonElement>(null)
+  const prevSelected = useRef(selectedAgentId)
+
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    drawerToggle.current?.focus()
+  }
+  // Selecting another agent opens the drawer on narrow windows.
+  useEffect(() => {
+    if (prevSelected.current !== selectedAgentId && narrow) setDrawerOpen(true)
+    prevSelected.current = selectedAgentId
+  }, [selectedAgentId, narrow])
+  useEffect(() => {
+    if (!narrow) setDrawerOpen(false)
+  }, [narrow])
+  useEffect(() => {
+    if (drawerOpen) drawerRef.current?.focus()
+  }, [drawerOpen])
+
+  const onDrawerKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeDrawer()
+      return
+    }
+    trapTab(e, drawerRef.current)
+  }
+
   const colsStyle = { '--ac-left-w': `${w.left}px`, '--ac-right-w': `${w.right}px` } as CSSProperties
+  const hv = hh.values
+
+  const inspector = (
+    <Inspector
+      topHeight={hv.inspectorTop}
+      splitter={
+        <Splitter
+          label="Resize inspector details"
+          controls="ac-insp-top"
+          side="top"
+          value={hv.inspectorTop}
+          min={INSPECTOR_TOP_MIN}
+          max={hh.max('inspectorTop')}
+          defaultValue={hh.def('inspectorTop')}
+          onChange={(v) => hh.set('inspectorTop', v)}
+        />
+      }
+    />
+  )
+
   return (
     <div className="ac-team">
       <a className="ac-team__skip" href="#ac-agents">
@@ -21,43 +97,173 @@ export function TeamView() {
       </a>
       <TeamHeader />
       <div className="ac-team__cols" style={colsStyle}>
-        <aside id="ac-left" className="ac-team__left" aria-label="Worktrees and tasks">
-          <WorktreeList />
-          <SharedTaskList />
-        </aside>
-        <Splitter
-          label="Resize worktrees panel"
-          controls="ac-left"
-          side="left"
-          value={w.left}
-          min={LEFT.min}
-          max={w.leftMax}
-          defaultValue={LEFT.def}
-          onChange={w.setLeft}
-        />
-        <main className="ac-team__center">
-          <div className="ac-team__scroll">
-            <OverlapBanner />
+        <div className="ac-team__rail-slot" data-compact={compactRail ? 'true' : 'false'} />
+        {leftCollapsed ? (
+          <aside id="ac-left" className="ac-team__strip ac-team__strip--left" aria-label="Worktrees and tasks">
+            <button
+              type="button"
+              className="ac-team__strip-btn"
+              aria-expanded={false}
+              aria-controls="ac-left"
+              aria-label="Expand worktrees panel"
+              onClick={toggleLeft}
+            >
+              {'›'}
+            </button>
+          </aside>
+        ) : (
+          <>
+            <aside id="ac-left" className="ac-team__left" aria-label="Worktrees and tasks">
+              <button
+                type="button"
+                className="ac-team__collapse"
+                aria-expanded
+                aria-controls="ac-left"
+                aria-label="Collapse worktrees panel"
+                onClick={toggleLeft}
+              >
+                {'‹'}
+              </button>
+              <div className="ac-team__body" ref={hh.bind('left')}>
+                <div id="ac-pane-worktrees" className="ac-pane ac-pane--fixed" style={{ height: hv.worktrees }}>
+                  <WorktreeList />
+                </div>
+                <Splitter
+                  label="Resize worktrees panel (height)"
+                  controls="ac-pane-worktrees"
+                  side="top"
+                  value={hv.worktrees}
+                  min={WORKTREES_MIN}
+                  max={hh.max('worktrees')}
+                  defaultValue={hh.def('worktrees')}
+                  onChange={(v) => hh.set('worktrees', v)}
+                />
+                <div className="ac-pane ac-pane--fill">
+                  <SharedTaskList />
+                </div>
+              </div>
+            </aside>
+            <Splitter
+              label="Resize worktrees panel"
+              controls="ac-left"
+              side="left"
+              value={w.left}
+              min={LEFT.min}
+              max={w.leftMax}
+              defaultValue={LEFT.def}
+              onChange={w.setLeft}
+            />
+          </>
+        )}
+        <main className="ac-team__center" ref={hh.bind('center')}>
+          <OverlapBanner />
+          <div id="ac-pane-grid" className="ac-pane ac-pane--fixed" style={{ height: hv.grid }}>
             <div id="ac-agents">
               <AgentGrid />
             </div>
+          </div>
+          <Splitter
+            label="Resize agent grid"
+            controls="ac-pane-grid"
+            side="top"
+            value={hv.grid}
+            min={GRID_MIN}
+            max={hh.max('grid')}
+            defaultValue={hh.def('grid')}
+            onChange={(v) => hh.set('grid', v)}
+          />
+          <div className="ac-pane ac-pane--fill ac-pane--timeline">
             <Timeline />
           </div>
-          <LeadConsole />
+          <Splitter
+            label="Resize lead console"
+            controls="ac-pane-console"
+            side="bottom"
+            value={hv.console}
+            min={CONSOLE_MIN}
+            max={hh.max('console')}
+            defaultValue={hh.def('console')}
+            onChange={(v) => hh.set('console', v)}
+          />
+          <div id="ac-pane-console" className="ac-pane ac-pane--fixed" style={{ height: hv.console }}>
+            <LeadConsole />
+          </div>
         </main>
-        <Splitter
-          label="Resize inspector panel"
-          controls="ac-right"
-          side="right"
-          value={w.right}
-          min={RIGHT.min}
-          max={w.rightMax}
-          defaultValue={RIGHT.def}
-          onChange={w.setRight}
-        />
-        <div id="ac-right" className="ac-team__right">
-          <Inspector />
-        </div>
+        {narrow ? (
+          <>
+            <button
+              ref={drawerToggle}
+              type="button"
+              className="ac-team__drawer-toggle"
+              aria-expanded={drawerOpen}
+              aria-controls="ac-right"
+              onClick={() => setDrawerOpen((o) => !o)}
+            >
+              Inspector
+            </button>
+            {drawerOpen && (
+              <>
+                <div className="ac-team__scrim" onMouseDown={closeDrawer} />
+                <div
+                  id="ac-right"
+                  ref={drawerRef}
+                  className="ac-team__right ac-team__right--drawer"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Agent inspector"
+                  tabIndex={-1}
+                  onKeyDown={onDrawerKey}
+                >
+                  <button type="button" className="ac-team__collapse" aria-label="Close inspector" onClick={closeDrawer}>
+                    {'×'}
+                  </button>
+                  <div className="ac-team__body">{inspector}</div>
+                </div>
+              </>
+            )}
+          </>
+        ) : rightCollapsed ? (
+          <aside id="ac-right" className="ac-team__strip ac-team__strip--right" aria-label="Agent inspector">
+            <button
+              type="button"
+              className="ac-team__strip-btn"
+              aria-expanded={false}
+              aria-controls="ac-right"
+              aria-label="Expand inspector panel"
+              onClick={toggleRight}
+            >
+              {'‹'}
+            </button>
+          </aside>
+        ) : (
+          <>
+            <Splitter
+              label="Resize inspector panel"
+              controls="ac-right"
+              side="right"
+              value={w.right}
+              min={RIGHT.min}
+              max={w.rightMax}
+              defaultValue={RIGHT.def}
+              onChange={w.setRight}
+            />
+            <div id="ac-right" className="ac-team__right">
+              <button
+                type="button"
+                className="ac-team__collapse ac-team__collapse--right"
+                aria-expanded
+                aria-controls="ac-right"
+                aria-label="Collapse inspector panel"
+                onClick={toggleRight}
+              >
+                {'›'}
+              </button>
+              <div className="ac-team__body" ref={hh.bind('right')}>
+                {inspector}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

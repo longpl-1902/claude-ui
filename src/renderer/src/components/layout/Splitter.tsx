@@ -9,12 +9,30 @@ interface SplitterProps {
   min: number
   max: number
   defaultValue: number
-  /** 'left': the controlled column is left of the handle; 'right': right of it. */
-  side: 'left' | 'right'
+  /**
+   * 'left'/'right': the controlled column is left/right of a vertical handle.
+   * 'top'/'bottom': the controlled pane is above/below a horizontal handle.
+   */
+  side: 'left' | 'right' | 'top' | 'bottom'
+  /** Defaults to 'vertical' (a column splitter); 'top'/'bottom' sides imply 'horizontal'. */
+  orientation?: 'vertical' | 'horizontal'
   onChange: (next: number) => void
 }
 
-export function Splitter({ label, controls, value, min, max, defaultValue, side, onChange }: SplitterProps) {
+export function Splitter({
+  label,
+  controls,
+  value,
+  min,
+  max,
+  defaultValue,
+  side,
+  orientation,
+  onChange
+}: SplitterProps) {
+  const horizontal = orientation === 'horizontal' || side === 'top' || side === 'bottom'
+  // 'before': the controlled pane sits left of / above the handle.
+  const before = side === 'left' || side === 'top'
   const [dragging, setDragging] = useState(false)
   const start = useRef({ x: 0, value: 0 })
   const prevSelect = useRef('')
@@ -33,7 +51,7 @@ export function Splitter({ label, controls, value, min, max, defaultValue, side,
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== undefined && e.button !== 0) return
-    start.current = { x: e.clientX, value }
+    start.current = { x: horizontal ? e.clientY : e.clientX, value }
     prevSelect.current = document.body.style.userSelect
     document.body.style.userSelect = 'none'
     try {
@@ -46,8 +64,8 @@ export function Splitter({ label, controls, value, min, max, defaultValue, side,
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!dragging) return
-    const dx = e.clientX - start.current.x
-    onChange(start.current.value + (side === 'left' ? dx : -dx))
+    const delta = (horizontal ? e.clientY : e.clientX) - start.current.x
+    onChange(start.current.value + (before ? delta : -delta))
   }
 
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
@@ -62,9 +80,11 @@ export function Splitter({ label, controls, value, min, max, defaultValue, side,
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.shiftKey ? 64 : 16
-    // Moving the handle right grows a left column and shrinks a right one.
-    const grow = side === 'left' ? 'ArrowRight' : 'ArrowLeft'
-    const shrink = side === 'left' ? 'ArrowLeft' : 'ArrowRight'
+    // Moving the handle right/down grows a pane before it and shrinks one after it.
+    const fwd = horizontal ? 'ArrowDown' : 'ArrowRight'
+    const back = horizontal ? 'ArrowUp' : 'ArrowLeft'
+    const grow = before ? fwd : back
+    const shrink = before ? back : fwd
     let next: number | null = null
     if (e.key === grow) next = value + step
     else if (e.key === shrink) next = value - step
@@ -79,14 +99,14 @@ export function Splitter({ label, controls, value, min, max, defaultValue, side,
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={horizontal ? 'horizontal' : 'vertical'}
       tabIndex={0}
       aria-label={label}
       aria-controls={controls}
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={value}
-      className={`ac-splitter${dragging ? ' is-dragging' : ''}`}
+      className={`ac-splitter${horizontal ? ' ac-splitter--h' : ''}${dragging ? ' is-dragging' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
