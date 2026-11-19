@@ -1,0 +1,42 @@
+.ac-team {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.ac-team__cols {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1;
+  min-height: 0;
+}
+
+.ac-team__left {
+  flex: 1 1 240px;
+  max-width: 100%;
+  border-right: 1px solid var(--ac-border);
+  background: var(--ac-bg-panel);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.ac-team__center {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ac-team__right {
+  flex: 1 1 360px;
+  border-left: 1px solid var(--ac-border);
+  background: var(--ac-bg-panel);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
