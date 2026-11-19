@@ -196,7 +196,7 @@
     position: fixed;
     inset: 0;
     z-index: 140;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--ac-overlay);
   }
 
   /* The inspector is an overlay drawer instead of a column. */
@@ -225,7 +225,7 @@
     z-index: 120;
     min-height: 40px;
     padding: 0 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--ac-shadow-md);
   }
 }
 

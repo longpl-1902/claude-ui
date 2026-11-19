@@ -1,5 +1,6 @@
 import type { ContextUsage } from '@shared/types'
 import { Button } from '../ui/Button'
+import './controlBar.css'
 
 export const AMBER_AT = 75
 export const RED_AT = 90
@@ -8,11 +9,6 @@ const fmt = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : Str
 
 export type MeterLevel = 'ok' | 'warn' | 'high'
 export const meterLevel = (pct: number): MeterLevel => (pct >= RED_AT ? 'high' : pct >= AMBER_AT ? 'warn' : 'ok')
-const COLOR: Record<MeterLevel, string> = {
-  ok: 'var(--ac-accent)',
-  warn: 'var(--ac-status-waiting, #d99a00)',
-  high: 'var(--ac-status-error, #e5484d)'
-}
 
 export interface ContextMeterProps {
   context?: ContextUsage
@@ -29,7 +25,7 @@ export function ContextMeter({ context, onRefresh }: ContextMeterProps): JSX.Ele
     ? context.categories.map((c) => `${c.name}: ${fmt(c.tokens)} (${Math.round(c.percentage)}%)`).join('\n')
     : 'Press refresh to read the context window usage'
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, flexWrap: 'wrap' }}>
+    <span className="ac-ctx">
       <span
         role="meter"
         aria-label="Context window"
@@ -38,23 +34,10 @@ export function ContextMeter({ context, onRefresh }: ContextMeterProps): JSX.Ele
         aria-valuenow={pct}
         data-level={level}
         title={tip}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, minWidth: 0 }}
+        className="ac-ctx__meter"
       >
-        <span
-          aria-hidden
-          style={{
-            width: 80,
-            height: 6,
-            borderRadius: 3,
-            background: 'var(--ac-border-btn)',
-            overflow: 'hidden',
-            display: 'inline-block'
-          }}
-        >
-          <span
-            data-testid="context-fill"
-            style={{ display: 'block', width: `${pct}%`, height: '100%', background: COLOR[level] }}
-          />
+        <span aria-hidden className="ac-ctx__track">
+          <span data-testid="context-fill" className="ac-ctx__fill" style={{ width: `${pct}%` }} />
         </span>
         <span>{label}</span>
       </span>

@@ -16,6 +16,7 @@ import { McpChips } from './McpChips'
 import { RewindDialog } from './RewindDialog'
 import { isKnownReason, reasonText } from '../ui/reasonText'
 import './teamCenter.css'
+import './controlBar.css'
 
 // D8: bypassPermissions is intentionally not offered.
 const MODES: ControlPermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk']
@@ -386,25 +387,22 @@ export function ControlBar({
         )}
       </div>
       {live && control && (
-        <p className="ac-tc-hint" style={{ margin: 0 }}>
+        <p className="ac-tc-hint ac-ctl-hint">
           {control.state === 'draft'
             ? 'Model, effort, mode and style are used when the session starts.'
             : 'Changes apply from the next turn.'}
         </p>
       )}
       {liveNote && (
-        <p className="ac-tc-hint" role="status" style={{ margin: 0 }}>
+        <p className="ac-tc-hint ac-ctl-hint" role="status">
           {liveNote}
         </p>
       )}
       {live && control && (!narrow || moreOpen) && (
-        <div className="ac-tc-ctl__row" data-testid="session-details-strip" style={{ flexWrap: 'wrap', minWidth: 0 }}>
+        <div className="ac-tc-ctl__row ac-ctl-strip" data-testid="session-details-strip">
           {renaming === null ? (
             <>
-              <span
-                title={details?.title ?? ''}
-                style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}
-              >
+              <span title={details?.title ?? ''} className="ac-ctl-title">
                 {details?.title ?? 'Untitled session'}
               </span>
               <Button size="sm" variant="ghost" onClick={() => setRenaming(details?.title ?? '')}>
@@ -413,7 +411,7 @@ export function ControlBar({
             </>
           ) : (
             <form
-              style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}
+              className="ac-ctl-rename"
               onSubmit={(e) => {
                 e.preventDefault()
                 const t = renaming.trim()

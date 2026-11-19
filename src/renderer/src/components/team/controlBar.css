@@ -1,0 +1,33 @@
+/* Session control bar pieces (ControlBar, ContextMeter, McpChips, RewindDialog). Colours come from theme tokens. */
+.ac-ctl-hint { margin: 0; }
+.ac-ctl-strip { flex-wrap: wrap; min-width: 0; }
+.ac-ctl-title { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.ac-ctl-rename { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+
+.ac-ctx { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-ctx__meter { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; color: var(--ac-text); }
+.ac-ctx__track { display: inline-block; width: 80px; height: 6px; border-radius: 3px; background: var(--ac-border-btn); overflow: hidden; }
+.ac-ctx__fill { display: block; height: 100%; background: var(--ac-accent); }
+.ac-ctx__meter[data-level='warn'] .ac-ctx__fill { background: var(--ac-status-running); }
+.ac-ctx__meter[data-level='high'] .ac-ctx__fill { background: var(--ac-status-error); }
+@media (forced-colors: active) {
+  .ac-ctx__track { border: 1px solid CanvasText; background: Canvas; }
+  .ac-ctx__fill { background: Highlight; forced-color-adjust: none; }
+}
+
+.ac-mcp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-mcp__chip { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-mcp__dot { color: var(--ac-text-muted); }
+.ac-mcp__chip[data-status='connected'] .ac-mcp__dot { color: var(--ac-status-done); }
+.ac-mcp__chip[data-status='pending'] .ac-mcp__dot,
+.ac-mcp__chip[data-status='needs-auth'] .ac-mcp__dot { color: var(--ac-status-running); }
+.ac-mcp__chip[data-status='failed'] .ac-mcp__dot { color: var(--ac-status-error); }
+.ac-mcp__menu { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex-basis: 100%; }
+
+.ac-rw__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ac-rw__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ac-rw__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-rw__actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ac-rw__preview { display: flex; flex-direction: column; gap: 4px; }
+.ac-rw__files { margin: 0; padding-left: 18px; }
+.ac-rw__file { overflow-wrap: anywhere; }

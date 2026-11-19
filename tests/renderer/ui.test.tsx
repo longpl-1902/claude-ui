@@ -143,21 +143,32 @@ describe('theme/colors', () => {
       ['needs-you', 'needs-you'],
       ['done', 'done']
     ] as const) {
-      expect(STATUS_META[key].color.toLowerCase()).toBe(token(tokens, `--ac-status-${name}`)!.toLowerCase())
-      expect(STATUS_META[key].bg.toLowerCase()).toBe(token(tokens, `--ac-status-${name}-bg`)!.toLowerCase())
+      // colours are token references (resolved per theme), and the tokens exist in the dark and light blocks
+      expect(STATUS_META[key].color).toBe(`var(--ac-status-${name})`)
+      expect(STATUS_META[key].bg).toBe(`var(--ac-status-${name}-bg)`)
+      expect(token(tokens, `--ac-status-${name}`)).toBeDefined()
+      expect(token(tokens, `--ac-status-${name}-bg`)).toBeDefined()
     }
   })
 
   it('segment colors equal the CSS tokens', () => {
     for (const kind of ['think', 'read', 'edit', 'bash', 'wait', 'error'] as const)
-      expect(SEGMENT_COLORS[kind].toLowerCase()).toBe(token(tokens, `--ac-seg-${kind}`)!.toLowerCase())
+      {
+        expect(SEGMENT_COLORS[kind]).toBe(`var(--ac-seg-${kind})`)
+        expect(token(tokens, `--ac-seg-${kind}`)).toBeDefined()
+      }
   })
 
   it('tool colors', () => {
-    expect(TOOL_COLORS['Done']).toBe('#5ED3A8')
-    expect(toolColor('Edit')).toBe('#8FB4FF')
-    expect(toolColor('Bash').toLowerCase()).toBe('#c49bff')
-    expect(toolColor('NoSuchTool')).toBe('#A4AAB4')
+    expect(TOOL_COLORS['Done']).toBe('var(--ac-tool-done)')
+    expect(toolColor('Edit')).toBe('var(--ac-tool-edit)')
+    expect(toolColor('Bash')).toBe('var(--ac-tool-bash)')
+    expect(toolColor('NoSuchTool')).toBe('var(--ac-tool-read)')
+    // dark values keep the original palette
+    expect(token(tokens, '--ac-tool-done')!.toLowerCase()).toBe('#5ed3a8')
+    expect(token(tokens, '--ac-tool-edit')!.toLowerCase()).toBe('#8fb4ff')
+    expect(token(tokens, '--ac-tool-bash')!.toLowerCase()).toBe('#c49bff')
+    expect(token(tokens, '--ac-tool-read')!.toLowerCase()).toBe('#a4aab4')
   })
 
   it('legend and fallback account color', () => {
@@ -168,7 +179,7 @@ describe('theme/colors', () => {
       { label: 'Bash', kind: 'bash' },
       { label: 'Error', kind: 'error' }
     ])
-    expect(ACCOUNT_FALLBACK_COLOR).toBe('#5C636E')
+    expect(ACCOUNT_FALLBACK_COLOR).toBe('var(--ac-account-fallback)')
   })
 })
 

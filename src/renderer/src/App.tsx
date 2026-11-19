@@ -8,6 +8,7 @@ import { useAttentionStore } from '@renderer/store/useAttentionStore'
 import { useRailStore } from '@renderer/store/useRailStore'
 import { useSwitcherStore } from '@renderer/store/useSwitcherStore'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
+import { useThemeStore } from '@renderer/theme/useThemeStore'
 import { useControlStore } from '@renderer/store/useControlStore'
 import { useWorkspaceStore } from '@renderer/store/useWorkspaceStore'
 
@@ -22,6 +23,9 @@ export default function App() {
   })
 
   useShortcuts()
+
+  // Follow the Windows theme / accent (and the persisted Light/Dark override).
+  useEffect(() => useThemeStore.getState().init(), [])
 
   // Connect the global shortcuts (T18) to the rail / inbox / switcher stores (T22). getState() at call time.
   useEffect(() => {

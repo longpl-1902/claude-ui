@@ -45,9 +45,9 @@ a:hover {
 }
 
 @keyframes ac-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(242, 165, 65, 0.55); }
-  70% { box-shadow: 0 0 0 6px rgba(242, 165, 65, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(242, 165, 65, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(var(--ac-pulse-rgb), 0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(var(--ac-pulse-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--ac-pulse-rgb), 0); }
 }
 
 .ac-pulse {
@@ -75,14 +75,23 @@ a:hover {
   }
 }
 
-/* Scrollbars (user feedback: native light scrollbars looked out of place).
-   Thin, rounded, no arrow buttons, transparent track; thumb strengthens on hover.
-   T31 extends this for the light theme / forced colors. */
+/* Native widgets (form controls, default scrollbars) follow the theme. */
 :root {
   color-scheme: dark;
-  --ac-scroll-thumb: rgba(164, 170, 180, 0.28);
-  --ac-scroll-thumb-hover: rgba(164, 170, 180, 0.5);
 }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+@media (forced-colors: active) {
+  :root,
+  :root[data-theme='light'] {
+    color-scheme: light dark;
+  }
+}
+
+/* Scrollbars: thin (8px), rounded thumb, transparent track, no arrow buttons. The thumb comes from theme tokens
+   and strengthens on hover/active; the transparent border insets it so it reads as an overlay. Horizontal bars
+   appear only where horizontal scrolling is legitimate (the terminal, code blocks). */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -97,18 +106,49 @@ a:hover {
   border: 2px solid transparent;
   background-clip: padding-box;
   min-height: 32px;
+  min-width: 32px;
 }
-::-webkit-scrollbar-thumb:hover,
-::-webkit-scrollbar-thumb:active {
+::-webkit-scrollbar-thumb:hover {
   background-color: var(--ac-scroll-thumb-hover);
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--ac-scroll-thumb-active);
 }
 ::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
 }
+/* Engines without the webkit pseudo-elements use the standard properties (Chromium would ignore the pseudo
+   rules above if these were set unconditionally). */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ac-scroll-thumb-hover) transparent;
+  }
+}
 @media (forced-colors: active) {
+  ::-webkit-scrollbar-track {
+    background: Canvas;
+  }
   ::-webkit-scrollbar-thumb {
     background-color: CanvasText;
+    border-color: Canvas;
   }
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background-color: Highlight;
+  }
+}
+
+/* Window chrome: the headers are the drag region (titleBarStyle hidden); everything interactive stays clickable,
+   and the native window controls overlay (titleBarOverlay) keeps its own space at the right edge. */
+.ac-header,
+.ac-acc-header,
+.ac-ext-header {
+  -webkit-app-region: drag;
+  padding-right: max(20px, calc(100vw - env(titlebar-area-width, 100vw) + 8px));
+}
+:is(.ac-header, .ac-acc-header, .ac-ext-header) :is(button, a, input, select, textarea, label, summary, [role='button'], [role='menu'], [role='menuitem'], [role='dialog'], [tabindex], .ac-header__menu, .ac-header__chip) {
+  -webkit-app-region: no-drag;
 }

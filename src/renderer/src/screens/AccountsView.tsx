@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import { AccountCards } from '@renderer/components/accounts/AccountCards'
 import { AccountPolicies } from '@renderer/components/accounts/AccountPolicies'
+import { AppearanceRow } from '@renderer/components/accounts/AppearanceRow'
 import { AccountsHeader } from '@renderer/components/accounts/AccountsHeader'
 import { DetectedLogins } from '@renderer/components/accounts/DetectedLogins'
 import { FolderRules } from '@renderer/components/accounts/FolderRules'
@@ -35,6 +36,7 @@ export function AccountsView() {
         <AccountCards adding={adding} onAdd={() => setAdding(true)} onCloseAdd={() => setAdding(false)} />
         <FolderRules />
         <AccountPolicies />
+        <AppearanceRow />
         <RunningNow />
       </main>
     </div>

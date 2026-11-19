@@ -1,14 +1,7 @@
 import { useState } from 'react'
 import type { McpServerLive, OkResult } from '@shared/types'
 import { Button } from '../ui/Button'
-
-const STATUS_COLOR: Record<string, string> = {
-  connected: 'var(--ac-status-running, #2da44e)',
-  pending: 'var(--ac-status-waiting, #d99a00)',
-  'needs-auth': 'var(--ac-status-waiting, #d99a00)',
-  failed: 'var(--ac-status-error, #e5484d)',
-  disabled: 'var(--ac-text-muted)'
-}
+import './controlBar.css'
 
 export interface McpChipsProps {
   servers: McpServerLive[]
@@ -26,26 +19,21 @@ export function McpChips({ servers, onToggle, onReconnect, onManage, onResult }:
   }
   const cur = servers.find((s) => s.name === open)
   return (
-    <div
-      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, minWidth: 0 }}
-      role="group"
-      aria-label="MCP servers"
-    >
+    <div className="ac-mcp" role="group" aria-label="MCP servers">
       {servers.length === 0 && <span className="ac-tc-hint">No MCP servers in this session</span>}
       {servers.map((s) => (
         <button
           key={s.name}
           type="button"
-          className="ac-tc-chipbtn"
+          className="ac-tc-chipbtn ac-mcp__chip"
           aria-haspopup="menu"
           aria-expanded={open === s.name}
           aria-label={`MCP ${s.name}: ${s.status}`}
           title={s.error ? `${s.name}: ${s.error}` : `${s.name}: ${s.status}`}
           data-status={s.status}
-          style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           onClick={() => setOpen(open === s.name ? null : s.name)}
         >
-          <span aria-hidden style={{ color: STATUS_COLOR[s.status] ?? 'inherit' }}>
+          <span aria-hidden className="ac-mcp__dot">
             {'● '}
           </span>
           {s.name}
@@ -58,7 +46,7 @@ export function McpChips({ servers, onToggle, onReconnect, onManage, onResult }:
         <div
           role="menu"
           aria-label={`${cur.name} actions`}
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', flexBasis: '100%' }}
+          className="ac-mcp__menu"
         >
           <span className="ac-tc-hint">
             {cur.name} ({cur.status}

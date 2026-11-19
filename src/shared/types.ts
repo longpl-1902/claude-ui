@@ -388,3 +388,16 @@ export interface McpConfigured { name: string; scope: 'local' | 'user' | 'projec
 export interface McpAddRequest { projectRoot: string; accountId: string; name: string; scope: 'local' | 'user' | 'project'; transport: 'stdio' | 'http' | 'sse'; commandOrUrl: string; args: string[]; env: Record<string, string>; headers: Record<string, string> }
 export interface CliPreview { previewId: string; argvDisplay: string[]; cwd: string; configDir: string; effect: string; warnings: string[] } // secrets masked in argvDisplay
 export interface CliRunResult { ok: boolean; reason?: string; output?: string } // output masked, <= 4 KiB
+
+// ---- Theme (T31) ----
+
+/** The user's choice: follow Windows, or force one theme. */
+export type ThemeSource = 'system' | 'light' | 'dark'
+
+/** What the renderer applies: pushed by the main process on every Windows theme / accent / contrast change. */
+export interface ThemeState {
+  mode: 'light' | 'dark'
+  /** Windows accent colour as #RRGGBB, or null when unavailable. The renderer decides whether it is usable. */
+  accent: string | null
+  highContrast: boolean
+}

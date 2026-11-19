@@ -22,7 +22,7 @@ function TokensToday({ accountId }: { accountId: string }): JSX.Element {
       <span title="input + output + cache writes; cache reads shown separately">
         {t === undefined ? '—' : formatTokens(t.headline)}
         {t !== undefined && t.cacheRead > 0 && (
-          <span style={{ color: '#A4AAB4' }}> +{formatTokens(t.cacheRead)} cached</span>
+          <span style={{ color: 'var(--ac-text-muted)' }}> +{formatTokens(t.cacheRead)} cached</span>
         )}
       </span>
     </div>
@@ -84,7 +84,7 @@ export function AccountCards({ adding, onAdd, onCloseAdd }: AccountCardsProps): 
               )}
               <div className="ac-acc-field">
                 <span className="ac-acc-field__label">Status</span>
-                <span style={{ color: a.signedIn ? '#5ED3A8' : '#A4AAB4' }}>
+                <span style={{ color: a.signedIn ? 'var(--ac-ok-text)' : 'var(--ac-text-muted)' }}>
                   {a.signedIn ? 'Signed in' : 'Not connected'}
                 </span>
               </div>

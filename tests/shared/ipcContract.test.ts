@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { INVOKE_CHANNELS, IPC, PUSH_CHANNELS } from '@shared/ipc'
+import { INVOKE_CHANNELS, IPC, PUSH_CHANNELS, THEME_IPC } from '@shared/ipc'
 import {
   createHandlers, isControlStartRequest, isEffort, isImageAttachment, isImageList, isMcpAddRequest, isPermissionAnswer, isUuid
 } from '../../src/main/ipc/handlers'
@@ -419,5 +419,16 @@ describe('R-27..R-32 IPC contract v5', () => {
       expect(await h['plugins:preview']('a1', 'nuke' as never, 'p')).toEqual({ ok: false, reason: 'invalid-args' })
       expect(await h['cli:apply'](5 as never)).toEqual({ ok: false, reason: 'invalid-args' })
     })
+  })
+})
+
+describe('T31 theme channels', () => {
+  it('theme:get / theme:set-source / theme:changed follow the naming pattern and stay out of the generic table', () => {
+    expect(THEME_IPC).toEqual({ get: 'theme:get', setSource: 'theme:set-source', changed: 'theme:changed' })
+    for (const c of Object.values(THEME_IPC)) {
+      expect(c).toMatch(/^[a-z]+:[a-z-]+$/)
+      expect(Object.values(IPC) as string[]).not.toContain(c)
+      expect(INVOKE_CHANNELS as readonly string[]).not.toContain(c)
+    }
   })
 })

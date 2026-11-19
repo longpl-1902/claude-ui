@@ -18,12 +18,12 @@
 .ac-btn--md { height: 36px; }
 .ac-btn--lg { height: 40px; }
 
-.ac-btn--primary { background: var(--ac-accent); border-color: var(--ac-accent); color: #0E0F11; font-weight: 600; }
+.ac-btn--primary { background: var(--ac-accent); border-color: var(--ac-accent); color: var(--ac-on-accent); font-weight: 600; }
 .ac-btn--primary:hover:not(:disabled) { background: var(--ac-accent-hover); }
-.ac-btn--accent2 { background: var(--ac-accent-2); border-color: var(--ac-accent-2); color: #0E0F11; font-weight: 600; }
+.ac-btn--accent2 { background: var(--ac-accent-2); border-color: var(--ac-accent-2); color: var(--ac-on-accent); font-weight: 600; }
 .ac-btn--accent2:hover:not(:disabled) { background: var(--ac-accent-hover); }
-.ac-btn--warn { background: #F2A541; border-color: #F2A541; color: #0E0F11; font-weight: 600; }
-.ac-btn--warn:hover:not(:disabled) { background: #F5B462; }
+.ac-btn--warn { background: var(--ac-warn-solid); border-color: var(--ac-warn-solid); color: var(--ac-on-warn); font-weight: 600; }
+.ac-btn--warn:hover:not(:disabled) { background: var(--ac-warn-solid-hover); }
 .ac-btn--danger { border-color: var(--ac-danger-border); color: var(--ac-status-needs-you); }
 .ac-btn--ghost { background: transparent; border-color: transparent; }
 .ac-btn--dashed { background: transparent; border: 1px dashed var(--ac-border-dashed); color: var(--ac-text-muted); }
@@ -50,7 +50,7 @@
   align-items: center;
   justify-content: center;
   flex: none;
-  color: #0E0F11;
+  color: var(--ac-on-avatar);
   font-weight: 700;
   font-family: var(--ac-font-ui);
   user-select: none;

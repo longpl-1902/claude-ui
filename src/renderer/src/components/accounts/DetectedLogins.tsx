@@ -51,7 +51,7 @@ export function DetectedLogins(): JSX.Element {
           return (
             <div key={d.configDir} className="ac-acc-detected">
               <span className="ac-acc-detected__icon">
-                <FolderIcon size={18} color="#A4AAB4" />
+                <FolderIcon size={18} color="var(--ac-text-muted)" />
               </span>
               <div className="ac-acc-detected__info">
                 <span className="ac-acc-mono ac-acc-detected__dir">{d.configDir}</span>
