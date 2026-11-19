@@ -58,7 +58,7 @@ export function targetFor(name: string, input: Record<string, unknown>): string 
   return truncate(out, 160)
 }
 
-const NL = String.fromCharCode(10)
+const NL = '\n'
 const lineCount =(v: unknown): number => (typeof v === 'string' && v !== '' ? v.split(NL).length : 0)
 
 function editFromInput(name: string, input: Obj): ToolUseRec['edit'] | undefined {
