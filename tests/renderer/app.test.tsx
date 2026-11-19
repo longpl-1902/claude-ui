@@ -51,6 +51,7 @@ describe('R-13 / R-15 App navigation (no window.api)', () => {
     seedMockAccounts()
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: /Account: Company/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Manage accounts/ }))
     expect(screen.getByRole('heading', { name: 'Claude accounts' })).toBeInTheDocument()
     expect(screen.queryByText('Lead console')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: /Team view/ }))

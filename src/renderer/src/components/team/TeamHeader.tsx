@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, RefObject } from 'react'
 import type { AccountView, FolderResolution } from '@shared/types'
-import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
 import { NeedsYouButton } from '../rail/NeedsYouInbox'
 import { useAttentionStore } from '../../store/useAttentionStore'
-import { ChevronDownIcon, LockIcon, PanelLeftIcon, PanelRightIcon, TerminalIcon } from '../ui/Icons'
+import { PanelLeftIcon, PanelRightIcon, TerminalIcon } from '../ui/Icons'
 import { formatTokens } from '@shared/format'
 import { tokenHeadline } from '@shared/teamDefaults'
 import {
@@ -22,6 +21,7 @@ import { useWorkspaceStore } from '../../store/useWorkspaceStore'
 import { useOverflowItems } from '../../hooks/useOverflowItems'
 import { useTitlebarInset } from '../../hooks/useTitlebarInset'
 import { HooksDialog, hooksLabel } from './HooksDialog'
+import { AccountMenu } from './AccountMenu'
 import './teamLeft.css'
 import '../inspector/inspector.css'
 
@@ -371,30 +371,7 @@ export function TeamHeader({ drawers }: TeamHeaderProps = {}) {
           </Button>
         </span>
       )}
-      <button
-        type="button"
-        className="ac-header__chip"
-        data-fixed
-        data-min="120"
-        aria-label={`Account: ${account ? (account.email ? `${account.name} (${account.email})` : account.name) : 'none'}. Manage accounts`}
-        title={account ? (account.email ? `${account.name} · ${account.email}` : account.name) : 'No account'}
-        onClick={() => navigate('accounts')}
-      >
-        <Avatar
-          initials={account ? account.name.charAt(0).toUpperCase() : '?'}
-          color={account ? account.color : 'var(--ac-text-muted)'}
-          size={20}
-          shape="circle"
-        />
-        <span className="ac-header__name">{account ? account.name : 'No account'}</span>
-        {account?.email && <span className="ac-header__email">{account.email}</span>}
-        {account?.locked && (
-          <span title="Account locked while a session runs" className="ac-header__lock">
-            <LockIcon size={12} color="var(--ac-text-muted)" />
-          </span>
-        )}
-        <ChevronDownIcon size={12} color="var(--ac-text-muted)" />
-      </button>
+      <AccountMenu account={account} />
       <div className="ac-header__spacer" />
       <span className="ac-header__fixed" data-fixed>
         <NeedsYouButton inSession={counters.needsYou} />

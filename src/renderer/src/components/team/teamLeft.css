@@ -115,3 +115,16 @@
 .ac-wt__stack-avatars { display: inline-flex; align-items: center; }
 .ac-wt__stack-avatars > * + * { margin-left: -4px; }
 .ac-wt__stack-more { margin-left: 4px !important; color: var(--ac-text-muted); }
+
+/* Account chip menu (switch the account new sessions start with) */
+.ac-header__chipwrap { position: relative; display: flex; flex: 0 1 320px; max-width: 320px; min-width: 120px; }
+.ac-header__chipwrap > .ac-header__chip { flex: 1 1 auto; max-width: 100%; min-width: 0; }
+.ac-header__chip[aria-expanded='true'] { border-color: var(--ac-accent); }
+@media (min-width: 900px) {
+  .ac-header > .ac-header__chipwrap { flex-shrink: 1; }
+}
+.ac-header__accrow-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.ac-header__accrow-text { display: flex; flex-direction: column; min-width: 0; }
+.ac-header__accrow-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-header__check { flex: none; width: 16px; text-align: center; color: var(--ac-accent); }
+.ac-header__accrow[aria-checked='true'] { background: var(--ac-bg-inset); }

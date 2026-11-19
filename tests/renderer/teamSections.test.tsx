@@ -119,10 +119,39 @@ describe('R-08 TeamHeader', () => {
     await userEvent.click(screen.getByRole('button', { name: '+ New teammate' }))
   })
 
-  it('clicking the account chip opens the Accounts screen (R-13)', async () => {
+  it('the account chip opens a menu; Manage accounts opens the Accounts screen (R-13)', async () => {
+    render(<TeamHeader />)
+    const chip = screen.getByRole('button', { name: /Account: Company/ })
+    expect(chip).toHaveAttribute('aria-haspopup', 'menu')
+    await userEvent.click(chip)
+    expect(chip).toHaveAttribute('aria-expanded', 'true')
+    expect(useConsoleStore.getState().screen).toBe('team')
+    await userEvent.click(screen.getByRole('menuitem', { name: /Manage accounts/ }))
+    expect(useConsoleStore.getState().screen).toBe('accounts')
+  })
+
+  it('the account menu switches the account new sessions start with', async () => {
+    const setDefault = vi.fn()
+    useConsoleStore.setState({ setDefaultAccount: setDefault } as never)
     render(<TeamHeader />)
     await userEvent.click(screen.getByRole('button', { name: /Account: Company/ }))
-    expect(useConsoleStore.getState().screen).toBe('accounts')
+    const radios = screen.getAllByRole('menuitemradio')
+    expect(radios.length).toBe(useConsoleStore.getState().accounts.accounts.length)
+    const checked = radios.filter((r) => r.getAttribute('aria-checked') === 'true')
+    expect(checked.length).toBe(1)
+    const other = radios.find((r) => r.getAttribute('aria-checked') === 'false')!
+    await userEvent.click(other)
+    expect(setDefault).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu', { name: 'Accounts' })).toBeNull()
+  })
+
+  it('the account menu closes on Escape and returns focus to the chip', async () => {
+    render(<TeamHeader />)
+    const chip = screen.getByRole('button', { name: /Account: Company/ })
+    await userEvent.click(chip)
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu', { name: 'Accounts' })).toBeNull()
+    expect(chip).toHaveFocus()
   })
 
   it('the 3px top border uses the active account color when the color edge is enabled', () => {
