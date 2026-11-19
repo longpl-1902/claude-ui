@@ -341,3 +341,40 @@ describe('P3-T11 project grouping', () => {
     expect(r.waitingForSession).toBe(false)
   })
 })
+
+describe('R-05 controlled session hints and registry fields', () => {
+  it('R-05 a hint with sessionId picks that transcript, whichever session is newer', async () => {
+    const { index } = setup()
+    const r = await index.pickAuto(ROOTS, { pid: 1, cwd: 'C:/Users/u/other', startedAtMs: 0, accountId: '', sessionId: S4 })
+    expect(r.pick).toMatchObject({ accountId: '', sessionId: S4, projectDir: PROJ_OTHER })
+    expect(r.waitingForSession).toBe(false)
+  })
+
+  it('R-05 a hint whose transcript does not exist yet is waitingForSession (no cwd/mtime fallback)', async () => {
+    const { index } = setup()
+    const r = await index.pickAuto(ROOTS, { pid: 1, cwd: 'd:/work/demo', startedAtMs: 0, accountId: 'acme', sessionId: 'not-written-yet' })
+    expect(r).toEqual({ pick: null, waitingForSession: true })
+  })
+
+  it('R-05 the session id is looked up inside the hint account only', async () => {
+    const { index } = setup()
+    const r = await index.pickAuto(ROOTS, { pid: 1, cwd: 'd:/work/demo', startedAtMs: 0, accountId: '', sessionId: S1 })
+    expect(r).toEqual({ pick: null, waitingForSession: true })
+  })
+
+  it('R-05 listSessions carries registryPid for a live session only', async () => {
+    const { index } = setup()
+    const list = await index.listSessions(ROOTS)
+    expect(list.find((s) => s.sessionId === S1)).toMatchObject({ live: true, registryPid: PID_LIVE })
+    expect(list.find((s) => s.sessionId === S4)!.registryPid).toBeUndefined()
+  })
+
+  it('R-05 entrypoint comes from the head line of the transcript', async () => {
+    const { index } = setup({
+      mutate: (fs, tree) => fs.replace(tree.paths.s4, jsonl([{ ...userPrompt('hi', { ts: at(1) }), entrypoint: 'sdk-cli' }]))
+    })
+    const list = await index.listSessions(ROOTS)
+    expect(list.find((s) => s.sessionId === S4)!.entrypoint).toBe('sdk-cli')
+    expect(list.find((s) => s.sessionId === S1)!.entrypoint).toBe('cli')
+  })
+})

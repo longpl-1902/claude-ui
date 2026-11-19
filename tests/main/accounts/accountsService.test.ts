@@ -376,3 +376,95 @@ describe('R-14 accountsService writes', () => {
     for (const w of t.fs.writes) expect(fwd(w).toLowerCase().startsWith(USERDATA.toLowerCase())).toBe(true)
   })
 })
+
+describe('R-04 accountsService launchControlled', () => {
+  function withControl(t: Awaited<ReturnType<typeof twoAccounts>>, running: { cwd: string; accountId: string }[] = []) {
+    const create = vi.fn((o: { cwd: string; accountId: string }) => ({ id: 'c1', ...o }))
+    const svc = createAccountsService({
+      fs: t.fs,
+      host,
+      userDataDir: USERDATA,
+      pty: t.pty,
+      watchFile: () => ({ close: () => undefined }),
+      claudeFound: () => true,
+      control: { create: create as never, running: () => running }
+    })
+    return { svc, create, running }
+  }
+
+  it('R-04 creates a controlled session with the profile config dir and never spawns a pty', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t)
+    const r = await c.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: t.work, permissionMode: 'acceptEdits', model: 'm1' })
+    expect(r).toEqual({ ok: true, controlId: 'c1' })
+    expect(c.create).toHaveBeenCalledTimes(1)
+    const a = c.create.mock.calls[0]![0] as unknown as Record<string, unknown>
+    expect(fwd(a.configDirAbs as string)).toBe(`${HOME}/.claude-work`)
+    expect(a).toMatchObject({ accountId: t.work, permissionMode: 'acceptEdits', model: 'm1' })
+    expect(fwd(a.cwd as string)).toBe(`${HOME}/work/x`)
+    expect(t.pty.spawnClaude).not.toHaveBeenCalled()
+  })
+
+  it('R-04 the default config dir is passed as null and the mode defaults to default', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t)
+    await c.svc.setSafety({ warnPersonalInCompanyFolder: false, showAccountColorEdge: true, lockAccountOnTeamStart: true })
+    await c.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: t.me })
+    expect(c.create.mock.calls[0]![0]).toMatchObject({ configDirAbs: null, permissionMode: 'default' })
+  })
+
+  it('R-04 invalid folder, invalid args and a missing control dep are refused without creating', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t)
+    expect(await c.svc.launchControlled({ cwd: 'D:/does/not/exist', accountId: t.work })).toMatchObject({ ok: false, reason: 'invalid-folder' })
+    expect(await c.svc.launchControlled({ cwd: 'relative/x', accountId: t.work })).toMatchObject({ ok: false, reason: 'invalid-folder' })
+    expect(await c.svc.launchControlled({ cwd: 5, accountId: t.work } as never)).toMatchObject({ ok: false, reason: 'invalid-args' })
+    expect(await t.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: t.work })).toMatchObject({ ok: false, reason: 'invalid-args' })
+    expect(c.create).not.toHaveBeenCalled()
+  })
+
+  it('R-04 unknown account is blocked', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t)
+    expect(await c.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: 'nobody' })).toMatchObject({ ok: false, reason: 'unknown-account' })
+    expect(c.create).not.toHaveBeenCalled()
+  })
+
+  it('R-04 a running controlled session of another account locks the folder', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t, [{ cwd: `${HOME}/work/x`, accountId: t.work }])
+    const r = await c.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: t.me, confirmed: true })
+    expect(r).toMatchObject({ ok: false, reason: 'account-locked' })
+    expect(c.create).not.toHaveBeenCalled()
+  })
+
+  it('R-04 a warned launch needs confirmed:true, then creates', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t)
+    const first = await c.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: t.me })
+    expect(first).toMatchObject({ ok: false, reason: 'needs-confirmation', warnings: ['personal-in-company-folder'] })
+    expect(c.create).not.toHaveBeenCalled()
+    expect(await c.svc.launchControlled({ cwd: `${HOME}/work/x`, accountId: t.me, confirmed: true })).toMatchObject({ ok: true, controlId: 'c1' })
+  })
+
+  it('R-04 launchClaude also sees a controlled session as running (lock)', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t, [{ cwd: `${HOME}/work/x`, accountId: t.work }])
+    expect(await c.svc.launchClaude({ cwd: `${HOME}/work/x`, accountId: t.me, cols: 80, rows: 24, confirmed: true })).toMatchObject({
+      ok: false,
+      reason: 'account-locked'
+    })
+  })
+
+  it('R-04 the snapshot lists controlled sessions (no ptyId) and locks their account', async () => {
+    const t = await twoAccounts()
+    const c = withControl(t, [{ cwd: `${HOME}/work/x`, accountId: t.work }])
+    const snap = await c.svc.snapshot()
+    expect(snap.sessions).toHaveLength(1)
+    expect(snap.sessions[0]).toMatchObject({ teamName: 'x', accountId: t.work, agentCount: 1 })
+    expect(snap.sessions[0]!.ptyId).toBeUndefined()
+    expect(snap.accounts.find((a) => a.id === t.work)!.locked).toBe(true)
+    expect(snap.accounts.find((a) => a.id === t.me)!.locked).toBeUndefined()
+    expect(snap.activeAccountId).toBe(t.work)
+  })
+})

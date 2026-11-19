@@ -14,6 +14,8 @@ export interface PtyHint {
   cwd: string
   startedAtMs: number
   accountId: string
+  /** A controlled session: its transcript is known by id (null until the file exists). */
+  sessionId?: string
 }
 export interface LiveRegistry {
   entry: RegistryEntry
@@ -65,6 +67,7 @@ interface Meta {
   size: number
   cwd?: string
   title?: string
+  entrypoint?: string
 }
 
 const join = (dir: string, name: string): string => dir.replace(/[\\/]+$/, '') + '/' + name
@@ -138,6 +141,14 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
           try {
             const o = JSON.parse(line) as { cwd?: unknown }
             if (typeof o.cwd === 'string' && o.cwd !== '') meta.cwd = o.cwd
+          } catch {
+            /* partial or malformed line */
+          }
+        }
+        if (meta.entrypoint === undefined && line.includes('"entrypoint"')) {
+          try {
+            const o = JSON.parse(line) as { entrypoint?: unknown }
+            if (typeof o.entrypoint === 'string' && o.entrypoint !== '') meta.entrypoint = o.entrypoint
           } catch {
             /* partial or malformed line */
           }
@@ -229,8 +240,12 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
       s.project = projectNow(meta.cwd, f.projectDir)
       if (meta.title !== undefined) s.title = meta.title
       const reg = live.get(`${f.accountId}|${f.sessionId}`)
+      if (meta.entrypoint !== undefined) s.entrypoint = meta.entrypoint
       if (reg) {
         s.live = true
+        s.registryPid = reg.pid
+        const regEntry = (reg as { entrypoint?: unknown }).entrypoint
+        if (typeof regEntry === 'string' && regEntry !== '') s.entrypoint = regEntry
         if (reg.status) s.registryStatus = reg.status as RegistryStatus
       }
       out.push(s)
@@ -247,6 +262,10 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
 
   async function pickFromPty(roots: ConfigRoot[], pty: PtyHint): Promise<AutoPick | null> {
     const own = roots.filter((r) => r.accountId === pty.accountId)
+    if (pty.sessionId !== undefined) {
+      const f = await findSession(own, pty.accountId, pty.sessionId)
+      return f ? toPick(f) : null // controlled session: its id is known, wait for the file
+    }
     const reg = (await readRegistry(own)).find((l) => l.entry.pid === pty.pid)
     if (reg) {
       const f = await findSession(own, reg.accountId, reg.entry.sessionId)
