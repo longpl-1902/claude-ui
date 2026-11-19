@@ -31,7 +31,7 @@ import { selectControlForSession, useControlStore } from './useControlStore'
 
 type AccountsApi = ConsoleApi['accounts']
 
-export type Screen = 'team' | 'accounts'
+export type Screen = 'team' | 'accounts' | 'extensions'
 export type InspectorTab = 'activity' | 'files' | 'messages'
 export interface SignInState {
   step: SignInStep
