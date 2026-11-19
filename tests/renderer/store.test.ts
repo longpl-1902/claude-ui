@@ -1,29 +1,39 @@
 // @vitest-environment jsdom
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EMPTY_ACCOUNTS_SNAPSHOT } from '@shared/accountsDefaults'
+import type { Agent, AgentRuntime, TeamSnapshot } from '@shared/types'
+import { EMPTY_TEAM_SNAPSHOT, PLACEHOLDER_AGENT } from '@shared/teamDefaults'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import {
   resetConsoleStore,
   selectActiveAccount,
   selectSelectedAgent,
+  selectSelectedAgentOrNull,
+  selectTokensToday,
+  useAgentStatusInfo,
   useAgentStatuses,
   useConsoleStore,
   useTeamCounters
 } from '@renderer/store/useConsoleStore'
 import { seedMockAccounts } from './seedAccounts'
+import { seedDemoTeam } from './seedTeam'
 
 const s = () => useConsoleStore.getState()
 
-beforeEach(() => resetConsoleStore())
+beforeEach(() => {
+  resetConsoleStore()
+  seedDemoTeam()
+})
 afterEach(() => {
   delete (window as unknown as { api?: unknown }).api
 })
 
 describe('R-07 initial state', () => {
-  it('starts on the team screen with be selected and the activity tab', () => {
+  beforeEach(() => resetConsoleStore())
+  it('starts on the team screen with lead selected and the activity tab', () => {
     expect(s().screen).toBe('team')
-    expect(s().selectedAgentId).toBe('be')
+    expect(s().selectedAgentId).toBe('lead')
     expect(s().inspectorTab).toBe('activity')
     expect(s().rawTerminalOpen).toBe(false)
     expect(s().consoleDraft).toBe('')
@@ -37,10 +47,22 @@ describe('R-07 initial state', () => {
     expect(s().leadPty).toEqual({})
   })
 
-  it('team stays seeded with a deep clone of the mock', () => {
-    expect(s().team).toEqual(mockTeamSnapshot)
-    expect(s().team).not.toBe(mockTeamSnapshot)
+  it('team starts empty (never the mock), live, auto-selection, no usage', () => {
+    expect(s().team).toEqual(EMPTY_TEAM_SNAPSHOT)
+    expect(s().team).not.toBe(EMPTY_TEAM_SNAPSHOT)
+    expect(s().liveTeam).toEqual(EMPTY_TEAM_SNAPSHOT)
+    expect(s().teamMode).toBe('live')
+    expect(s().selection).toEqual({ mode: 'auto' })
+    expect(s().sessions).toEqual([])
+    expect(s().usageToday).toBeNull()
+  })
+
+  it('seedDemoTeam loads a deep clone of the mock as demo data', () => {
+    seedDemoTeam()
+    expect(s().team).toEqual({ ...mockTeamSnapshot, source: 'demo' })
     expect(s().team.agents).not.toBe(mockTeamSnapshot.agents)
+    expect(s().teamMode).toBe('demo')
+    expect(s().selectedAgentId).toBe('be')
   })
 })
 
@@ -155,7 +177,8 @@ function installApi(over: Record<string, Fn> = {}) {
 }
 
 describe('R-11 hydrate', () => {
-  it('hydrateTeam replaces the team; hydrateAccounts sets loaded', () => {
+  it('hydrateTeam replaces the team (live mode); hydrateAccounts sets loaded', () => {
+    s().exitDemo()
     s().hydrateTeam({ ...mockTeamSnapshot, teamName: 'from-ipc' })
     expect(s().team.teamName).toBe('from-ipc')
     s().hydrateAccounts({ ...mockAccountsSnapshot, defaultAccountId: 'personal' })
@@ -329,8 +352,8 @@ describe('R-07 resetConsoleStore', () => {
     s().setLimitPolicy('switch')
     resetConsoleStore()
     expect(s().screen).toBe('team')
-    expect(s().selectedAgentId).toBe('be')
-    expect(s().team.console).toHaveLength(7)
+    expect(s().selectedAgentId).toBe('lead')
+    expect(s().team.console).toHaveLength(0)
     expect(s().accounts).toEqual(EMPTY_ACCOUNTS_SNAPSHOT)
     expect(s().accountsLoaded).toBe(false)
     expect(mockTeamSnapshot.console).toHaveLength(7)
@@ -357,5 +380,143 @@ describe('R-07 derived hooks', () => {
   it('useTeamCounters returns 6 / 3 / 1 / 1.125M tokens', () => {
     const { result } = renderHook(() => useTeamCounters())
     expect(result.current).toEqual({ agents: 6, running: 3, needsYou: 1, tokens: 1125000 })
+  })
+})
+
+const rt = (over: Partial<AgentRuntime> = {}): AgentRuntime => ({
+  kind: 'lead',
+  startedMs: 0,
+  lastActivityMs: 0,
+  openTools: [],
+  lastTurn: 'user',
+  ...over
+})
+const agent = (id: string, runtime?: AgentRuntime): Agent => ({ ...structuredClone(PLACEHOLDER_AGENT), id, name: id, runtime })
+const snap = (ids: string[], runtimes: Record<string, AgentRuntime> = {}): TeamSnapshot => ({
+  ...structuredClone(EMPTY_TEAM_SNAPSHOT),
+  source: 'live',
+  agents: ids.map((id) => agent(id, runtimes[id]))
+})
+
+describe('P3 hydrateTeam / demo', () => {
+  beforeEach(() => resetConsoleStore())
+
+  it('live hydrate sets team and liveTeam; keeps a valid selection', () => {
+    s().hydrateTeam(snap(['lead', 'a', 'b']))
+    s().selectAgent('b')
+    s().hydrateTeam(snap(['lead', 'a', 'b']))
+    expect(s().selectedAgentId).toBe('b')
+    expect(s().team).toBe(s().liveTeam)
+  })
+
+  it('re-selects lead, else the first agent, else lead when the selection vanishes', () => {
+    s().hydrateTeam(snap(['lead', 'a']))
+    s().selectAgent('a')
+    s().hydrateTeam(snap(['lead']))
+    expect(s().selectedAgentId).toBe('lead')
+    s().hydrateTeam(snap(['x', 'y']))
+    expect(s().selectedAgentId).toBe('x')
+    s().hydrateTeam(snap([]))
+    expect(s().selectedAgentId).toBe('lead')
+  })
+
+  it('showDemo / exitDemo keep liveTeam; a push during demo does not replace the demo view', () => {
+    const live = snap(['lead', 'a'])
+    s().hydrateTeam(live)
+    s().showDemo()
+    expect(s().teamMode).toBe('demo')
+    expect(s().team.source).toBe('demo')
+    expect(s().team.agents).toHaveLength(mockTeamSnapshot.agents.length)
+    expect(s().selectedAgentId).toBe(mockTeamSnapshot.agents[0]!.id)
+    expect(s().liveTeam).toBe(live)
+    const pushed = snap(['lead', 'a', 'b'])
+    s().hydrateTeam(pushed)
+    expect(s().team.source).toBe('demo')
+    expect(s().liveTeam).toBe(pushed)
+    s().exitDemo()
+    expect(s().teamMode).toBe('live')
+    expect(s().team).toBe(pushed)
+    expect(s().selectedAgentId).toBe('lead')
+  })
+
+  it('selectSession stores the selection, calls api, hydrates and exits demo', async () => {
+    const result = snap(['lead', 'z'])
+    const select = vi.fn().mockResolvedValue(result)
+    ;(window as unknown as { api: unknown }).api = { transcripts: { select } }
+    s().showDemo()
+    const sel = { mode: 'session', accountId: 'a', sessionId: 's1' } as const
+    await s().selectSession(sel)
+    expect(select).toHaveBeenCalledWith(sel)
+    expect(s().selection).toEqual(sel)
+    expect(s().teamMode).toBe('live')
+    expect(s().team).toBe(result)
+  })
+
+  it('refreshSessions sets sessions; missing api is a no-op; rejection sets teamError', async () => {
+    await s().refreshSessions()
+    expect(s().sessions).toEqual([])
+    const list = [{ sessionId: 'x' }]
+    const listSessions = vi.fn().mockResolvedValue(list)
+    ;(window as unknown as { api: unknown }).api = { transcripts: { listSessions } }
+    await s().refreshSessions()
+    expect(s().sessions).toBe(list)
+    listSessions.mockRejectedValue(new Error('boom'))
+    await expect(s().refreshSessions()).resolves.toBeUndefined()
+    expect(s().teamError).toBe('boom')
+  })
+
+  it('setSessions, applyUsage and tick', () => {
+    s().setSessions([])
+    s().applyUsage({ day: '2026-01-01', byAccount: {} })
+    expect(s().usageToday?.day).toBe('2026-01-01')
+    s().tick(1234)
+    expect(s().nowMs).toBe(1234)
+    vi.useFakeTimers()
+    vi.setSystemTime(99_000)
+    s().tick()
+    expect(s().nowMs).toBe(99_000)
+    vi.useRealTimers()
+  })
+})
+
+describe('P3 live status, selectors', () => {
+  beforeEach(() => resetConsoleStore())
+  afterEach(() => vi.useRealTimers())
+
+  it('derives status from runtime and ticks to stale with fake timers', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    s().hydrateTeam(snap(['lead'], { lead: rt({ lastTurn: 'user', lastActivityMs: 1_000_000 }) }))
+    s().tick()
+    const { result } = renderHook(() => ({ all: useAgentStatuses(), info: useAgentStatusInfo('lead') }))
+    expect(result.current.all.lead).toBe('running')
+    expect(result.current.info).toEqual({ status: 'running', reason: 'thinking' })
+    act(() => {
+      vi.setSystemTime(1_000_000 + 6 * 60_000)
+      s().tick()
+    })
+    expect(result.current.all.lead).toBe('waiting')
+    expect(result.current.info.reason).toBe('no activity for a while')
+  })
+
+  it('demo agents (no runtime) keep the event-derived statuses; unknown id is waiting', () => {
+    seedDemoTeam()
+    const { result } = renderHook(() => ({ info: useAgentStatusInfo('be'), none: useAgentStatusInfo('nope') }))
+    expect(result.current.info).toEqual({ status: 'running' })
+    expect(result.current.none.status).toBe('waiting')
+  })
+
+  it('selectSelectedAgent returns the placeholder on an empty team; OrNull returns null', () => {
+    expect(selectSelectedAgent(s())).toBe(PLACEHOLDER_AGENT)
+    expect(selectSelectedAgentOrNull(s())).toBeNull()
+    s().hydrateTeam(snap(['lead']))
+    expect(selectSelectedAgentOrNull(s())?.id).toBe('lead')
+  })
+
+  it('selectTokensToday returns the headline (no cache read) per account', () => {
+    expect(selectTokensToday('a')(s())).toBeUndefined()
+    s().applyUsage({ day: 'd', byAccount: { a: { input: 10, output: 20, cacheCreation: 30, cacheRead: 999 } } })
+    expect(selectTokensToday('a')(s())).toEqual({ headline: 60, cacheRead: 999 })
+    expect(selectTokensToday('zz')(s())).toBeUndefined()
   })
 })

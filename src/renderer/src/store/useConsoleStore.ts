@@ -3,8 +3,10 @@ import { create } from 'zustand'
 import type { StoreApi, UseBoundStore } from 'zustand'
 import { EMPTY_ACCOUNTS_SNAPSHOT } from '@shared/accountsDefaults'
 import type { ConsoleApi } from '@shared/ipc'
+import { deriveLiveStatus, reasonLabel } from '@shared/liveStatus'
 import { mockTeamSnapshot } from '@shared/mock'
-import { deriveAllStatuses } from '@shared/status'
+import { deriveAgentStatus } from '@shared/status'
+import { EMPTY_TEAM_SNAPSHOT, LEAD_ID, PLACEHOLDER_AGENT, tokenHeadline } from '@shared/teamDefaults'
 import type {
   AccountView,
   AccountsSnapshot,
@@ -17,8 +19,11 @@ import type {
   ProfileInput,
   SafetySettings,
   SignInStatus,
+  SessionSummary,
   SignInStep,
-  TeamSnapshot
+  TeamSelection,
+  TeamSnapshot,
+  UsageToday
 } from '@shared/types'
 
 type AccountsApi = ConsoleApi['accounts']
@@ -40,9 +45,18 @@ export interface LeadPtyState {
   accountId?: string
 }
 
+export type TeamMode = 'live' | 'demo'
+
 export interface ConsoleState {
   screen: Screen
   team: TeamSnapshot
+  teamMode: TeamMode
+  liveTeam: TeamSnapshot
+  sessions: SessionSummary[]
+  selection: TeamSelection
+  usageToday: UsageToday | null
+  nowMs: number
+  teamError?: string
   accounts: AccountsSnapshot
   accountsLoaded: boolean
   accountsError?: string
@@ -59,6 +73,14 @@ export interface ConsoleState {
   setConsoleDraft(text: string): void
   submitConsole(): void
   hydrateTeam(s: TeamSnapshot): void
+  showDemo(): void
+  exitDemo(): void
+  refreshSessions(): Promise<void>
+  selectSession(sel: TeamSelection): Promise<void>
+  setSessions(list: SessionSummary[]): void
+  applyUsage(u: UsageToday): void
+  tick(nowMs?: number): void
+  setSelection(sel: TeamSelection): void
   hydrateAccounts(s: AccountsSnapshot): void
   refreshAccounts(): Promise<void>
   scanAccounts(): Promise<void>
@@ -86,16 +108,40 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
 function initialData() {
   return {
     screen: 'team' as Screen,
-    team: structuredClone(mockTeamSnapshot),
+    team: structuredClone(EMPTY_TEAM_SNAPSHOT),
+    teamMode: 'live' as TeamMode,
+    liveTeam: structuredClone(EMPTY_TEAM_SNAPSHOT),
+    sessions: [] as SessionSummary[],
+    selection: { mode: 'auto' } as TeamSelection,
+    usageToday: null as UsageToday | null,
+    nowMs: Date.now(),
+    teamError: undefined as string | undefined,
     accounts: structuredClone(EMPTY_ACCOUNTS_SNAPSHOT),
     accountsLoaded: false,
     accountsError: undefined as string | undefined,
-    selectedAgentId: 'be',
+    selectedAgentId: LEAD_ID,
     inspectorTab: 'activity' as InspectorTab,
     rawTerminalOpen: false,
     consoleDraft: '',
     signIn: { step: 'none', panelOpen: false } as SignInState,
     leadPty: {} as LeadPtyState
+  }
+}
+
+function pickSelected(current: string, team: TeamSnapshot): string {
+  if (team.agents.some((a) => a.id === current)) return current
+  if (team.agents.some((a) => a.id === LEAD_ID)) return LEAD_ID
+  return team.agents[0]?.id ?? LEAD_ID
+}
+
+/** Guarded transcripts/usage/team call: a missing api is a no-op, a rejection lands in teamError. */
+async function callTeamApi<T>(fn: () => Promise<T> | undefined, fallback: T): Promise<T> {
+  try {
+    const r = await fn()
+    return r === undefined ? fallback : r
+  } catch (e) {
+    useConsoleStore.setState({ teamError: errMsg(e) })
+    return fallback
   }
 }
 
@@ -155,7 +201,42 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
         // ignore send failures
       }
     },
-    hydrateTeam: (team) => set({ team }),
+    hydrateTeam: (snap) =>
+      set((s) =>
+        s.teamMode === 'live'
+          ? { liveTeam: snap, team: snap, selectedAgentId: pickSelected(s.selectedAgentId, snap) }
+          : { liveTeam: snap }
+      ),
+    showDemo: () => {
+      const team = structuredClone(mockTeamSnapshot)
+      team.source = 'demo'
+      set({ team, teamMode: 'demo', selectedAgentId: team.agents[0]?.id ?? LEAD_ID })
+    },
+    exitDemo: () =>
+      set((s) => ({
+        teamMode: 'live',
+        team: s.liveTeam,
+        selectedAgentId: pickSelected(s.selectedAgentId, s.liveTeam)
+      })),
+    refreshSessions: async () => {
+      const api = window.api?.transcripts
+      if (!api) return
+      const list = await callTeamApi(() => api.listSessions(), undefined)
+      if (list) set({ sessions: list })
+    },
+    selectSession: async (sel) => {
+      set({ selection: sel })
+      const api = window.api?.transcripts
+      if (!api) return
+      const snap = await callTeamApi(() => api.select(sel), undefined)
+      if (!snap) return
+      get().exitDemo()
+      get().hydrateTeam(snap)
+    },
+    setSessions: (sessions) => set({ sessions }),
+    setSelection: (selection) => set({ selection }),
+    applyUsage: (usageToday) => set({ usageToday }),
+    tick: (nowMs) => set({ nowMs: nowMs ?? Date.now() }),
     hydrateAccounts: (accounts) => set({ accounts, accountsLoaded: true, accountsError: undefined }),
     refreshAccounts: async () => {
       const snap = await callApi((a) => a.getSnapshot(), undefined)
@@ -230,15 +311,47 @@ export function resetConsoleStore(): void {
 }
 
 export const selectSelectedAgent = (s: ConsoleState): Agent =>
-  s.team.agents.find((a) => a.id === s.selectedAgentId) ?? s.team.agents[0]!
+  s.team.agents.find((a) => a.id === s.selectedAgentId) ?? s.team.agents[0] ?? PLACEHOLDER_AGENT
+
+export const selectSelectedAgentOrNull = (s: ConsoleState): Agent | null =>
+  s.team.agents.find((a) => a.id === s.selectedAgentId) ?? s.team.agents[0] ?? null
+
+export const selectTokensToday =
+  (accountId: string) =>
+  (s: ConsoleState): { headline: number; cacheRead: number } | undefined => {
+    const t = s.usageToday?.byAccount[accountId]
+    return t ? { headline: tokenHeadline(t), cacheRead: t.cacheRead } : undefined
+  }
 
 export const selectActiveAccount = (s: ConsoleState): AccountView | undefined =>
   s.accounts.accounts.find((a) => a.id === s.accounts.activeAccountId) ??
   s.accounts.accounts.find((a) => a.id === s.accounts.defaultAccountId)
 
+function statusInfoFor(team: TeamSnapshot, agent: Agent, nowMs: number): { status: AgentStatus; reason?: string } {
+  if (agent.runtime) {
+    const r = deriveLiveStatus(agent.runtime, nowMs)
+    return { status: r.status, reason: reasonLabel(r.reason, r.detail) }
+  }
+  return { status: deriveAgentStatus(team.events, agent.id, team.now) }
+}
+
 export function useAgentStatuses(): Record<string, AgentStatus> {
   const team = useConsoleStore((s) => s.team)
-  return useMemo(() => deriveAllStatuses(team), [team])
+  const nowMs = useConsoleStore((s) => s.nowMs)
+  return useMemo(() => {
+    const out: Record<string, AgentStatus> = {}
+    for (const a of team.agents) out[a.id] = statusInfoFor(team, a, nowMs).status
+    return out
+  }, [team, nowMs])
+}
+
+export function useAgentStatusInfo(id: string): { status: AgentStatus; reason?: string } {
+  const team = useConsoleStore((s) => s.team)
+  const nowMs = useConsoleStore((s) => s.nowMs)
+  return useMemo(() => {
+    const a = team.agents.find((x) => x.id === id)
+    return a ? statusInfoFor(team, a, nowMs) : { status: 'waiting' as AgentStatus }
+  }, [team, nowMs, id])
 }
 
 export function useTeamCounters(): { agents: number; running: number; needsYou: number; tokens: number } {

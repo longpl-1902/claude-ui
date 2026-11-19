@@ -5,8 +5,12 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from '@renderer/components/inspector/Inspector'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { seedDemoTeam } from './seedTeam'
 
-beforeEach(() => resetConsoleStore())
+beforeEach(() => {
+  resetConsoleStore()
+  seedDemoTeam()
+})
 afterEach(() => {
   delete (window as unknown as { api?: unknown }).api
 })
@@ -147,7 +151,7 @@ describe('R-11 Inspector actions', () => {
     ;(window as unknown as { api: unknown }).api = api
     act(() => {
       const t = useConsoleStore.getState().team
-      useConsoleStore.getState().hydrateTeam({ ...t, worktrees: [] })
+      useConsoleStore.setState({ team: { ...t, worktrees: [] } })
     })
     render(<Inspector />)
     const btn = screen.getByRole('button', { name: 'Open worktree' })

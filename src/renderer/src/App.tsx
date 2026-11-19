@@ -11,14 +11,31 @@ export default function App() {
     document.title = 'Agent Console'
     const api = window.api
     if (!api) return
-    api.team.getSnapshot().then(hydrateTeam).catch(() => {})
     const st = useConsoleStore.getState()
+    api.team.getSnapshot().then(hydrateTeam).catch(() => {})
+    api.transcripts
+      ?.getSelection?.()
+      .then(st.setSelection)
+      .catch(() => {})
+    void st.refreshSessions()
+    api.usage
+      ?.getToday?.()
+      .then(st.applyUsage)
+      .catch(() => {})
     void st.refreshAccounts()
     const offChanged = api.accounts?.onChanged?.(st.hydrateAccounts)
     const offStatus = api.accounts?.onSignInStatus?.(st.applySignInStatus)
+    const offTeam = api.team.onChanged?.(hydrateTeam)
+    const offSessions = api.transcripts?.onSessionsChanged?.(st.setSessions)
+    const offUsage = api.usage?.onChanged?.(st.applyUsage)
+    const timer = setInterval(() => st.tick(), 5000)
     return () => {
       offChanged?.()
       offStatus?.()
+      offTeam?.()
+      offSessions?.()
+      offUsage?.()
+      clearInterval(timer)
     }
   }, [hydrateTeam])
 
