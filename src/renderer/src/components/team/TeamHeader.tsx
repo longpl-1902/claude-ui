@@ -5,12 +5,45 @@ import { formatTokens } from '@shared/format'
 import { selectActiveAccount, useConsoleStore, useTeamCounters } from '../../store/useConsoleStore'
 import './teamLeft.css'
 
+function relTime(mtimeMs: number, nowMs: number): string {
+  const sec = Math.max(0, Math.round((nowMs - mtimeMs) / 1000))
+  if (sec < 60) return 'just now'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  return `${Math.floor(hr / 24)}d ago`
+}
+
+function baseName(p: string | undefined): string {
+  if (!p) return ''
+  const parts = p.split(/[/\\]/).filter(Boolean)
+  return parts[parts.length - 1] ?? p
+}
+
 export function TeamHeader() {
   const team = useConsoleStore((s) => s.team)
   const account = useConsoleStore(selectActiveAccount)
   const edge = useConsoleStore((s) => s.accounts.safety.showAccountColorEdge)
   const navigate = useConsoleStore((s) => s.navigate)
   const counters = useTeamCounters()
+  const teamMode = useConsoleStore((s) => s.teamMode)
+  const sessions = useConsoleStore((s) => s.sessions)
+  const selection = useConsoleStore((s) => s.selection)
+  const selectSession = useConsoleStore((s) => s.selectSession)
+  const exitDemo = useConsoleStore((s) => s.exitDemo)
+  const nowMs = useConsoleStore((s) => s.nowMs)
+  const selectedValue = selection.mode === 'session' ? `${selection.accountId}|${selection.sessionId}` : 'auto'
+  const onPick = (value: string): void => {
+    if (value === 'auto') {
+      void selectSession({ mode: 'auto' })
+      return
+    }
+    const i = value.indexOf('|')
+    void selectSession({ mode: 'session', accountId: value.slice(0, i), sessionId: value.slice(i + 1) })
+  }
+  const demo = teamMode === 'demo'
+  const live = !demo && team.source === 'live'
 
   return (
     <header
@@ -26,6 +59,35 @@ export function TeamHeader() {
         <span className="ac-header__sep" aria-hidden="true">/</span>
         <span className="ac-header__team">team: {team.teamName}</span>
       </div>
+      {demo && (
+        <span className="ac-header__badge ac-header__badge--demo" title="Showing demo data">
+          DEMO <span className="ac-header__badge-note">demo data</span>
+        </span>
+      )}
+      {live && <span className="ac-header__badge ac-header__badge--live">LIVE</span>}
+      <select
+        className="ac-header__picker"
+        aria-label="Session"
+        value={selectedValue}
+        onChange={(e) => onPick(e.target.value)}
+      >
+        <option value="auto">Auto (latest)</option>
+        {sessions.map((x) => {
+          const v = `${x.accountId}|${x.sessionId}`
+          const label = `${[x.title ?? x.sessionId.slice(0, 8), baseName(x.cwd ?? x.projectDir), relTime(x.mtimeMs, nowMs)].filter(Boolean).join(' · ')}${x.live ? ' · live' : ''}`
+          return (
+            <option key={v} value={v}>
+              {label}
+            </option>
+          )
+        })}
+      </select>
+      {demo && (
+        <Button size="sm" onClick={exitDemo}>
+          Back to live
+        </Button>
+      )}
+      {team.historyTruncated && <span className="ac-header__note">older history not loaded</span>}
       <button
         type="button"
         className="ac-header__chip"

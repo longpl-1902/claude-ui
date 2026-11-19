@@ -6,6 +6,7 @@ const SUBTLE = 'var(--ac-text-subtle)'
 
 export function SharedTaskList() {
   const team = useConsoleStore((s) => s.team)
+  const demo = useConsoleStore((s) => s.team.source === 'demo')
   const nameOf = (id: string) => team.agents.find((a) => a.id === id)?.name ?? id
 
   const view = (t: SharedTask): { color: string; fill: string; meta: string; metaColor: string } => {
@@ -30,6 +31,15 @@ export function SharedTaskList() {
           metaColor: 'var(--ac-status-needs-you)'
         }
     }
+  }
+
+  if (!demo) {
+    return (
+      <section className="ac-left-section">
+        <h2 className="ac-left-title">Shared tasks</h2>
+        <p className="ac-left-placeholder">Shared tasks arrive in Phase 5</p>
+      </section>
+    )
   }
 
   return (

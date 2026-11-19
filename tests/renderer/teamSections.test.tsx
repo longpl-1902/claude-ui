@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import './jestDom'
 import { render, screen, within } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TeamHeader } from '@renderer/components/team/TeamHeader'
@@ -200,5 +202,22 @@ describe('R-09 SharedTaskList', () => {
     expect(screen.getByText('Blocked by #2 · ui-builder')).toBeInTheDocument()
     expect(screen.getByText('2 failing · test-writer')).toBeInTheDocument()
     expect(screen.getByText('Done · reviewer')).toBeInTheDocument()
+  })
+})
+
+describe('P3 TeamHeader picker keeps the chip truncating', () => {
+  it('renders the session picker beside a long chip; CSS keeps one row on wide windows', () => {
+    const snap = structuredClone(mockAccountsSnapshot)
+    snap.accounts = snap.accounts.map((a) =>
+      a.id === snap.activeAccountId ? { ...a, name: 'x'.repeat(60), email: 'y'.repeat(60) + '@example.vn' } : a
+    )
+    useConsoleStore.getState().hydrateAccounts(snap)
+    const { container } = render(<TeamHeader />)
+    expect(screen.getByRole('combobox', { name: 'Session' })).toBeInTheDocument()
+    expect(container.querySelector('.ac-header__email')).toBeInTheDocument()
+    const css = readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/teamLeft.css'), 'utf8')
+    expect(css).toMatch(/\.ac-header__chip \{[^}]*flex: 0 1 320px/)
+    expect(css).toMatch(/@media \(min-width: 1101px\)\s*\{[^@]*\.ac-header \{ flex-wrap: nowrap/)
+    expect(css).toMatch(/\.ac-header__picker \{[^}]*min-width: 120px/)
   })
 })
