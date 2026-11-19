@@ -57,7 +57,8 @@ export function createTailer(fs: ByteReadFs, opts: TailOptions = {}): Tailer {
       state = undefined
     }
     if (!state) {
-      const start = st.size > backfill ? st.size - backfill : 0
+      // one byte early, so a line starting exactly at the window edge is kept (the discard stops at the newline before it)
+      const start = st.size > backfill ? st.size - backfill - 1 : 0
       state = { offset: start, birthtimeMs: st.birthtimeMs, partial: EMPTY, discarding: start > 0 }
       skippedBytes = start
       states.set(path, state)

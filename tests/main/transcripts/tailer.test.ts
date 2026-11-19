@@ -162,6 +162,14 @@ describe('R-03 tailer backfill window', () => {
     expect(t.offsetOf(P)).toBe(18)
   })
 
+  it('R-03 a window that starts exactly on a line boundary keeps that line', async () => {
+    const fs = createMemoryByteFs({ [P]: 'line1\nline2\nline3\n' }) // line3 starts at byte 12
+    const r = await createTailer(fs, { backfillBytes: 6 }).read(P) // window = bytes 12..17
+    expect(r.lines).toEqual(['line3'])
+    const r2 = await createTailer(fs, { backfillBytes: 12 }).read(P)
+    expect(r2.lines).toEqual(['line2', 'line3'])
+  })
+
   it('R-03 files within the window are read whole with skippedBytes 0', async () => {
     const fs = createMemoryByteFs({ [P]: 'line1\nline2\n' })
     const r = await createTailer(fs, { backfillBytes: 1000 }).read(P)

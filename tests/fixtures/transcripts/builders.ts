@@ -198,17 +198,22 @@ export interface ToolResultOpts extends LineOpts {
   toolUseResult?: unknown
   toolDenialKind?: string
   permissionDecision?: Record<string, unknown>
+  /**
+   * Model a SUB-AGENT result line: real sub-agent files carry no `toolUseResult` on successful results
+   * (only error strings carry it). Default false keeps the main-file behaviour.
+   */
+  omitToolUseResult?: boolean
 }
 export function toolResult(toolUseId: string, content: string | Block[], o: ToolResultOpts = {}): Record<string, unknown> {
   const block: Block = { type: 'tool_result', tool_use_id: toolUseId, content }
   if (o.isError !== undefined) block.is_error = o.isError
   const line: Record<string, unknown> = { ...envelope('user', o), message: { role: 'user', content: [block] } }
-  if (o.toolUseResult !== undefined) line.toolUseResult = o.toolUseResult
+  if (o.toolUseResult !== undefined && o.omitToolUseResult !== true) line.toolUseResult = o.toolUseResult
   if (o.toolDenialKind !== undefined) line.toolDenialKind = o.toolDenialKind
   if (o.permissionDecision !== undefined) line.permissionDecision = o.permissionDecision
   return line
 }
-export const bashResult = (toolUseId: string, stdout: string, o: LineOpts = {}): Record<string, unknown> =>
+export const bashResult = (toolUseId: string, stdout: string, o: ToolResultOpts = {}): Record<string, unknown> =>
   toolResult(toolUseId, stdout, {
     ...o,
     toolUseResult: { stdout, stderr: '', interrupted: false, isImage: false, noOutputExpected: false }
@@ -231,7 +236,7 @@ export const interruptedToolResult = (toolUseId: string, o: LineOpts = {}): Reco
     toolDenialKind: 'interrupted'
   })
 /** Edit result. `patchLines` are hunk lines whose first char is ' ', '+', '-' or a backslash. */
-export function editResult(toolUseId: string, filePath: string, patchLines: string[], o: LineOpts = {}): Record<string, unknown> {
+export function editResult(toolUseId: string, filePath: string, patchLines: string[], o: ToolResultOpts = {}): Record<string, unknown> {
   const removed = patchLines.filter((l) => l.startsWith('-')).length
   const added = patchLines.filter((l) => l.startsWith('+')).length
   return toolResult(toolUseId, `The file ${filePath} has been updated.`, {
@@ -247,7 +252,7 @@ export function editResult(toolUseId: string, filePath: string, patchLines: stri
   })
 }
 /** Write (create) result: empty structuredPatch, `content` holds the new file. */
-export const writeCreateResult = (toolUseId: string, filePath: string, content: string, o: LineOpts = {}): Record<string, unknown> =>
+export const writeCreateResult = (toolUseId: string, filePath: string, content: string, o: ToolResultOpts = {}): Record<string, unknown> =>
   toolResult(toolUseId, `File created successfully at: ${filePath}`, {
     ...o,
     toolUseResult: { type: 'create', filePath, content, structuredPatch: [], originalFile: null }
@@ -256,7 +261,7 @@ export const writeCreateResult = (toolUseId: string, filePath: string, content: 
 export function agentResult(
   toolUseId: string,
   r: { agentId: string; status: 'completed' | 'async_launched' | string; text?: string; totalTokens?: number },
-  o: LineOpts = {}
+  o: ToolResultOpts = {}
 ): Record<string, unknown> {
   const content = r.text === undefined ? [] : [textBlock(r.text)]
   return toolResult(toolUseId, r.text ?? 'Async agent launched (fake).', {
@@ -376,3 +381,7 @@ export function jsonl(items: unknown[], opts: { eol?: '\n' | '\r\n'; trailing?: 
   const body = items.map((i) => (typeof i === 'string' ? i : toLine(i))).join(eol)
   return opts.trailing === false ? body : body + eol
 }
+
+// ---- sub-agent flavoured helpers (no toolUseResult on success, like real sub-agent files) ----
+/** Successful sub-agent result for any tool: plain text, no toolUseResult. */
+export const subOkResult = (toolUseId: string, text: string, o: LineOpts = {}): Record<string, unknown> => toolResult(toolUseId, text, o)
