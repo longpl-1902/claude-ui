@@ -1,17 +1,7 @@
+import type { CatalogItem, CatalogKind } from '../../shared/types'
 import { isDeniedPath } from '../accounts/safeFs'
 
-export type CatalogKind = 'skill' | 'agent' | 'command' | 'output-style'
-/** Structurally equal to T23's CatalogItem. */
-export interface CatalogItem {
-  kind: CatalogKind
-  name: string
-  description?: string
-  scope: 'user' | 'project' | 'plugin'
-  plugin?: string
-  path: string
-  argumentHint?: string
-  model?: string
-}
+export type { CatalogItem, CatalogKind }
 
 export interface CatalogFs {
   readdir(p: string): Promise<{ name: string; isDir: boolean }[]>

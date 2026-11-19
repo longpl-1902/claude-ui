@@ -1,4 +1,4 @@
-import { spawn as nodeSpawn } from 'node:child_process'
+import { execFile, spawn as nodeSpawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { watch as chokidarWatch } from 'chokidar'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, shell } from 'electron'
@@ -7,8 +7,11 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import { createAccountsService } from './accounts/accountsService'
-import { safeNodeFs } from './accounts/safeFs'
+import { expandHome, isAbsoluteFor, isDefaultConfigDir, toDisplayPath } from './accounts/paths'
+import { isDeniedPath, safeNodeFs } from './accounts/safeFs'
 import { createChokidarWatchFile } from './accounts/signIn'
+import { createCatalog, type CatalogFs } from './catalog/catalog'
+import { createClaudeCli, type CliExec } from './catalog/claudeCli'
 import { createAttentionPrefs, type AttentionPrefsFs } from './attention/prefs'
 import { createNotifier } from './attention/notifier'
 import { createStatusHub } from './attention/statusHub'
@@ -38,6 +41,48 @@ function broadcast(channel: string, payload: unknown): void {
     if (!w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send(channel, payload)
   }
 }
+
+/** Catalog reads: directory listing, the first bytes of a file, existence. Credential files are never touched. */
+const catalogFs: CatalogFs = {
+  async readdir(p) {
+    if (isDeniedPath(p)) return []
+    return (await safeNodeFs.readdir(p)).map((e) => ({ name: e.name, isDir: e.isDirectory() }))
+  },
+  async readHead(p, max) {
+    if (isDeniedPath(p)) return null
+    let fh: Awaited<ReturnType<typeof fsp.open>> | null = null
+    try {
+      fh = await fsp.open(p, 'r')
+      const buf = Buffer.alloc(max)
+      const { bytesRead } = await fh.read(buf, 0, max, 0)
+      return buf.subarray(0, bytesRead).toString('utf8')
+    } catch {
+      return null
+    } finally {
+      await fh?.close().catch(() => undefined)
+    }
+  },
+  exists: (p) => safeNodeFs.exists(p)
+}
+
+/** execFile wrapper: resolves {stdout, stderr, code} for any exit code; rejects only when the process cannot run or times out. */
+const cliExec: CliExec = (file, args, o) =>
+  new Promise((resolve, reject) => {
+    execFile(file, args, { cwd: o.cwd, env: o.env, timeout: o.timeout, windowsHide: true, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (!err) return resolve({ stdout, stderr, code: 0 })
+      const e = err as NodeJS.ErrnoException & { killed?: boolean; code?: number | string }
+      if (e.killed) return reject(new Error('The command timed out'))
+      if (typeof e.code === 'number') return resolve({ stdout: stdout ?? '', stderr: stderr ?? '', code: e.code })
+      reject(err)
+    })
+  })
+
+const gitExec = (args: string[]): Promise<{ stdout: string }> =>
+  new Promise((resolve, reject) => {
+    execFile('git', args, { timeout: 10_000, windowsHide: true, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }, (err, stdout) =>
+      err ? reject(err) : resolve({ stdout })
+    )
+  })
 
 /** 16x16 red dot used as the taskbar overlay when sessions need the user. */
 const RED_DOT_DATA_URL =
@@ -335,6 +380,26 @@ app.whenReady().then(async () => {
     void hub.refresh()
   })
   control.onStream((events) => broadcast(IPC.controlStream, events))
+  control.onDetails((d) => broadcast(IPC.controlDetailsChanged, d))
+
+  // ---- catalog + claude mcp/plugin CLI (T25) ----
+  const catalog = createCatalog({ fs: catalogFs, home: host.home, platform: host.platform })
+  const claudeCli = createClaudeCli({
+    exec: cliExec,
+    resolveClaude,
+    baseEnv: process.env,
+    platform: host.platform,
+    newId: () => randomUUID(),
+    now: () => Date.now()
+  })
+  const resolveAccountDir = async (accountId: string): Promise<{ abs: string; configDirAbs: string | null; display: string } | null> => {
+    const a = (await accounts.snapshot()).accounts.find((x) => x.id === accountId)
+    if (!a) return null
+    const abs = expandHome(a.configDir, host.home)
+    if (!isAbsoluteFor(abs, host.platform)) return null
+    const isDefault = isDefaultConfigDir(abs, host.home, host.platform)
+    return { abs, configDirAbs: isDefault ? null : abs, display: isDefault ? '~/.claude' : toDisplayPath(abs, host.home, host.platform) }
+  }
 
   const pidAlive = (pid: number): boolean => {
     try {
@@ -405,6 +470,10 @@ app.whenReady().then(async () => {
       hooks,
       externalKiller,
       openInEditor,
+      catalog,
+      claudeCli,
+      resolveAccountDir,
+      execGit: gitExec,
       isSessionLive: (accountId, sessionId) => transcripts.isSessionLive(accountId, sessionId),
       attention: {
         snapshot: () => hub.snapshot(),
