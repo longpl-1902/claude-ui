@@ -1,5 +1,6 @@
 import type { ChangedFile } from '@shared/types'
 import { shortenPath } from '@shared/displayPath'
+import { CopyButton } from '../chat/CopyButton'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { rendererPlatform } from '../../store/useWorkspaceStore'
 
@@ -16,6 +17,7 @@ export function FilesTab({ files }: { files: ChangedFile[] }): JSX.Element {
             <span className="insp-file__path" title={p.full}>
               {p.short}
             </span>
+            <CopyButton text={p.full} label={`path ${p.short}`} />
             <span className="insp-file__add">+{f.added}</span>
             <span className="insp-file__del">−{f.removed}</span>
           </div>

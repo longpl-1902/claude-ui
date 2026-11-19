@@ -2,6 +2,7 @@ import { shortenPath } from '@shared/displayPath'
 import type { Agent, Worktree } from '@shared/types'
 import { rendererPlatform, selectWorktreeViews, useWorkspaceStore } from '../../store/useWorkspaceStore'
 import { useConsoleStore } from '../../store/useConsoleStore'
+import { CopyButton } from '../chat/CopyButton'
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
 import { ErrorBanner } from '../ui/ErrorBanner'
@@ -45,6 +46,7 @@ function LiveWorktrees(): JSX.Element {
                 <span className="ac-wt__branch" title={w.branch}>
                   {w.branch}
                 </span>
+                <CopyButton text={w.branch} label={`branch ${w.branch}`} />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -57,6 +59,7 @@ function LiveWorktrees(): JSX.Element {
               </div>
               <div className="ac-wt__path" title={p.full}>
                 {p.short}
+                <CopyButton text={w.path} label={`path of ${w.branch}`} />
               </div>
               {w.agentIds.length > 0 && (
                 <div className="ac-wt__avatars">

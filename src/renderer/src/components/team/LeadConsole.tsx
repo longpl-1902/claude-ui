@@ -8,6 +8,8 @@ import { useCenterViewStore } from '../../store/useCenterViewStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
 import { CopyButton } from '../chat/CopyButton'
 import { Button } from '../ui/Button'
+import { ErrorBanner } from '../ui/ErrorBanner'
+import { reasonText } from '../ui/reasonText'
 import { ASK_LEAD_TEXT, ControlBar } from './ControlBar'
 import type { StartOption } from './ControlBar'
 import { PermissionCard } from './PermissionCard'
@@ -177,7 +179,7 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
     setSendError('')
     void send(control.id, route.text).then((r) => {
       if (r.ok) setDraft('')
-      else setSendError(`Could not send the message (${r.reason ?? 'failed'}).`)
+      else setSendError(reasonText(r.reason))
     })
   }
 
@@ -354,9 +356,7 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
         <span className="ac-tc-kbd">Enter</span>
       </form>
       {sendError && (
-        <p className="ac-tc-ctl__error ac-tc-prompt-hint" role="alert">
-          {sendError}
-        </p>
+        <ErrorBanner className="ac-tc-prompt-hint" message={sendError} onDismiss={() => setSendError('')} />
       )}
       {promptDisabled && external && (
         <div className="ac-tc-external">

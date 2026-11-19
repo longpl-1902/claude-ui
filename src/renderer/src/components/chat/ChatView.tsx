@@ -7,6 +7,7 @@ import { useMaxWidth } from '../../store/useLayoutStore'
 import { classifyLine } from '../team/LeadConsole'
 import { PermissionCard } from '../team/PermissionCard'
 import { Composer } from './Composer'
+import { reasonText } from '../ui/reasonText'
 import { CopyButton } from './CopyButton'
 import { Markdown } from './Markdown'
 import { ToolCallRow } from './ToolCallRow'
@@ -107,7 +108,7 @@ export function ChatView(): JSX.Element {
     setSendError('')
     void send(control.id, r.text).then((res) => {
       if (res.ok) setDraft('')
-      else setSendError(`Could not send the message (${res.reason ?? 'failed'}).`)
+      else setSendError(reasonText(res.reason))
     })
   }
 
