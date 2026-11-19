@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { AccountsView } from '@renderer/screens/AccountsView'
 import { TeamView } from '@renderer/screens/TeamView'
+import { ExtensionsView } from '@renderer/screens/ExtensionsView'
 import { ShortcutsHelp } from '@renderer/components/ui/ShortcutsHelp'
 import { setShortcutBridge, useShortcuts } from '@renderer/hooks/useShortcuts'
 import { useAttentionStore } from '@renderer/store/useAttentionStore'
@@ -79,7 +80,7 @@ export default function App() {
 
   return (
     <>
-      {screen === 'team' ? <TeamView /> : <AccountsView />}
+      {screen === 'team' ? <TeamView /> : screen === 'extensions' ? <ExtensionsView /> : <AccountsView />}
       <ShortcutsHelp />
     </>
   )

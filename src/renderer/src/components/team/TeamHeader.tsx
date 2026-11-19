@@ -233,6 +233,14 @@ export function TeamHeader() {
         >
           {hooksText}
         </Button>
+        <Button
+          variant="secondary"
+          title="MCP servers, plugins, skills, agents and commands (Ctrl+Shift+E)"
+          onClick={after(() => navigate('extensions'))}
+          {...role}
+        >
+          Extensions
+        </Button>
       </>
     )
   }
