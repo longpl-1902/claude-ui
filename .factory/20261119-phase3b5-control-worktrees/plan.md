@@ -496,3 +496,8 @@ previewed `claude mcp|plugin` command (hard rule 3), health check only on explic
 Manual (after wave 11, no tokens): open Extensions, check that the skills/agents/commands of `~/.claude` and this repo
 are listed, run "Check health" once, preview (do not run) an MCP add. Token-using checks (palette after start,
 rewind, images) only if the user agrees.
+
+## UI quality additions (user request, 2026-11-19)
+- **Wave 12: T31** Windows theme (System/Light/Dark, live accent, title bar overlay + Mica, contrast-checked light
+  theme, colour-literal sweep, xterm theme) + thin themed scrollbars.
+- **Wave 13: T32** declutter/ease-of-use pass: UX lead reviews the built app in both themes → agreed list → implement → re-check.
