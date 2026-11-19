@@ -209,7 +209,7 @@ describe('T31 global styles', () => {
 
   it('the standard scrollbar properties are only a fallback (they would disable the webkit styling)', () => {
     expect(globalCss).toMatch(/@supports not selector\(::-webkit-scrollbar\)\s*\{[^}]*scrollbar-width:\s*thin/)
-    expect(globalCss.replace(/@supports not selector[\s\S]*?\n\}\n/, '')).not.toMatch(/scrollbar-color/)
+    expect(globalCss.replace(/@supports not selector[\s\S]*?\r?\n\}\r?\n/, '')).not.toMatch(/scrollbar-color/)
   })
 
   it('scrollbars respect forced colors', () => {
