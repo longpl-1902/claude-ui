@@ -162,3 +162,10 @@
 /* T32 U7: not-controllable session: one line + one primary action */
 .ac-tc-external { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 16px 12px; }
 .ac-tc-external p { margin: 0; flex: 1 1 240px; }
+
+/* Overlap banner: at most two lines until "Details"; dismiss until a new file overlaps */
+.ac-tc-banner__text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.ac-tc-banner__text.is-expanded { display: block; -webkit-line-clamp: unset; max-height: 160px; overflow-y: auto; }
+.ac-tc-banner__close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--ac-radius-sm); background: transparent; color: var(--ac-warn-text); font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+.ac-tc-banner__close:hover { background: var(--ac-bg-btn-hover); }
+.ac-tc-banner__close:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }

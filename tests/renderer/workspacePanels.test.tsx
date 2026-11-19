@@ -248,7 +248,7 @@ describe('OverlapBanner + CompareDiffsDialog (live)', () => {
     seed()
     useWorkspaceStore.setState({
       workspace: snapshot(
-        [wt(ROOT, 'main', { isMain: true }), wt('D:/repo-wt/feat-x', 'feat/x')],
+        [wt(ROOT, 'main', { isMain: true, files: [f('src/a.ts'), f('src/b.ts')] }), wt('D:/repo-wt/feat-x', 'feat/x')],
         [
           { path: 'src/a.ts', worktrees: [ROOT, 'D:/repo-wt/feat-x'] },
           { path: 'src/b.ts', worktrees: [ROOT, 'D:/repo-wt/feat-x'] }
@@ -260,6 +260,90 @@ describe('OverlapBanner + CompareDiffsDialog (live)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Compare diffs' }))
     await userEvent.selectOptions(await screen.findByRole('combobox'), 'src/b.ts')
     expect(compare).toHaveBeenLastCalledWith(ROOT, 'src/b.ts')
+  })
+
+  const committedOnly = (path: string) => ({ path, status: 'M' as const, committed: true, uncommitted: false })
+
+  it('ignores files that branches only changed in past commits (nobody is editing them now)', () => {
+    seedLive([agent('lead', 'Alice', ROOT)])
+    useWorkspaceStore.setState({
+      watchedRoot: ROOT,
+      workspace: snapshot(
+        [
+          wt(ROOT, 'main', { isMain: true, files: [committedOnly('.gitignore')] }),
+          wt('D:/repo-wt/feat-x', 'feat/x', { files: [committedOnly('.gitignore')] })
+        ],
+        [{ path: '.gitignore', worktrees: [ROOT, 'D:/repo-wt/feat-x'] }]
+      )
+    })
+    render(<OverlapBanner />)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('warns when the file is uncommitted in two worktrees even without agents there', () => {
+    seedLive([agent('lead', 'Alice', 'D:/elsewhere')])
+    useWorkspaceStore.setState({ watchedRoot: ROOT, workspace: TWO_WT() })
+    render(<OverlapBanner />)
+    expect(screen.getByRole('alert')).toHaveTextContent('src/a.ts changed in')
+  })
+
+  it('names at most 3 worktrees per file', () => {
+    const wts = ['a', 'b', 'c', 'd', 'e'].map((x) => wt(`D:/repo-wt/${x}`, `feat/${x}`, { files: [f('src/a.ts')] }))
+    seedLive([agent('lead', 'Alice', 'D:/repo-wt/a')])
+    useWorkspaceStore.setState({
+      watchedRoot: ROOT,
+      workspace: snapshot(wts, [{ path: 'src/a.ts', worktrees: wts.map((w) => w.path) }])
+    })
+    render(<OverlapBanner />)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('src/a.ts changed in feat/a (Alice), feat/b, feat/c and 2 more worktrees')
+    expect(alert).not.toHaveTextContent('feat/d')
+  })
+
+  it('Details shows every file; Less collapses again', async () => {
+    seed()
+    const files = ['a', 'b', 'c', 'd', 'e'].map((x) => `src/${x}.ts`)
+    useWorkspaceStore.setState({
+      workspace: snapshot(
+        [wt(ROOT, 'main', { isMain: true, files: files.map(f) }), wt('D:/repo-wt/feat-x', 'feat/x', { files: files.map(f) })],
+        files.map((p) => ({ path: p, worktrees: [ROOT, 'D:/repo-wt/feat-x'] }))
+      )
+    })
+    render(<OverlapBanner />)
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('src/e.ts')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('more')
+    await userEvent.click(screen.getByRole('button', { name: 'Less' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('+2 more')
+  })
+
+  it('the close button dismisses the warning, remembered per project, until a new file overlaps', async () => {
+    window.localStorage.clear()
+    seed()
+    const { unmount } = render(<OverlapBanner />)
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss overlap warning' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    unmount()
+    render(<OverlapBanner />)
+    expect(screen.queryByRole('alert')).toBeNull()
+    act(() =>
+      useWorkspaceStore.setState({
+        workspace: snapshot(
+          [
+            wt(ROOT, 'main', { isMain: true, files: [f('src/a.ts'), f('src/new.ts')] }),
+            wt('D:/repo-wt/feat-x', 'feat/x', { files: [f('src/a.ts'), f('src/new.ts')] })
+          ],
+          [
+            { path: 'src/a.ts', worktrees: [ROOT, 'D:/repo-wt/feat-x'] },
+            { path: 'src/new.ts', worktrees: [ROOT, 'D:/repo-wt/feat-x'] }
+          ]
+        )
+      })
+    )
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('src/new.ts')
+    expect(alert).not.toHaveTextContent('src/a.ts')
+    window.localStorage.clear()
   })
 
   it('narrow width: banner text is a flexible span (no fixed width) and the button stays', () => {
