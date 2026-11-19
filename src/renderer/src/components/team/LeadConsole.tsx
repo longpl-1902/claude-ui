@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { FormEvent } from 'react'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { Button } from '../ui/Button'
@@ -13,6 +14,19 @@ export function LeadConsole(): JSX.Element {
   const draft = useConsoleStore((s) => s.consoleDraft)
   const setDraft = useConsoleStore((s) => s.setConsoleDraft)
   const submit = useConsoleStore((s) => s.submitConsole)
+
+  const live = useConsoleStore((s) => s.teamMode === 'live')
+  const logRef = useRef<HTMLDivElement>(null)
+  const atBottom = useRef(true)
+  const onScroll = (): void => {
+    const el = logRef.current
+    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  }
+  const lineCount = team.console.length
+  useEffect(() => {
+    const el = logRef.current
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight
+  }, [lineCount, rawOpen])
 
   const who = (id: string): { name: string; color: string } => {
     if (id === 'you') return { name: 'you', color: 'var(--ac-accent)' }
@@ -38,7 +52,7 @@ export function LeadConsole(): JSX.Element {
       {rawOpen ? (
         <RawTerminalPane />
       ) : (
-        <div className="ac-tc-log">
+        <div className="ac-tc-log" ref={logRef} onScroll={onScroll}>
           {team.console.map((l, i) => {
             const w = who(l.who)
             return (
@@ -66,6 +80,7 @@ export function LeadConsole(): JSX.Element {
         />
         <span className="ac-tc-kbd">Enter</span>
       </form>
+      {live && <div className="ac-tc-hint ac-tc-prompt-hint">Sending prompts arrives in Phase 3b</div>}
       {draft.startsWith('/') && (
         <div className="ac-tc-cmds">
           {COMMANDS.map((c) => (

@@ -4,7 +4,18 @@ import './teamCenter.css'
 
 export function Timeline(): JSX.Element {
   const team = useConsoleStore((s) => s.team)
+  const demo = useConsoleStore((s) => s.team.source === 'demo')
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
+  if (!demo) {
+    return (
+      <section className="ac-tc-panel">
+        <div className="ac-tc-tl-head">
+          <h2>Timeline</h2>
+        </div>
+        <p className="ac-tc-placeholder">Timeline arrives in Phase 5</p>
+      </section>
+    )
+  }
   return (
     <section className="ac-tc-panel">
       <div className="ac-tc-tl-head">

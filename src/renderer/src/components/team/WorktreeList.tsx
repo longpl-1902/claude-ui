@@ -5,7 +5,17 @@ import './teamLeft.css'
 
 export function WorktreeList() {
   const team = useConsoleStore((s) => s.team)
+  const demo = useConsoleStore((s) => s.team.source === 'demo')
   const nameOf = (id: string) => team.agents.find((a) => a.id === id)?.name ?? id
+
+  if (!demo) {
+    return (
+      <section className="ac-left-section">
+        <h2 className="ac-left-title">Worktrees</h2>
+        <p className="ac-left-placeholder">Worktrees arrive in Phase 5</p>
+      </section>
+    )
+  }
 
   return (
     <section className="ac-left-section">
