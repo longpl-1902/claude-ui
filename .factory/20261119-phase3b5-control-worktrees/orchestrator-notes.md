@@ -1,2 +1,3 @@
 - T09: sessionModel tracker replay log grows with session length (memory) — reviewer to judge cap.
 - T21 gaps for T13: (a) feed hooksService installed-state per project root into statusHub so ProjectStatus.hooksActive covers "installed" (F3), not only "event in 24 h"; (b) add AttentionPrefs.notifyIdle (default false) + notifier support so idle toasts can be enabled (F2 pref). T13 owns the wiring + the small type/pref addition.
+- T14 left the <1100px 'left column + rail merged into one collapsible drawer' undone (left column stays stacked). Assigned to T22 (owns the rail): implement the merged drawer using useLayoutStore + Dialog/trapTab; Inspector keeps topHeight/splitter props for T17.

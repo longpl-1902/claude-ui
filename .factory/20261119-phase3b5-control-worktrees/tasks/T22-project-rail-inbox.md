@@ -68,3 +68,6 @@ See plan.md "Final decisions after the UX rebuttal" F1–F4 — items assigned t
 
 ## Addendum: responsive
 Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.
+
+## Addendum (orchestrator)
+Also implement the <1100px merged left drawer (rail + worktrees/tasks) that T14 left undone — see orchestrator-notes.md.
