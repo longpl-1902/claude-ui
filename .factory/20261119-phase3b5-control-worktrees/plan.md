@@ -528,3 +528,6 @@ Window sizes to support: 900×600 (min) · 1100×700 · 1440×900 · 1920×1080 
 
 ## Two monitors (user request, 2026-11-19)
 User works on a 27" + 24" pair. **Wave 12b: T34** multi-window (Chat window per session, Project window per project, drag-out / Ctrl+Shift+N), shared live state across windows, per-display placement memory with rescue when a monitor disappears, mixed-DPI correctness, notification focus goes to the right window. Order: wave 12 T31 → wave 12b T34 → wave 13 T32 (T32 review must include a two-monitor check).
+
+## Header fit (user-confirmed bug, 2026-11-19)
+- **Wave 12a: T35** measure-based header overflow (runs after T31, before T34).
