@@ -81,7 +81,9 @@
 .ac-acc-radio--on .ac-acc-radio__dot { background: #8FB4FF; }
 .ac-acc-radio__text { display: flex; flex-direction: column; gap: 2px; }
 .ac-acc-radio__title { font-size: 13px; font-weight: 500; }
-.ac-acc-radio:focus-visible, .ac-acc-back:focus-visible { outline: 2px solid #8FB4FF; outline-offset: 2px; }
+.ac-acc-radio { position: relative; }
+.ac-acc-radio__input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.ac-acc-radio:has(.ac-acc-radio__input:focus-visible), .ac-acc-back:focus-visible { outline: 2px solid #8FB4FF; outline-offset: 2px; }
 
 .ac-acc-session { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--ac-border); background: var(--ac-bg-card); border-radius: var(--ac-radius-card); }
 .ac-acc-session__team { font-weight: 500; }
