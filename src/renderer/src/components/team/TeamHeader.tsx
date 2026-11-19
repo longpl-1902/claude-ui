@@ -2,8 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AccountView, FolderResolution } from '@shared/types'
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
+import { NeedsYouButton } from '../rail/NeedsYouInbox'
+import { useAttentionStore } from '../../store/useAttentionStore'
 import { ChevronDownIcon, LockIcon, TerminalIcon } from '../ui/Icons'
 import { formatTokens } from '@shared/format'
+import { tokenHeadline } from '@shared/teamDefaults'
 import {
   deriveProjects,
   selectActiveAccount,
@@ -87,7 +90,8 @@ export function TeamHeader() {
   const exitDemo = useConsoleStore((s) => s.exitDemo)
   const nowMs = useConsoleStore((s) => s.nowMs)
   const projectKey = useConsoleStore((s) => s.projectKey)
-  const setProject = useConsoleStore((s) => s.setProject)
+  const usageToday = useConsoleStore((s) => s.usageToday)
+  const hubProjects = useAttentionStore((s) => s.snapshot.projects)
   const controlSessions = useControlStore((s) => s.sessions)
   const interrupt = useControlStore((s) => s.interrupt)
   const openStartForm = useControlStore((s) => s.openStartForm)
@@ -104,6 +108,17 @@ export function TeamHeader() {
     const i = value.indexOf('|')
     void selectSession({ mode: 'session', accountId: value.slice(0, i), sessionId: value.slice(i + 1) })
   }
+  const tokensTodayAll = useMemo(
+    () => Object.values(usageToday?.byAccount ?? {}).reduce((n, t) => n + tokenHeadline(t), 0),
+    [usageToday]
+  )
+  const tokensTodayTitle = useMemo(
+    () =>
+      hubProjects.length === 0
+        ? 'All accounts, all projects'
+        : `All accounts, all projects. Per project: ${hubProjects.map((p) => `${p.name} ${formatTokens(p.tokensToday)}`).join(', ')}`,
+    [hubProjects]
+  )
   const demo = teamMode === 'demo'
   const live = !demo && team.source === 'live'
   const narrow = useMaxWidth(HEADER_OVERFLOW_MAX)
@@ -247,21 +262,11 @@ export function TeamHeader() {
         </span>
       )}
       {live && <span className="ac-header__badge ac-header__badge--live">LIVE</span>}
-      <select
-        className="ac-header__picker ac-header__picker--project"
-        aria-label="Project"
-        title={current?.root ?? projectKey ?? undefined}
-        value={projectKey ?? ''}
-        onChange={(e) => setProject(e.target.value)}
-      >
-        {projectKey === null && <option value="">{projects.length === 0 ? 'No projects' : 'Select project'}</option>}
-        {projectKey !== null && !current && <option value={projectKey}>{projectKey.split('/').filter(Boolean).pop() ?? projectKey}</option>}
-        {projects.map((p) => (
-          <option key={p.key} value={p.key} title={p.root}>
-            {p.liveCount > 0 ? `${p.name} · ${p.liveCount} live` : p.name}
-          </option>
-        ))}
-      </select>
+      {!demo && projectName && (
+        <span className="ac-header__project" title={projectRoot || projectName}>
+          {projectName}
+        </span>
+      )}
       <select className="ac-header__picker" aria-label="Session" value={selectedValue} onChange={(e) => onPick(e.target.value)}>
         <option value="auto">Auto (latest)</option>
         {projectSessions.map((x) => {
@@ -303,6 +308,7 @@ export function TeamHeader() {
         <ChevronDownIcon size={12} color="var(--ac-text-muted)" />
       </button>
       <div className="ac-header__spacer" />
+      <NeedsYouButton />
       <div className="ac-header__counters">
         {!narrow && (
           <>
@@ -320,6 +326,11 @@ export function TeamHeader() {
         {!narrow && (
           <span>
             Tokens <strong>{formatTokens(counters.tokens)}</strong>
+          </span>
+        )}
+        {!narrow && (
+          <span title={tokensTodayTitle}>
+            Tokens today <strong>{formatTokens(tokensTodayAll)}</strong>
           </span>
         )}
       </div>
@@ -349,7 +360,8 @@ export function TeamHeader() {
             >
               <div className="ac-header__menu-info" role="presentation">
                 <strong>{counters.agents}</strong> agents · <strong>{counters.running}</strong> running · Tokens{' '}
-                <strong>{formatTokens(counters.tokens)}</strong>
+                <strong>{formatTokens(counters.tokens)}</strong> · Tokens today{' '}
+                <strong>{formatTokens(tokensTodayAll)}</strong>
               </div>
               {actionButtons(true)}
             </div>
