@@ -8,6 +8,8 @@ export interface UsageCounterDeps {
   nowMs(): number
   /** local YYYY-MM-DD */
   localDay(ms: number): string
+  /** Project key of a transcript file (for todayByProject); absent: everything lands under ''. */
+  projectKeyOf?(filePath: string): string
 }
 export interface UsageCounter {
   /** queue a file for an initial or incremental read */
@@ -16,6 +18,8 @@ export interface UsageCounter {
   pump(): Promise<boolean>
   /** totals for localDay(nowMs()) only */
   today(): UsageToday
+  /** Today's totals per project key (same message.id dedupe as today()). */
+  todayByProject(): Record<string, TokenTotals>
   forgetAccount(accountId: string): void
 }
 
@@ -96,6 +100,21 @@ export function createUsageCounter(deps: UsageCounterDeps): UsageCounter {
         t.cacheRead += e.totals.cacheRead
       }
       return { day: currentDay, byAccount }
+    },
+
+    todayByProject() {
+      rollover()
+      const out: Record<string, TokenTotals> = {}
+      for (const e of byId.values()) {
+        const first = e.files.values().next().value as string | undefined
+        const key = first !== undefined && deps.projectKeyOf ? deps.projectKeyOf(first) : ''
+        const t = (out[key] ??= { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 })
+        t.input += e.totals.input
+        t.output += e.totals.output
+        t.cacheCreation += e.totals.cacheCreation
+        t.cacheRead += e.totals.cacheRead
+      }
+      return out
     },
 
     forgetAccount(accountId) {

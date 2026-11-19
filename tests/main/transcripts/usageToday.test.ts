@@ -230,3 +230,29 @@ describe('R-09 day rollover and forgetAccount', () => {
     expect(counter.today().byAccount.two!.input).toBe(2)
   })
 })
+
+describe('R-26 todayByProject', () => {
+  it('R-26 groups the deduped totals by the injected project key of the file', async () => {
+    const files = {
+      'C:/p/a/s1.jsonl': jsonl([...msgLine('m1', [1, 2], 5), ...msgLine('m2', [10, 20], 6)]),
+      'C:/p/b/s2.jsonl': jsonl([...msgLine('m3', [100, 200], 7)]),
+      'C:/p/a/s1-fork.jsonl': jsonl([...msgLine('m1', [1, 2], 5)]) // same message.id in a fork copy: counted once
+    }
+    const fs = createMemoryByteFs(files)
+    const counter = createUsageCounter({ fs, nowMs: () => NOW_MS, localDay: utcDay, projectKeyOf: (p) => (p.includes('/a/') ? 'proj-a' : 'proj-b') })
+    for (const p of Object.keys(files)) counter.addFile(p, 'acme')
+    while (await counter.pump());
+    expect(counter.todayByProject()).toEqual({
+      'proj-a': { input: 11, output: 22, cacheCreation: 0, cacheRead: 0 },
+      'proj-b': { input: 100, output: 200, cacheCreation: 0, cacheRead: 0 }
+    })
+    expect(counter.today().byAccount.acme).toEqual({ input: 111, output: 222, cacheCreation: 0, cacheRead: 0 })
+  })
+
+  it('R-26 without projectKeyOf everything lands under the empty key', async () => {
+    const { counter, drain } = make({ 'C:/p/a/s1.jsonl': jsonl([...msgLine('m1', [1, 2], 5)]) })
+    counter.addFile('C:/p/a/s1.jsonl', 'acme')
+    await drain()
+    expect(counter.todayByProject()).toEqual({ '': { input: 1, output: 2, cacheCreation: 0, cacheRead: 0 } })
+  })
+})

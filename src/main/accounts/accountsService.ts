@@ -1,6 +1,7 @@
 import { posix, win32 } from 'node:path'
 import type { HostEnv, WriteFs } from '../contracts'
 import type { PtyManagerApi } from '../pty/types'
+import type { ControlManager } from '../control/controlManager'
 import { ACCOUNT_COLORS } from '@shared/accountsDefaults'
 import { isFallbackPattern, matchFolder, type MatchOptions } from '@shared/folderRules'
 import { checkLaunch as checkLaunchRules } from '@shared/safety'
@@ -10,6 +11,8 @@ import type {
   AccountsFile,
   AccountsSnapshot,
   AccountView,
+  ControlStartRequest,
+  ControlStartResult,
   FolderResolution,
   FolderRule,
   LaunchCheck,
@@ -43,6 +46,7 @@ export interface AccountsService {
   resolveFolder(folder: string): Promise<FolderResolution>
   checkLaunch(folder: string, accountId: string): Promise<LaunchCheck>
   launchClaude(req: PtySpawnRequest): Promise<PtySpawnResult>
+  launchControlled(req: ControlStartRequest): Promise<ControlStartResult>
   signIn: SignInController
   onChanged(cb: (s: AccountsSnapshot) => void): () => void
 }
@@ -59,6 +63,8 @@ export function createAccountsService(deps: {
   pty: PtyManagerApi
   watchFile: WatchFile
   claudeFound: () => boolean
+  /** Controlled sessions: create + the ones in starting/idle/busy (they count as running for the account lock). */
+  control?: { create: ControlManager['create']; running: () => { cwd: string; accountId: string }[] }
 }): AccountsService {
   const { fs, host, pty } = deps
   const { home, platform } = host
@@ -81,7 +87,8 @@ export function createAccountsService(deps: {
     return run
   }
 
-  const claudeSessions = (): PtyInfo[] => pty.list().filter((p) => p.purpose === 'claude' && p.exitCode === undefined)
+  const ptySessions = (): PtyInfo[] => pty.list().filter((p) => p.purpose === 'claude' && p.exitCode === undefined)
+  const controlRunning = (): { cwd: string; accountId: string }[] => deps.control?.running() ?? []
 
   const ruleFolders = (rules: readonly FolderRule[]): string[] => {
     const out: string[] = []
@@ -115,8 +122,10 @@ export function createAccountsService(deps: {
     for (const d of dets) {
       if (isAbsoluteFor(d.absPath, platform)) d.display = await readDisplayFields(fs, d.absPath, home, platform)
     }
-    const running = claudeSessions()
-    const locked = (id: string): boolean => f.safety.lockAccountOnTeamStart && running.some((s) => s.accountId === id)
+    const ptys = ptySessions()
+    const ctl = controlRunning()
+    const locked = (id: string): boolean =>
+      f.safety.lockAccountOnTeamStart && (ptys.some((s) => s.accountId === id) || ctl.some((s) => s.accountId === id))
 
     const accounts: AccountView[] = []
     for (const p of f.profiles) {
@@ -139,18 +148,19 @@ export function createAccountsService(deps: {
       accounts.push(view)
     }
 
-    const sessions: RunningSession[] = running.map((s) => {
-      const out: RunningSession = {
-        teamName: pathMod.basename(s.cwd.replace(/[\\/]+$/, '')) || s.cwd,
-        path: toDisplayPath(s.cwd, home, platform),
-        accountId: s.accountId ?? '',
-        agentCount: 1,
-        ptyId: s.id
-      }
-      return out
+    const mk = (cwd: string, accountId: string): RunningSession => ({
+      teamName: pathMod.basename(cwd.replace(/[\/]+$/, '')) || cwd,
+      path: toDisplayPath(cwd, home, platform),
+      accountId,
+      agentCount: 1
     })
-    const newest = running.reduce<PtyInfo | undefined>((a, b) => (!a || b.startedAt >= a.startedAt ? b : a), undefined)
-    const activeAccountId = newest?.accountId ?? f.defaultAccountId ?? ''
+    const sessions: RunningSession[] = [
+      ...ptys.map((s) => ({ ...mk(s.cwd, s.accountId ?? ''), ptyId: s.id })),
+      ...ctl.map((s) => mk(s.cwd, s.accountId))
+    ]
+    const newest = ptys.reduce<PtyInfo | undefined>((x, y) => (!x || y.startedAt >= x.startedAt ? y : x), undefined)
+    // controlled sessions carry no start time here: the newest pty wins, else the last controlled one
+    const activeAccountId = newest?.accountId ?? ctl[ctl.length - 1]?.accountId ?? f.defaultAccountId ?? ''
 
     return {
       accounts,
@@ -227,7 +237,7 @@ export function createAccountsService(deps: {
       profiles: f.profiles,
       rules: f.rules,
       safety: f.safety,
-      sessions: claudeSessions().map((s) => ({ path: s.cwd, accountId: s.accountId ?? '' })),
+      sessions: [...ptySessions().map((s) => ({ path: s.cwd, accountId: s.accountId ?? '' })), ...controlRunning().map((s) => ({ path: s.cwd, accountId: s.accountId }))],
       match
     })
   const check = async (folder: string, accountId: string): Promise<LaunchCheck> => checkWith(await serial(ensure), folder, accountId)
@@ -410,6 +420,39 @@ export function createAccountsService(deps: {
           rows: req.rows
         })
         return r.ok ? { ok: true, ptyId: r.id } : { ok: false, reason: r.reason }
+      })
+      if (out.ok) await emitChanged()
+      return out
+    },
+
+    async launchControlled(req) {
+      const control = deps.control
+      if (!control || !isRecord(req) || typeof req.cwd !== 'string' || typeof req.accountId !== 'string') {
+        return { ok: false, reason: 'invalid-args' }
+      }
+      const cwd = expandHome(req.cwd.trim(), home)
+      if (!isAbsoluteFor(cwd, platform) || !(await fs.exists(cwd))) return { ok: false, reason: 'invalid-folder' }
+      // Check and create in one serial block so a second quick launch sees the first session. Never spawns here (D1).
+      const out = await serial(async (): Promise<ControlStartResult> => {
+        const f = await ensure()
+        const chk = checkWith(f, cwd, req.accountId)
+        if (!chk.allowed) return { ok: false, reason: chk.blockedReason ?? 'unknown-account' }
+        if (chk.warnings.length > 0 && req.confirmed !== true) {
+          return { ok: false, reason: 'needs-confirmation', warnings: chk.warnings }
+        }
+        const profile = f.profiles.find((p) => p.id === req.accountId)
+        if (!profile) return { ok: false, reason: 'unknown-account' }
+        const abs = expandHome(profile.configDir, home)
+        if (!isAbsoluteFor(abs, platform)) return { ok: false, reason: 'invalid-args' }
+        const info = control.create({
+          cwd,
+          accountId: profile.id,
+          configDirAbs: isDefaultConfigDir(abs, home, platform) ? null : abs,
+          permissionMode: req.permissionMode ?? 'default',
+          ...(req.model !== undefined ? { model: req.model } : {}),
+          ...(req.resume !== undefined ? { resume: req.resume } : {})
+        })
+        return { ok: true, controlId: info.id }
       })
       if (out.ok) await emitChanged()
       return out

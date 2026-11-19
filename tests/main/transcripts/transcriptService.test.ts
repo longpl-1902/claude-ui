@@ -23,6 +23,7 @@ import {
   HOME,
   NOW_MS,
   PID_LIVE,
+  PROJ_DEMO,
   PROJ_OTHER,
   ROOTS,
   S1,
@@ -526,5 +527,186 @@ describe('P3-T11 project grouping', () => {
     expect(svc.snapshot().sessionId).toBe(S1)
     await svc.select({ mode: 'auto' })
     expect(svc.getSelection()).toEqual({ mode: 'auto' })
+  })
+})
+
+describe('R-04/R-05/R-18 control integration', () => {
+  const CTL = 'cccccccc-aaaa-4bbb-8ccc-0000000000cc'
+  const ctlPath = `${ACME_DIR}/projects/${PROJ_DEMO}/${CTL}.jsonl`
+  const editLines = (sec: number) =>
+    jsonl(assistantBlocks([toolUseBlock('toolu_ed_1', 'Edit', { file_path: 'a.ts', old_string: 'a', new_string: 'b' })], { ts: at(sec), messageId: 'msg_ed_1', stopReason: 'tool_use', usage: usage(1, 1) }))
+
+  function withControl(hint: { current: PtyHint | null }, ctl: { current: { sessionId: string; controlId: string }[] } = { current: [] }) {
+    const tree = buildTranscriptTree()
+    const fs = createMemoryByteFs(tree.files, { mtimes: tree.mtimes, caseInsensitive: true })
+    const watchers: FakeWatcher[] = []
+    const watchDir: WatchDir = (dir, o, cb) => {
+      const w: FakeWatcher = { dir, opts: o, cb, closed: false }
+      watchers.push(w)
+      return { close: () => void (w.closed = true) }
+    }
+    const emit = (kind: 'add' | 'change' | 'unlink', p: string): void => {
+      for (const w of watchers) if (!w.closed && norm(p).startsWith(norm(w.dir) + '/')) w.cb(kind, p)
+    }
+    const alive = new Set([PID_LIVE])
+    const svc = createTranscriptService({
+      fs,
+      host: { home: HOME, platform: 'win32', env: {} },
+      roots: async () => ROOTS,
+      ptyHint: () => null,
+      controlHint: () => hint.current,
+      controlledSessions: () => ctl.current,
+      watchDir,
+      isPidAlive: (pid) => alive.has(pid),
+      nowMs: () => Date.now(),
+      localDay: utcDay,
+      setTimer: (fn, ms) => setTimeout(fn, ms),
+      clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
+    })
+    return { tree, fs, svc, emit, alive }
+  }
+  const hookEv = (over: Record<string, unknown> = {}) =>
+    ({ event: 'PermissionRequest', sessionId: S1, receivedMs: NOW_MS - 1000, toolName: 'Bash', ...over }) as never
+
+  it('R-04 a control hint wins over the registry pick and waits for its transcript', async () => {
+    const hint = { current: { pid: 1, cwd: 'd:/work/demo', startedAtMs: 0, accountId: 'acme', sessionId: CTL } as PtyHint | null }
+    const { svc, fs, emit } = track(withControl(hint))
+    await svc.start()
+    await flush(3000)
+    expect(svc.snapshot()).toMatchObject({ waitingForSession: true })
+    fs.set(ctlPath, jsonl([userPrompt('hello', { ts: at(500), sessionId: CTL })]))
+    emit('add', ctlPath)
+    await flush(3000)
+    expect(svc.snapshot().sessionId).toBe(CTL)
+  })
+
+  it('R-04 a control hint is held like a pty: it stays selected although S1 is live', async () => {
+    const hint = { current: null as PtyHint | null }
+    const env = track(withControl(hint))
+    const { svc, fs, emit } = env
+    await svc.start()
+    await flush(3000)
+    expect(svc.snapshot().sessionId).toBe(S1)
+    fs.set(ctlPath, jsonl([userPrompt('hello', { ts: at(500), sessionId: CTL })]))
+    hint.current = { pid: 1, cwd: 'd:/work/demo', startedAtMs: 0, accountId: 'acme', sessionId: CTL }
+    svc.onPtyChanged()
+    emit('add', ctlPath)
+    await flush(3000)
+    expect(svc.snapshot().sessionId).toBe(CTL)
+    emit('change', env.tree.paths.registryLive)
+    await flush(3000)
+    expect(svc.snapshot().sessionId).toBe(CTL)
+  })
+
+  it('R-05 listSessions marks controlled sessions with their controlId', async () => {
+    const ctl = { current: [{ sessionId: S1, controlId: 'ctl-1' }] }
+    const { svc } = track(withControl({ current: null }, ctl))
+    await svc.start()
+    const list = await svc.listSessions()
+    expect(list.find((s) => s.sessionId === S1)).toMatchObject({ controlled: true, controlId: 'ctl-1', registryPid: PID_LIVE })
+    expect(list.find((s) => s.sessionId === S4)!.controlled).toBeUndefined()
+  })
+
+  it('R-18 ingestHook changes the snapshot only for the selected session', async () => {
+    const { svc } = track(withControl({ current: null }))
+    await svc.start()
+    await flush(3000)
+    const stable = (x: TranscriptService): string => JSON.stringify(x.snapshot(), (k, v) => (k === 'now' || k === 'elapsedSec' ? undefined : v))
+    const before = stable(svc)
+    svc.ingestHook(hookEv({ sessionId: S4 }))
+    await flush(1000)
+    expect(stable(svc)).toBe(before)
+    svc.ingestHook(hookEv())
+    await flush(1000)
+    expect(stable(svc)).not.toBe(before)
+  })
+
+  it('R-18 a hook event pushes a snapshot and tails new bytes at once', async () => {
+    const { svc, fs, tree } = track(withControl({ current: null }))
+    const teams: TeamSnapshot[] = []
+    svc.onTeam((s) => teams.push(s))
+    await svc.start()
+    await flush(3000)
+    const n = teams.length
+    fs.append(tree.paths.s1, jsonl(assistantBlocks([toolUseBlock('toolu_h1', 'Read', { file_path: 'h.ts' })], { ts: at(101), messageId: 'msg_h1', stopReason: 'tool_use', usage: usage(1, 1) })))
+    svc.ingestHook(hookEv())
+    await flush(300) // push throttle is 250 ms; the poll tick (1 s) has not fired yet
+    expect(teams.length).toBeGreaterThan(n)
+    expect(JSON.stringify(teams[teams.length - 1])).toContain('h.ts')
+  })
+
+  it('R-18 a hook event for an unknown session schedules a session list refresh', async () => {
+    const { svc } = track(withControl({ current: null }))
+    const lists: SessionSummary[][] = []
+    svc.onSessions((s) => lists.push(s))
+    await svc.start()
+    await flush(3000)
+    await svc.listSessions()
+    const n = lists.length
+    svc.ingestHook(hookEv({ sessionId: S4, event: 'SessionStart' }))
+    await flush(1500)
+    expect(lists.length).toBe(n)
+    svc.ingestHook(hookEv({ sessionId: 'unknown-session', event: 'SessionStart' }))
+    await flush(1500)
+    expect(lists.length).toBe(n + 1)
+  })
+
+  it('R-04 onActivity fires once (debounced 500 ms) when an Edit lands in the selected session', async () => {
+    const { svc, fs, emit, tree } = track(withControl({ current: null }))
+    await svc.start()
+    await flush(3000)
+    const seen: string[] = []
+    svc.onActivity((k) => seen.push(k))
+    fs.append(tree.paths.s1, editLines(120))
+    emit('change', tree.paths.s1)
+    await flush(300)
+    expect(seen).toEqual([])
+    await flush(700)
+    expect(seen).toEqual(['file-edit'])
+    await flush(3000)
+    expect(seen).toEqual(['file-edit'])
+  })
+
+  it('R-04 non-edit tool use does not fire onActivity', async () => {
+    const { svc, fs, emit, tree } = track(withControl({ current: null }))
+    await svc.start()
+    await flush(3000)
+    const seen: string[] = []
+    svc.onActivity((k) => seen.push(k))
+    fs.append(tree.paths.s1, jsonl(assistantBlocks([toolUseBlock('toolu_r1', 'Read', { file_path: 'r.ts' })], { ts: at(121), messageId: 'msg_r1', stopReason: 'tool_use', usage: usage(1, 1) })))
+    emit('change', tree.paths.s1)
+    await flush(3000)
+    expect(seen).toEqual([])
+  })
+
+  it('R-04 isSessionLive reads the registry (live pid only)', async () => {
+    const { svc, alive } = track(withControl({ current: null }))
+    await svc.start()
+    expect(await svc.isSessionLive('acme', S1)).toBe(true)
+    expect(await svc.isSessionLive('', S1)).toBe(false)
+    expect(await svc.isSessionLive('acme', S4)).toBe(false)
+    alive.delete(PID_LIVE)
+    expect(await svc.isSessionLive('acme', S1)).toBe(false)
+  })
+
+  it('R-26 onFileChange forwards every watched transcript path of every project', async () => {
+    const { svc, emit, tree } = track(withControl({ current: null }))
+    await svc.start()
+    const paths: string[] = []
+    svc.onFileChange((p) => paths.push(p))
+    emit('change', tree.paths.s1)
+    emit('change', tree.paths.s4)
+    emit('change', tree.paths.registryLive)
+    expect(paths).toEqual([tree.paths.s1, tree.paths.s4])
+  })
+
+  it('R-26 usageByProject groups today by project key and sums to the account totals', async () => {
+    const { svc } = track(await boot())
+    await svc.listSessions()
+    await flush(3000)
+    const byProject = svc.usageByProject()
+    const sum = (m: Record<string, { input: number; output: number }>) => Object.values(m).reduce((a, t) => a + t.input + t.output, 0)
+    expect(sum(byProject)).toBe(sum(svc.usageToday().byAccount))
+    expect(Object.keys(byProject).length).toBeGreaterThanOrEqual(2)
   })
 })

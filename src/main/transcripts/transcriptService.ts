@@ -1,12 +1,12 @@
 import { watch } from 'chokidar'
 import { join as pathJoin } from 'node:path'
 import { EMPTY_TEAM_SNAPSHOT } from '../../shared/teamDefaults'
-import type { SessionSummary, TeamSelection, TeamSnapshot, UsageToday } from '../../shared/types'
+import type { HookEvent, SessionSummary, TeamSelection, TeamSnapshot, TokenTotals, UsageToday } from '../../shared/types'
 import type { HostEnv } from '../contracts'
 import { expandHome, normalizeForCompare, samePath } from '../accounts/paths'
 import { classifyTranscriptPath, projectsRoot, sessionsRegistryDir } from './layout'
 import { parseLine, shouldSkipRaw } from './parseLine'
-import { createProjectResolver, type ExecFn } from './projectResolver'
+import { createProjectResolver, provisionalProject, type ExecFn } from './projectResolver'
 import type { TranscriptRecord } from './records'
 import { createSessionIndex, type AutoPick, type ConfigRoot, type PtyHint, type SessionIndex } from './sessionIndex'
 import { createSessionModel, parseSubagentMeta, type SessionModel } from './sessionModel'
@@ -28,6 +28,10 @@ export interface TranscriptServiceDeps {
   host: HostEnv
   roots(): Promise<ConfigRoot[]>
   ptyHint(): PtyHint | null
+  /** Newest controlled session with state != draft/exited; wins over ptyHint in auto mode. */
+  controlHint?: () => PtyHint | null
+  /** Controlled sessions whose transcript id is known (marks them in the session list). */
+  controlledSessions?: () => { sessionId: string; controlId: string }[]
   watchDir: WatchDir
   isPidAlive(pid: number): boolean
   nowMs(): number
@@ -45,6 +49,11 @@ export interface TranscriptService {
   select(sel: TeamSelection): Promise<TeamSnapshot>
   getSelection(): TeamSelection
   usageToday(): UsageToday
+  usageByProject(): Record<string, TokenTotals>
+  ingestHook(e: HookEvent): void
+  onActivity(cb: (kind: 'file-edit') => void): () => void
+  isSessionLive(accountId: string, sessionId: string): Promise<boolean>
+  onFileChange(cb: (path: string) => void): () => void
   refreshRoots(): Promise<void>
   onPtyChanged(): void
   onTeam(cb: (s: TeamSnapshot) => void): () => void
@@ -117,6 +126,8 @@ const LARGE_RUNNING_ACTIVITY_CAP = 30
 const SNAPSHOT_EVENTS_CAP = 150
 const SNAPSHOT_CONSOLE_CAP = 100
 const MIDNIGHT_SLACK_MS = 1000
+const ACTIVITY_DEBOUNCE_MS = 500
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
 type Kind = 'main' | 'sub' | 'meta'
 interface FileRec {
@@ -149,7 +160,19 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   // a git answer re-pushes the session list (its projects were provisional until then)
   const projects = deps.execGit ? createProjectResolver({ exec: deps.execGit, platform, onResolved: () => scheduleSessions() }) : undefined
   const index: SessionIndex = createSessionIndex({ fs, platform, home: host.home, isPidAlive: deps.isPidAlive, nowMs: deps.nowMs, ...(projects ? { projects } : {}) })
-  const counter = createUsageCounter({ fs, nowMs: deps.nowMs, localDay: deps.localDay })
+  /** encoded project dir (normalized) -> cwd, learned from session listings; feeds the per-project usage keys */
+  const dirCwd = new Map<string, string>()
+  const projectKeyOf = (filePath: string): string => {
+    for (const r of roots) {
+      const info = classifyTranscriptPath(filePath, projectsRoot(r.configDirAbs))
+      if (!info) continue
+      const cwd = dirCwd.get(norm(info.projectDir))
+      const hit = cwd !== undefined ? projects?.cached(cwd) : undefined
+      return (hit ?? provisionalProject(cwd, info.projectDir, platform)).key
+    }
+    return ''
+  }
+  const counter = createUsageCounter({ fs, nowMs: deps.nowMs, localDay: deps.localDay, projectKeyOf })
 
   let disposed = false
   let roots: ConfigRoot[] = []
@@ -173,6 +196,10 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   const teamCbs = new Set<(s: TeamSnapshot) => void>()
   const sessionCbs = new Set<(s: SessionSummary[]) => void>()
   const usageCbs = new Set<(u: UsageToday) => void>()
+  const activityCbs = new Set<(k: 'file-edit') => void>()
+  const fileChangeCbs = new Set<(p: string) => void>()
+  let activityTimer: unknown = null
+  const knownSessions = new Set<string>()
   const fire = <T>(cbs: Set<(v: T) => void>, v: T): void => {
     for (const cb of [...cbs]) {
       try {
@@ -286,6 +313,19 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     }
   }
 
+  // ---- activity ----------------------------------------------------------------------------------------------
+  const isEdit = (rec: TranscriptRecord): boolean =>
+    rec.t === 'assistant'
+      ? rec.toolUses.some((u) => EDIT_TOOLS.has(u.name))
+      : rec.t === 'tool_results' && rec.results.some((r) => r.fileChange !== undefined && !r.isError)
+  function scheduleActivity(): void {
+    if (activityTimer !== null || disposed) return
+    activityTimer = deps.setTimer(() => {
+      activityTimer = null
+      if (!disposed) fire(activityCbs, 'file-edit')
+    }, ACTIVITY_DEBOUNCE_MS)
+  }
+
   // ---- tail --------------------------------------------------------------------------------------------------
   async function ingestLines(sel: Selected, source: string, lines: string[]): Promise<void> {
     let batch: TranscriptRecord[] = []
@@ -293,7 +333,10 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     for (const line of lines) {
       if (shouldSkipRaw(line)) continue
       const rec = parseLine(line)
-      if (rec) batch.push(rec)
+      if (rec) {
+        batch.push(rec)
+        if (sel === selected && isEdit(rec)) scheduleActivity()
+      }
       if (++n % BATCH_LINES === 0) {
         sel.model.ingest(source, batch)
         batch = []
@@ -425,11 +468,12 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
 
   /** `force`: a user's choice of project/auto, which must not be held back by the keep-current-pick stability rule. */
   async function applyAuto(force = false): Promise<void> {
-    const { pick, waitingForSession: waiting } = await index.pickAuto(roots, deps.ptyHint(), selection.mode === 'auto' ? selection.projectKey : undefined)
+    const hint = deps.controlHint?.() ?? deps.ptyHint()
+    const { pick, waitingForSession: waiting } = await index.pickAuto(roots, hint, selection.mode === 'auto' ? selection.projectKey : undefined)
     if (selection.mode !== 'auto' || disposed) return
     // Stability: without a pty (the highest tier) keep the current pick while it is still live, so two busy
     // sessions do not make the view flip (each flip re-backfills every sub-agent file).
-    if (!force && selected && deps.ptyHint() === null && (await isLive(selected.pick))) {
+    if (!force && selected && hint === null && (await isLive(selected.pick))) {
       if (selection.mode !== 'auto' || disposed) return
       if (waitingForSession) {
         waitingForSession = false
@@ -457,13 +501,29 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   }
 
   // ---- sessions / usage pushes -------------------------------------------------------------------------------
+
+  async function listAll(): Promise<SessionSummary[]> {
+    const list = await index.listSessions(roots)
+    const ctl = new Map((deps.controlledSessions?.() ?? []).map((c) => [c.sessionId, c.controlId]))
+    knownSessions.clear()
+    for (const s of list) {
+      knownSessions.add(s.sessionId)
+      if (s.cwd !== undefined) dirCwd.set(norm(s.projectDir), s.cwd)
+      const controlId = ctl.get(s.sessionId)
+      if (controlId !== undefined) {
+        s.controlled = true
+        s.controlId = controlId
+      }
+    }
+    return list
+  }
   function scheduleSessions(): void {
     if (disposed) return
     clear(sessionsTimer)
     sessionsTimer = deps.setTimer(() => {
       sessionsTimer = null
       bg(async () => {
-        const list = await index.listSessions(roots)
+        const list = await listAll()
         if (!disposed) fire(sessionCbs, list)
       })
     }, SESSIONS_DEBOUNCE_MS)
@@ -640,6 +700,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     }
     const info = classifyTranscriptPath(path, projectsRoot(root.configDirAbs))
     if (!info) return
+    if (/\.jsonl$/i.test(path)) fire(fileChangeCbs, path)
     if (info.kind !== 'meta' && kind !== 'unlink') {
       counter.addFile(path, root.accountId)
       kickPump()
@@ -707,7 +768,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       })
     },
     snapshot: () => currentSnapshot(),
-    listSessions: () => index.listSessions(roots),
+    listSessions: () => listAll(),
     select(sel) {
       return run(async () => {
         if (sel.mode === 'auto') {
@@ -728,12 +789,42 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     },
     getSelection: () => ({ ...selection }) as TeamSelection,
     usageToday: () => counter.today(),
+    usageByProject: () => counter.todayByProject(),
     refreshRoots() {
       return run(async () => {
         await syncRoots()
         scheduleSessions()
         if (selection.mode === 'auto') await applyAuto()
       })
+    },
+    ingestHook(e) {
+      if (disposed) return
+      const sel = selected
+      if (sel && e.sessionId === sel.pick.sessionId) {
+        sel.model.applyHook(e)
+        afterIngest(sel)
+        // same lane as the poll: pick up whatever the hook just announced without waiting for the next tick
+        bg(async () => {
+          if (sel !== selected) return
+          for (const rec of [...sel.files.values()]) {
+            if (sel !== selected) return
+            await processFile(sel, rec)
+          }
+        })
+        return
+      }
+      if (!knownSessions.has(e.sessionId) && sessionsTimer === null) scheduleSessions()
+    },
+    onActivity(cb) {
+      activityCbs.add(cb)
+      return () => void activityCbs.delete(cb)
+    },
+    async isSessionLive(accountId, sessionId) {
+      return (await index.readRegistry(roots)).some((l) => l.accountId === accountId && l.entry.sessionId === sessionId)
+    },
+    onFileChange(cb) {
+      fileChangeCbs.add(cb)
+      return () => void fileChangeCbs.delete(cb)
     },
     onPtyChanged() {
       scheduleRepick()
@@ -754,13 +845,15 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       disposed = true
       for (const rw of rootWatches.values()) for (const w of rw.watchers) w.w.close()
       rootWatches.clear()
-      for (const t of [pushTimer, sessionsTimer, usageTimer, pollTimer, midnightTimer]) clear(t)
-      pushTimer = sessionsTimer = usageTimer = pollTimer = midnightTimer = null
+      for (const t of [pushTimer, sessionsTimer, usageTimer, pollTimer, midnightTimer, activityTimer]) clear(t)
+      pushTimer = sessionsTimer = usageTimer = pollTimer = midnightTimer = activityTimer = null
       selected = null
       pendingTail.clear()
       teamCbs.clear()
       sessionCbs.clear()
       usageCbs.clear()
+      activityCbs.clear()
+      fileChangeCbs.clear()
     }
   }
 }
