@@ -540,3 +540,320 @@ describe('T13 external kill, editor, git, hooks, attention handlers', () => {
     expect(yml).toMatch(/extraResources:\s*\n\s*- from: resources\/hook\s*\n\s*to: hook/)
   })
 })
+
+// ---- T26: contract v5 handlers ----
+const V5_UUID = '33333333-aaaa-4bbb-8ccc-000000000003'
+const BAD = { ok: false, reason: 'invalid-args' }
+
+describe('T26 v5 control handlers', () => {
+  const control = () => {
+    const calls: string[] = []
+    const rec = (name: string, ret: unknown) => (...args: unknown[]) => {
+      calls.push(`${name}:${JSON.stringify(args)}`)
+      return ret
+    }
+    const c = {
+      ...(fakeControl().control as object),
+      details: rec('details', { controlId: 'c1' }),
+      sendRich: rec('sendRich', Promise.resolve(OK)),
+      refreshContext: rec('refreshContext', Promise.resolve(OK)),
+      mcpToggle: rec('mcpToggle', Promise.resolve(OK)),
+      mcpReconnect: rec('mcpReconnect', Promise.resolve(OK)),
+      fileSuggestions: rec('fileSuggestions', Promise.resolve(null)),
+      rewindPreview: rec('rewindPreview', Promise.resolve({ canRewind: true, filesChanged: [], insertions: 0, deletions: 0 })),
+      rewind: rec('rewind', Promise.resolve(OK)),
+      forkAt: rec('forkAt', { ok: true, controlId: 'c2' }),
+      setEffort: rec('setEffort', Promise.resolve(OK)),
+      setOutputStyle: rec('setOutputStyle', Promise.resolve(OK)),
+      rename: rec('rename', Promise.resolve(OK)),
+      getPlan: rec('getPlan', Promise.resolve({ exists: true, content: 'p' }))
+    }
+    return { control: c as never, calls }
+  }
+
+  it('valid calls reach the manager', async () => {
+    const { control: c, calls } = control()
+    const { invoke } = register({ control: c })
+    const png = { mediaType: 'image/png', dataBase64: 'AAAA' }
+    expect(await invoke('control:details', 'c1')).toEqual({ controlId: 'c1' })
+    expect(await invoke('control:send-rich', 'c1', 'hi', [png])).toEqual(OK)
+    expect(await invoke('control:refresh-context', 'c1')).toEqual(OK)
+    expect(await invoke('control:mcp-toggle', 'c1', 'github', false)).toEqual(OK)
+    expect(await invoke('control:mcp-reconnect', 'c1', 'github')).toEqual(OK)
+    expect(await invoke('control:rewind-preview', 'c1', V5_UUID)).toMatchObject({ canRewind: true })
+    expect(await invoke('control:rewind', 'c1', V5_UUID)).toEqual(OK)
+    expect(await invoke('control:fork-at', 'c1', V5_UUID)).toEqual({ ok: true, controlId: 'c2' })
+    expect(await invoke('control:set-effort', 'c1', 'xhigh')).toEqual(OK)
+    expect(await invoke('control:set-effort', 'c1', null)).toEqual(OK)
+    expect(await invoke('control:set-output-style', 'c1', 'Explanatory')).toEqual(OK)
+    expect(await invoke('control:set-output-style', 'c1', null)).toEqual(OK)
+    expect(await invoke('control:rename', 'c1', 'My title')).toEqual(OK)
+    expect(await invoke('control:get-plan', 'c1')).toEqual({ exists: true, content: 'p' })
+    expect(calls).toEqual([
+      'details:["c1"]',
+      `sendRich:["c1","hi",[${JSON.stringify(png)}]]`,
+      'refreshContext:["c1"]',
+      'mcpToggle:["c1","github",false]',
+      'mcpReconnect:["c1","github"]',
+      `rewindPreview:["c1","${V5_UUID}"]`,
+      `rewind:["c1","${V5_UUID}"]`,
+      `forkAt:["c1","${V5_UUID}"]`,
+      'setEffort:["c1","xhigh"]',
+      'setEffort:["c1",null]',
+      'setOutputStyle:["c1","Explanatory"]',
+      'setOutputStyle:["c1",null]',
+      'rename:["c1","My title"]',
+      'getPlan:["c1"]'
+    ])
+  })
+
+  it('invalid arguments never reach the manager', async () => {
+    const { control: c, calls } = control()
+    const { invoke } = register({ control: c })
+    const png = { mediaType: 'image/png', dataBase64: 'AAAA' }
+    expect(await invoke('control:details', 5)).toBeNull()
+    expect(await invoke('control:send-rich', 'c1', 'hi', Array.from({ length: 6 }, () => png))).toEqual(BAD)
+    expect(await invoke('control:send-rich', 'c1', 'hi', [{ mediaType: 'image/bmp', dataBase64: 'AAAA' }])).toEqual(BAD)
+    expect(await invoke('control:send-rich', 'c1', 'x'.repeat(32_001), [])).toEqual(BAD)
+    expect(await invoke('control:send-rich', 'c1', 'hi', [{ mediaType: 'image/png', dataBase64: 'A'.repeat(8 * 1024 * 1024) }])).toEqual(BAD)
+    expect(await invoke('control:mcp-toggle', 'c1', 'bad name!', true)).toEqual(BAD)
+    expect(await invoke('control:mcp-toggle', 'c1', 'github', 'yes')).toEqual(BAD)
+    expect(await invoke('control:mcp-reconnect', 'c1', '')).toEqual(BAD)
+    expect(await invoke('control:rewind-preview', 'c1', 'nope')).toEqual({ canRewind: false, filesChanged: [], insertions: 0, deletions: 0, error: 'invalid-args' })
+    expect(await invoke('control:rewind', 'c1', 'nope')).toEqual(BAD)
+    expect(await invoke('control:fork-at', 'c1', 'nope')).toEqual(BAD)
+    expect(await invoke('control:set-effort', 'c1', 'turbo')).toEqual(BAD)
+    expect(await invoke('control:set-output-style', 'c1', 'x'.repeat(129))).toEqual(BAD)
+    expect(await invoke('control:set-output-style', 'c1', '')).toEqual(BAD)
+    expect(await invoke('control:rename', 'c1', 'x'.repeat(201))).toEqual(BAD)
+    expect(await invoke('control:rename', 'c1', '   ')).toEqual(BAD)
+    expect(await invoke('control:get-plan', 7)).toEqual({ exists: false })
+    expect(calls).toEqual([])
+  })
+
+  it('control:start applies effort and output style to the new draft only when they were requested', async () => {
+    const { control: c, calls } = control()
+    const launch = vi.fn(async () => ({ ok: true, controlId: 'c9' }))
+    const { invoke } = register({ accounts: accountsWith(launch), control: c })
+    await invoke('control:start', GOOD_START)
+    expect(calls).toEqual([])
+    await invoke('control:start', { ...GOOD_START, effort: 'high', outputStyle: 'Learning' })
+    expect(calls).toEqual(['setEffort:["c9","high"]', 'setOutputStyle:["c9","Learning"]'])
+  })
+
+  it('R-19 creating the handlers calls no v5 manager method', () => {
+    const { control: c, calls } = control()
+    register({ control: c })
+    expect(calls).toEqual([])
+  })
+})
+
+describe('T26 control:file-suggestions', () => {
+  const gitOut = ['src/main/index.ts', 'src/main/control/controlSession.ts', 'README.md', 'src/renderer/App.tsx', 'docs/main-notes.md', ''].join('\n')
+  const noLive = () => ({ ...(fakeControl().control as object), fileSuggestions: async () => null }) as never
+
+  it('uses the running session when it answers', async () => {
+    const c = { ...(fakeControl().control as object), fileSuggestions: async () => [{ path: 'from/cli.ts' }] } as never
+    const execGit = vi.fn(async () => ({ stdout: gitOut }))
+    const { invoke } = register({ control: c, execGit })
+    expect(await invoke('control:file-suggestions', 'c1', 'C:/p', 'x')).toEqual([{ path: 'from/cli.ts' }])
+    expect(execGit).not.toHaveBeenCalled()
+  })
+
+  it('id null or a non-running session falls back to git ls-files, fuzzy-filtered', async () => {
+    const execGit = vi.fn(async () => ({ stdout: gitOut }))
+    const { invoke } = register({ control: noLive(), execGit })
+    const r = (await invoke('control:file-suggestions', null, 'C:/p', 'main')) as { path: string }[]
+    expect(execGit).toHaveBeenCalledWith(['-C', 'C:/p', 'ls-files', '-co', '--exclude-standard'])
+    expect(r.map((x) => x.path)).toEqual(expect.arrayContaining(['src/main/index.ts', 'docs/main-notes.md']))
+    expect(r.map((x) => x.path)).not.toContain('README.md')
+    expect(r.map((x) => x.path)).not.toContain('src/renderer/App.tsx')
+    const sub = (await invoke('control:file-suggestions', 'c1', 'C:/p', 'smi')) as { path: string }[]
+    expect(sub.map((x) => x.path)).toContain('src/main/index.ts')
+    expect((await invoke('control:file-suggestions', null, 'C:/p', '')) as unknown[]).toHaveLength(5)
+  })
+
+  it('caches the file list for 30 s per folder, caps it at 20 000 paths and answers at 50', async () => {
+    let now = 1_000_000
+    const many = Array.from({ length: 25_000 }, (_, i) => `dir/file${i}.ts`).join('\n')
+    const execGit = vi.fn(async () => ({ stdout: many }))
+    const { invoke } = register({ control: noLive(), execGit, now: () => now })
+    const first = (await invoke('control:file-suggestions', null, 'C:/p', 'file')) as { path: string }[]
+    expect(first).toHaveLength(50)
+    expect(await invoke('control:file-suggestions', null, 'C:/p', 'file24999')).toEqual([])
+    expect(((await invoke('control:file-suggestions', null, 'C:/p', 'file19999')) as unknown[]).length).toBeGreaterThan(0)
+    now += 29_000
+    await invoke('control:file-suggestions', null, 'C:/p', 'a')
+    expect(execGit).toHaveBeenCalledTimes(1)
+    await invoke('control:file-suggestions', null, 'C:/other', 'a')
+    expect(execGit).toHaveBeenCalledTimes(2)
+    now += 2_000
+    await invoke('control:file-suggestions', null, 'C:/p', 'a')
+    expect(execGit).toHaveBeenCalledTimes(3)
+  })
+
+  it('a failing git, bad arguments and no git dependency answer an empty list', async () => {
+    const { invoke } = register({
+      control: noLive(),
+      execGit: async () => {
+        throw new Error('not a repo')
+      }
+    })
+    expect(await invoke('control:file-suggestions', null, 'C:/p', 'a')).toEqual([])
+    expect(await invoke('control:file-suggestions', null, '', 'a')).toEqual([])
+    expect(await invoke('control:file-suggestions', 5 as never, 'C:/p', 'a')).toEqual([])
+    expect(await invoke('control:file-suggestions', null, 'C:/p', 'x'.repeat(257))).toEqual([])
+    expect(await register({ control: noLive() }).invoke('control:file-suggestions', null, 'C:/p', 'a')).toEqual([])
+  })
+})
+
+describe('T26 catalog, mcp, plugins and cli handlers', () => {
+  const DIR = { abs: 'C:/Users/u/.claude-acme', configDirAbs: 'C:/Users/u/.claude-acme', display: '~/.claude-acme' }
+  const DEFAULT_DIR = { abs: 'C:/Users/u/.claude', configDirAbs: null, display: '~/.claude' }
+  const preview = { previewId: 'p1', argvDisplay: ['claude', 'mcp', 'list'], cwd: 'C:/p', configDir: '~/.claude-acme', effect: 'e', warnings: [] }
+  const mcpReq = { projectRoot: 'C:/p', accountId: 'acme', name: 'gh', scope: 'user', transport: 'http', commandOrUrl: 'https://example.com/mcp', args: [], env: {}, headers: {} }
+
+  function services() {
+    const catalog = { list: vi.fn(async () => [{ kind: 'skill', name: 'a', scope: 'user', path: 'C:/skills/a/SKILL.md' }]) }
+    const claudeCli = {
+      mcpList: vi.fn(async () => ({ servers: [{ name: 's', scope: 'unknown', target: 'x', status: 'connected' }] })),
+      pluginList: vi.fn(async () => ({ plugins: [{ id: 'p@m', name: 'p', enabled: true, installPath: 'C:/plugins/p' }] })),
+      previewMcpAdd: vi.fn(() => preview),
+      previewMcpRemove: vi.fn(() => preview),
+      previewPlugin: vi.fn(() => preview),
+      apply: vi.fn(async () => ({ ok: true, output: 'done' }))
+    }
+    const resolveAccountDir = vi.fn(async (id: string) => (id === 'acme' ? DIR : id === 'def' ? DEFAULT_DIR : null))
+    const open = vi.fn(async () => OK)
+    let now = 5_000_000
+    const deps = { catalog, claudeCli, resolveAccountDir, openInEditor: { open }, now: () => now } as never
+    return { catalog, claudeCli, resolveAccountDir, open, deps, tick: (ms: number) => void (now += ms) }
+  }
+
+  it('catalog:list resolves the account dir, feeds plugin install paths (cached 5 min) and returns the items', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    const items = await invoke('catalog:list', 'C:/p', 'acme')
+    expect(items).toEqual([{ kind: 'skill', name: 'a', scope: 'user', path: 'C:/skills/a/SKILL.md' }])
+    expect(s.catalog.list).toHaveBeenCalledWith({ configDirAbs: DIR.abs, projectRoot: 'C:/p', plugins: [{ name: 'p', installPath: 'C:/plugins/p' }] })
+    expect(s.claudeCli.pluginList).toHaveBeenCalledWith({ configDirAbs: DIR.configDirAbs })
+    await invoke('catalog:list', null, 'acme')
+    expect(s.claudeCli.pluginList).toHaveBeenCalledTimes(1)
+    s.tick(5 * 60_000 + 1)
+    await invoke('catalog:list', null, 'acme')
+    expect(s.claudeCli.pluginList).toHaveBeenCalledTimes(2)
+    expect(await invoke('catalog:list', null, 'ghost')).toEqual([])
+    expect(await invoke('catalog:list', 5 as never, 'acme')).toEqual([])
+  })
+
+  it('plugins:list refreshes the cache and hides install paths; the default account uses a null config dir', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    await invoke('catalog:list', null, 'def')
+    expect(s.claudeCli.pluginList).toHaveBeenLastCalledWith({ configDirAbs: null })
+    const r = await invoke('plugins:list', 'def')
+    expect(r).toEqual({ plugins: [{ id: 'p@m', name: 'p', enabled: true }] })
+    expect(s.claudeCli.pluginList).toHaveBeenCalledTimes(2)
+    expect(await invoke('plugins:list', 'ghost')).toEqual({ plugins: [], error: 'unknown-account' })
+    expect(await invoke('plugins:list', '')).toEqual({ plugins: [], error: 'invalid-args' })
+  })
+
+  it('catalog:open opens only paths returned by the last catalog list', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    expect(await invoke('catalog:open', 'C:/skills/a/SKILL.md')).toEqual({ ok: false, reason: 'not-listed' })
+    await invoke('catalog:list', null, 'acme')
+    expect(await invoke('catalog:open', 'C:/skills/a/SKILL.md')).toEqual(OK)
+    expect(s.open).toHaveBeenCalledWith('C:/skills/a/SKILL.md')
+    expect(await invoke('catalog:open', 'C:/Windows/system32/cmd.exe')).toEqual({ ok: false, reason: 'not-listed' })
+    expect(await invoke('catalog:open', '')).toEqual(BAD)
+    expect(await invoke('catalog:open', 5 as never)).toEqual(BAD)
+    s.catalog.list.mockResolvedValueOnce([])
+    await invoke('catalog:list', null, 'acme')
+    expect(await invoke('catalog:open', 'C:/skills/a/SKILL.md')).toEqual({ ok: false, reason: 'not-listed' })
+    expect(s.open).toHaveBeenCalledTimes(1)
+  })
+
+  it('mcp:list runs claude mcp list in the project with the account dir, and stamps ranAt', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    const r = (await invoke('mcp:list', 'C:/p', 'acme')) as { servers: unknown[]; ranAt: string; error?: string }
+    expect(s.claudeCli.mcpList).toHaveBeenCalledWith({ cwd: 'C:/p', configDirAbs: DIR.configDirAbs })
+    expect(r.servers).toHaveLength(1)
+    expect(Number.isNaN(Date.parse(r.ranAt))).toBe(false)
+    expect(((await invoke('mcp:list', 'C:/p', 'ghost')) as { error?: string }).error).toBe('unknown-account')
+    expect(((await invoke('mcp:list', '', 'acme')) as { error?: string }).error).toBe('invalid-args')
+    expect(s.claudeCli.mcpList).toHaveBeenCalledTimes(1)
+  })
+
+  it('previews validate, then pass the account dir to the CLI runner; nothing runs until cli:apply', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    expect(await invoke('mcp:preview-add', mcpReq)).toEqual(preview)
+    expect(s.claudeCli.previewMcpAdd).toHaveBeenCalledWith({ ...mcpReq, configDirAbs: DIR.configDirAbs, configDirDisplay: DIR.display })
+    expect(await invoke('mcp:preview-remove', 'C:/p', 'acme', 'gh', 'user')).toEqual(preview)
+    expect(s.claudeCli.previewMcpRemove).toHaveBeenCalledWith({ cwd: 'C:/p', name: 'gh', scope: 'user', configDirAbs: DIR.configDirAbs, configDirDisplay: DIR.display })
+    expect(await invoke('mcp:preview-remove', 'C:/p', 'acme', 'gh', null)).toEqual(preview)
+    expect(await invoke('plugins:preview', 'acme', 'install', 'p@m')).toEqual(preview)
+    expect(s.claudeCli.previewPlugin).toHaveBeenCalledWith({ action: 'install', id: 'p@m', configDirAbs: DIR.configDirAbs, configDirDisplay: DIR.display })
+    expect(s.claudeCli.apply).not.toHaveBeenCalled()
+    expect(s.claudeCli.mcpList).not.toHaveBeenCalled()
+  })
+
+  it('invalid preview requests and unknown accounts never reach the runner', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    expect(await invoke('mcp:preview-add', { ...mcpReq, name: '--bad' })).toEqual(BAD)
+    expect(await invoke('mcp:preview-add', { ...mcpReq, scope: 'global' })).toEqual(BAD)
+    expect(await invoke('mcp:preview-add', null)).toEqual(BAD)
+    expect(await invoke('mcp:preview-add', { ...mcpReq, accountId: 'ghost' })).toEqual({ ok: false, reason: 'unknown-account' })
+    expect(await invoke('mcp:preview-remove', 'C:/p', 'acme', 'bad name', 'user')).toEqual(BAD)
+    expect(await invoke('mcp:preview-remove', 'C:/p', 'acme', 'gh', 'galaxy' as never)).toEqual(BAD)
+    expect(await invoke('plugins:preview', 'acme', 'explode' as never, 'p')).toEqual(BAD)
+    expect(await invoke('plugins:preview', 'acme', 'enable', '')).toEqual(BAD)
+    expect(await invoke('plugins:preview', 'ghost', 'enable', 'p')).toEqual({ ok: false, reason: 'unknown-account' })
+    expect(s.claudeCli.previewMcpAdd).not.toHaveBeenCalled()
+    expect(s.claudeCli.previewMcpRemove).not.toHaveBeenCalled()
+    expect(s.claudeCli.previewPlugin).not.toHaveBeenCalled()
+  })
+
+  it('cli:apply runs the stored preview and drops the plugin cache', async () => {
+    const s = services()
+    const { invoke } = register(s.deps)
+    await invoke('plugins:list', 'acme')
+    expect(await invoke('cli:apply', 'p1')).toEqual({ ok: true, output: 'done' })
+    expect(s.claudeCli.apply).toHaveBeenCalledWith('p1')
+    await invoke('catalog:list', null, 'acme')
+    expect(s.claudeCli.pluginList).toHaveBeenCalledTimes(2)
+    expect(await invoke('cli:apply', '')).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('cli:apply', 5 as never)).toEqual({ ok: false, reason: 'invalid-args' })
+  })
+
+  it('without the T25 services the channels keep their stubs (never run anything)', async () => {
+    const { invoke } = register()
+    expect(await invoke('catalog:list', null, 'acme')).toEqual([])
+    expect(await invoke('cli:apply', 'p1')).toEqual({ ok: false, reason: 'not-implemented' })
+  })
+})
+
+describe('T26 main wiring', () => {
+  const code = readFileSync(resolve(__dirname, '../../src/main/index.ts'), 'utf8').replace(/\/\/.*$/gm, '')
+
+  it('index.ts pushes control details, builds the catalog and CLI runner and hands them to the handlers', () => {
+    expect(code).toMatch(/control\.onDetails\(\(d\)\s*=>\s*broadcast\(IPC\.controlDetailsChanged,\s*d\)\)/)
+    expect(code).toMatch(/createCatalog\(\{\s*fs:\s*catalogFs/)
+    expect(code).toMatch(/createClaudeCli\(\{[^}]*exec:\s*cliExec/)
+    expect(code).toMatch(/createHandlers\(\{[\s\S]*catalog,\s*claudeCli,\s*resolveAccountDir,\s*execGit/)
+  })
+
+  it('the CLI exec wrapper resolves non-zero exits instead of rejecting, and credential files stay denied', () => {
+    expect(code).toMatch(/typeof e\.code === 'number'\)\s*return resolve\(\{[^}]*code: e\.code/)
+    expect(code).toMatch(/isDeniedPath\(p\)\) return null/)
+  })
+
+  it('handlers.ts stays free of fs / child_process / network (R-17) after the v5 wiring', () => {
+    const src = readFileSync(resolve(__dirname, '../../src/main/ipc/handlers.ts'), 'utf8')
+    expect(src).not.toMatch(/from\s+['"](node:)?(fs|fs\/promises|child_process|net|http|https|os|path)['"]/)
+    expect(src).not.toMatch(/\bfetch\(|https?:\/\//)
+  })
+})

@@ -1,13 +1,9 @@
+import type { CliPreview, CliRunResult, McpAddRequest, McpConfigured, PluginInfo } from '../../shared/types'
 import { buildChildEnv } from '../pty/childEnv'
 import type { ClaudeCommand } from '../pty/claudeBinary'
 import { maskArgv, maskText } from './mask'
 
-/** Local shapes, structurally equal to T23's McpConfigured / PluginInfo / McpAddRequest / CliPreview / CliRunResult. */
-export interface McpConfigured { name: string; scope: 'local' | 'user' | 'project' | 'plugin' | 'unknown'; transport?: string; target: string; status: string; pendingApproval?: boolean }
-export interface PluginInfo { id: string; name: string; marketplace?: string; version?: string; enabled: boolean; scope?: string; description?: string }
-export interface McpAddRequest { projectRoot: string; accountId: string; name: string; scope: 'local' | 'user' | 'project'; transport: 'stdio' | 'http' | 'sse'; commandOrUrl: string; args: string[]; env: Record<string, string>; headers: Record<string, string> }
-export interface CliPreview { previewId: string; argvDisplay: string[]; cwd: string; configDir: string; effect: string; warnings: string[] }
-export interface CliRunResult { ok: boolean; reason?: string; output?: string }
+export type { CliPreview, CliRunResult, McpAddRequest, McpConfigured, PluginInfo }
 
 export type CliExec = (
   file: string,

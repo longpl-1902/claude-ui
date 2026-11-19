@@ -4,9 +4,12 @@ import { safeExternalUrl } from '@shared/externalUrl'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
 import type {
-  AttentionPrefs, AttentionSnapshot, ControlPermissionMode, Effort, KillExternalRequest, OkResult, PtySpawnRequest, TeamSelection
+  AttentionPrefs, AttentionSnapshot, CatalogItem, ControlPermissionMode, Effort, FileSuggestion, KillExternalRequest, OkResult, PluginInfo,
+  PtySpawnRequest, TeamSelection
 } from '@shared/types'
 import type { AccountsService } from '../accounts/accountsService'
+import type { createCatalog } from '../catalog/catalog'
+import type { createClaudeCli } from '../catalog/claudeCli'
 import type { ControlManager } from '../control/controlManager'
 import type { WorktreeService } from '../git/worktreeService'
 import type { createHooksService } from '../hooks/hooksService'
@@ -50,6 +53,50 @@ export interface HandlerDeps {
     getPrefs(): AttentionPrefs
     setPrefs(p: AttentionPrefs): Promise<OkResult>
   }
+  /** T25 services (catalog scanner + claude mcp/plugin runner). */
+  catalog?: ReturnType<typeof createCatalog>
+  claudeCli?: ReturnType<typeof createClaudeCli>
+  /** Account -> real config folder (default dir resolved), env value (null = default dir) and a display string. */
+  resolveAccountDir?: (accountId: string) => Promise<{ abs: string; configDirAbs: string | null; display: string } | null>
+  /** Runs git with the given argv (no shell) and returns stdout; rejects on failure. */
+  execGit?: (args: string[]) => Promise<{ stdout: string }>
+  now?: () => number
+}
+
+export const FILE_LIST_TTL_MS = 30_000
+export const FILE_LIST_MAX = 20_000
+export const PLUGIN_CACHE_TTL_MS = 5 * 60_000
+export const FILE_SUGGESTIONS_MAX = 50
+
+/** Subsequence match, case-insensitive. Basename and prefix hits and short paths rank first. Top `limit`. */
+export function fuzzyFilter(paths: readonly string[], query: string, limit = FILE_SUGGESTIONS_MAX): FileSuggestion[] {
+  const q = query.toLowerCase()
+  if (q === '') return paths.slice(0, limit).map((path) => ({ path }))
+  const scored: { path: string; score: number }[] = []
+  for (const path of paths) {
+    const lower = path.toLowerCase()
+    let at = -1
+    let gaps = 0
+    let ok = true
+    for (const ch of q) {
+      const next = lower.indexOf(ch, at + 1)
+      if (next < 0) {
+        ok = false
+        break
+      }
+      if (at >= 0 && next !== at + 1) gaps++
+      at = next
+    }
+    if (!ok) continue
+    const base = lower.slice(lower.lastIndexOf('/') + 1)
+    let score = 100 - gaps * 3 - Math.min(40, lower.length / 4)
+    if (base.startsWith(q)) score += 60
+    else if (base.includes(q)) score += 40
+    else if (lower.includes(q)) score += 20
+    scored.push({ path, score })
+  }
+  scored.sort((a, b) => b.score - a.score || a.path.length - b.path.length || (a.path < b.path ? -1 : 1))
+  return scored.slice(0, limit).map((s) => ({ path: s.path, score: Math.round(s.score) }))
 }
 
 /** Validate and clean a spawn request. The renderer never chooses a command or arguments. */
@@ -70,7 +117,7 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
   const { accounts, pty } = deps
   const hasReal =
     accounts || pty || deps.pickFolder || deps.defaultCwd || deps.transcripts || deps.control || deps.worktrees || deps.hooks ||
-    deps.externalKiller || deps.openInEditor || deps.attention || deps.openExternal
+    deps.externalKiller || deps.openInEditor || deps.attention || deps.openExternal || deps.catalog || deps.claudeCli
   if (!hasReal) return mock
   const real: Partial<Handlers> = {}
   if (accounts) {
@@ -108,9 +155,33 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
         if (r?.kind === 'resume' && !r.fork && deps.isSessionLive && (await deps.isSessionLive(req.accountId, r.sessionId))) {
           return { ok: false, reason: 'session-live-elsewhere' }
         }
-        return accounts.launchControlled(req)
+        const started = await accounts.launchControlled(req)
+        if (started.ok && started.controlId) {
+          // launchControlled does not carry these two; a draft stores them for the CLI args of the first Send.
+          if (req.effort !== undefined) await deps.control!.setEffort(started.controlId, req.effort)
+          if (req.outputStyle !== undefined) await deps.control!.setOutputStyle(started.controlId, req.outputStyle)
+        }
+        return started
       }
     }
+  }
+  const fileCache = new Map<string, { at: number; files: string[] }>()
+  const listProjectFiles = async (cwd: string): Promise<string[]> => {
+    const nowMs = deps.now ?? ((): number => Date.now())
+    const hit = fileCache.get(cwd)
+    if (hit && nowMs() - hit.at < FILE_LIST_TTL_MS) return hit.files
+    let files: string[] = []
+    if (deps.execGit) {
+      try {
+        const r = await deps.execGit(['-C', cwd, 'ls-files', '-co', '--exclude-standard'])
+        files = r.stdout.split(/\r?\n/).filter((l) => l !== '').slice(0, FILE_LIST_MAX)
+      } catch {
+        files = []
+      }
+    }
+    fileCache.set(cwd, { at: nowMs(), files })
+    if (fileCache.size > 20) fileCache.delete(fileCache.keys().next().value as string)
+    return files
   }
   const { control } = deps
   if (control) {
@@ -125,11 +196,112 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
       'control:set-mode': (id, mode) => (allStrings(id) && PERMISSION_MODES.includes(mode) ? control.setMode(id, mode) : { ...INVALID_ARGS }),
       'control:list': () => control.list(),
       'control:get-stream': (id) => (allStrings(id) ? control.streamState(id) : null),
+      'control:details': (id) => (allStrings(id) ? control.details(id) : null),
+      'control:send-rich': (id, text, images) =>
+        allStrings(id, text) && text.length <= MAX_SEND && isImageList(images) ? control.sendRich(id, text, images) : { ...INVALID_ARGS },
+      'control:refresh-context': (id) => (allStrings(id) ? control.refreshContext(id) : { ...INVALID_ARGS }),
+      'control:mcp-toggle': (id, name, enabled) =>
+        allStrings(id) && isMcpName(name) && typeof enabled === 'boolean' ? control.mcpToggle(id, name, enabled) : { ...INVALID_ARGS },
+      'control:mcp-reconnect': (id, name) => (allStrings(id) && isMcpName(name) ? control.mcpReconnect(id, name) : { ...INVALID_ARGS }),
+      'control:file-suggestions': async (id, cwd, query) => {
+        if (!(id === null || str(id)) || !str(cwd, 4096) || cwd === '' || !str(query, 256)) return []
+        if (id !== null) {
+          const live = await control.fileSuggestions(id, query)
+          if (live) return live
+        }
+        return fuzzyFilter(await listProjectFiles(cwd), query)
+      },
+      'control:rewind-preview': (id, uuid) =>
+        allStrings(id) && isUuid(uuid)
+          ? control.rewindPreview(id, uuid)
+          : { canRewind: false, filesChanged: [], insertions: 0, deletions: 0, error: 'invalid-args' },
+      'control:rewind': (id, uuid) => (allStrings(id) && isUuid(uuid) ? control.rewind(id, uuid) : { ...INVALID_ARGS }),
+      'control:fork-at': (id, uuid) => (allStrings(id) && isUuid(uuid) ? control.forkAt(id, uuid) : { ok: false, reason: 'invalid-args' }),
+      'control:set-effort': (id, effort) =>
+        allStrings(id) && (effort === null || isEffort(effort)) ? control.setEffort(id, effort) : { ...INVALID_ARGS },
+      'control:set-output-style': (id, style) =>
+        allStrings(id) && (style === null || (str(style, 128) && style !== '')) ? control.setOutputStyle(id, style) : { ...INVALID_ARGS },
+      'control:rename': (id, title) => (allStrings(id) && str(title, 200) && title.trim() !== '' ? control.rename(id, title) : { ...INVALID_ARGS }),
+      'control:get-plan': (id) => (allStrings(id) ? control.getPlan(id) : { exists: false }),
       'team:pause-all': () => {
         const n = control.interruptAll()
         return n > 0 ? { ok: true, reason: String(n) } : { ok: false, reason: 'nothing-running' }
       }
     } satisfies Partial<Handlers>)
+  }
+  if (deps.catalog || deps.claudeCli) {
+    const nowMs = deps.now ?? ((): number => Date.now())
+    const noAccount: OkResult = { ok: false, reason: 'unknown-account' }
+    const dirOf = async (accountId: string): Promise<{ abs: string; configDirAbs: string | null; display: string } | null> =>
+      deps.resolveAccountDir ? deps.resolveAccountDir(accountId) : null
+    const plugins = new Map<string, { at: number; plugins: (PluginInfo & { installPath?: string })[]; error?: string }>()
+    const loadPlugins = async (accountId: string, force: boolean): Promise<{ plugins: (PluginInfo & { installPath?: string })[]; error?: string }> => {
+      const hit = plugins.get(accountId)
+      if (!force && hit && nowMs() - hit.at < PLUGIN_CACHE_TTL_MS) return hit
+      const dir = await dirOf(accountId)
+      if (!dir || !deps.claudeCli) return { plugins: [], error: 'unknown-account' }
+      const r = await deps.claudeCli.pluginList({ configDirAbs: dir.configDirAbs })
+      if (!r.error) plugins.set(accountId, { at: nowMs(), ...r })
+      return r
+    }
+    let listedPaths = new Set<string>()
+    if (deps.catalog) {
+      const catalog = deps.catalog
+      real['catalog:list'] = async (projectRoot, accountId) => {
+        if (!(projectRoot === null || (str(projectRoot, 4096) && projectRoot !== '')) || !str(accountId) || accountId === '') return []
+        const dir = await dirOf(accountId)
+        if (!dir) return []
+        const pl = (await loadPlugins(accountId, false)).plugins.flatMap((p) => (p.installPath ? [{ name: p.name, installPath: p.installPath }] : []))
+        const items: CatalogItem[] = await catalog.list({ configDirAbs: dir.abs, projectRoot, plugins: pl })
+        listedPaths = new Set(items.map((i) => i.path))
+        return items
+      }
+      real['catalog:open'] = async (path) => {
+        if (!str(path, 4096) || path === '') return { ...INVALID_ARGS }
+        if (!listedPaths.has(path)) return { ok: false, reason: 'not-listed' }
+        return deps.openInEditor ? deps.openInEditor.open(path) : { ok: false, reason: 'unavailable' }
+      }
+    }
+    if (deps.claudeCli) {
+      const cli = deps.claudeCli
+      real['mcp:list'] = async (projectRoot, accountId) => {
+        const ranAt = new Date(nowMs()).toISOString()
+        if (!str(projectRoot) || projectRoot === '' || !str(accountId) || accountId === '') return { servers: [], ranAt, error: 'invalid-args' }
+        const dir = await dirOf(accountId)
+        if (!dir) return { servers: [], ranAt, error: 'unknown-account' }
+        return { ...(await cli.mcpList({ cwd: projectRoot, configDirAbs: dir.configDirAbs })), ranAt }
+      }
+      real['mcp:preview-add'] = async (req) => {
+        if (!isMcpAddRequest(req)) return { ...INVALID_ARGS }
+        const dir = await dirOf(req.accountId)
+        return dir ? cli.previewMcpAdd({ ...req, configDirAbs: dir.configDirAbs, configDirDisplay: dir.display }) : { ...noAccount }
+      }
+      real['mcp:preview-remove'] = async (projectRoot, accountId, name, scope) => {
+        if (!str(projectRoot) || projectRoot === '' || !str(accountId) || accountId === '' || !isMcpName(name)) return { ...INVALID_ARGS }
+        if (!(scope === null || scope === 'local' || scope === 'user' || scope === 'project')) return { ...INVALID_ARGS }
+        const dir = await dirOf(accountId)
+        return dir ? cli.previewMcpRemove({ cwd: projectRoot, name, scope, configDirAbs: dir.configDirAbs, configDirDisplay: dir.display }) : { ...noAccount }
+      }
+      real['plugins:list'] = async (accountId) => {
+        if (!str(accountId) || accountId === '') return { plugins: [], error: 'invalid-args' }
+        const r = await loadPlugins(accountId, true)
+        const out: { plugins: PluginInfo[]; error?: string } = { plugins: r.plugins.map(({ installPath: _p, ...info }) => info) }
+        if (r.error !== undefined) out.error = r.error
+        return out
+      }
+      real['plugins:preview'] = async (accountId, action, id) => {
+        if (!str(accountId) || accountId === '' || !(action === 'enable' || action === 'disable' || action === 'install' || action === 'uninstall')) return { ...INVALID_ARGS }
+        if (!str(id, 256) || id === '') return { ...INVALID_ARGS }
+        const dir = await dirOf(accountId)
+        return dir ? cli.previewPlugin({ action, id, configDirAbs: dir.configDirAbs, configDirDisplay: dir.display }) : { ...noAccount }
+      }
+      real['cli:apply'] = async (previewId) => {
+        if (!str(previewId) || previewId === '') return { ok: false, reason: 'invalid-args' }
+        const r = await cli.apply(previewId)
+        plugins.clear()
+        return r
+      }
+    }
   }
   if (deps.externalKiller) {
     const killer = deps.externalKiller
@@ -295,7 +467,7 @@ export function isImageList(v: unknown): boolean {
   return Array.isArray(v) && v.length <= MAX_IMAGES_PER_TURN && v.every(isImageAttachment)
 }
 
-const MCP_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/
+const MCP_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/
 export const isMcpName = (v: unknown): v is string => typeof v === 'string' && MCP_NAME_RE.test(v)
 
 export function isMcpAddRequest(v: unknown): boolean {

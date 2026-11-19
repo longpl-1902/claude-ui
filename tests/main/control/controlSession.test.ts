@@ -33,11 +33,15 @@ describe('R-19 nothing is spawned or written until the user sends', () => {
     expect(h.spawnCalls).toHaveLength(0)
     expect(h.mgr.get(id)).toMatchObject({ model: 'opus', permissionMode: 'plan' })
   })
-  it('R-19 one send -> exactly one spawn and exactly one user frame, nothing else on stdin', async () => {
+  it('R-19 one send -> exactly one spawn and exactly one user frame; the rest of stdin is local control requests', async () => {
     const h = createHarness()
     const { child } = await startSession(h, {}, 'hello world')
     expect(h.spawnCalls).toHaveLength(1)
-    expect(child.frames()).toEqual([{ type: 'user', message: { role: 'user', content: 'hello world' }, parent_tool_use_id: null, session_id: '' }])
+    expect(child.frames()).toEqual([
+      { type: 'control_request', request_id: 'ac-1', request: { subtype: 'initialize' } },
+      { type: 'user', message: { role: 'user', content: 'hello world' }, parent_tool_use_id: null, session_id: '' },
+      { type: 'control_request', request_id: 'ac-2', request: { subtype: 'mcp_status' } }
+    ])
   })
   it('R-19 a whole turn of CLI output (init, status, deltas, assistant, result, control_response) causes no extra writes', async () => {
     const h = createHarness()
@@ -50,22 +54,27 @@ describe('R-19 nothing is spawned or written until the user sends', () => {
     child.emit({ type: 'rate_limit_event', rate_limit_info: {} })
     child.emit(resultMsg())
     h.flush()
-    expect(child.frames()).toHaveLength(1)
+    // initialize, user, mcp_status (after init) and get_context_usage (after the result): the CLI output added nothing else
+    expect(child.frames().map((f) => (f.type === 'control_request' ? f.request.subtype : f.type))).toEqual(['initialize', 'user', 'mcp_status', 'get_context_usage'])
   })
   it('R-19 an idle session for hours writes nothing (no keep-alive) and sets no timers', async () => {
     const h = createHarness()
     const { child } = await startSession(h)
     child.emit(resultMsg())
     h.flush()
+    const n = child.frames().length
     h.advance(6 * 60 * 60_000)
-    expect(child.frames()).toHaveLength(1)
+    expect(child.frames()).toHaveLength(n)
+    expect(child.frames().filter((f) => f.type === 'user')).toHaveLength(1)
     expect(h.pendingTimers()).toBe(0)
     expect(h.spawnCalls).toHaveLength(1)
   })
-  it('R-19 no initialize control request is ever sent', async () => {
+  it('R-19 initialize is a local control request written before the user turn, only inside the spawn from Send', async () => {
     const h = createHarness()
     const { child } = await startSession(h)
-    expect(child.frames().some((f) => f.type === 'control_request')).toBe(false)
+    const kinds = child.frames().map((f) => (f.type === 'control_request' ? f.request.subtype : f.type))
+    expect(kinds.slice(0, 2)).toEqual(['initialize', 'user'])
+    expect(child.frames().filter((f) => f.type === 'control_request').every((f) => ['initialize', 'mcp_status', 'get_context_usage'].includes(f.request.subtype))).toBe(true)
   })
   it('R-19 a crash does not retry: no respawn, no writes; only an explicit send starts it again', async () => {
     const h = createHarness()
@@ -92,7 +101,7 @@ describe('R-19 nothing is spawned or written until the user sends', () => {
     expect(args).toContain('--model')
     expect(args[args.indexOf('--model') + 1]).toBe('opus')
     expect(args[args.indexOf('--permission-mode') + 1]).toBe('acceptEdits')
-    expect(h.lastChild().frames().filter((f) => f.type === 'control_request')).toHaveLength(0)
+    expect(h.lastChild().frames().filter((f) => f.type === 'control_request').map((f) => f.request.subtype)).toEqual(['initialize'])
     h.lastChild().emit(initMsg())
     await p
   })
@@ -486,7 +495,7 @@ describe('R-03 interrupt, model and mode', () => {
     expect(h.mgr.setModel(id, 'sonnet').ok).toBe(true)
     expect(h.mgr.setModel(id, null).ok).toBe(true)
     expect(h.mgr.setMode(id, 'plan').ok).toBe(true)
-    const f = child.frames().slice(1)
+    const f = child.frames().filter((x) => x.type === 'control_request' && /^(set_model|set_permission_mode)$/.test(x.request.subtype))
     expect(f.map((x) => x.request)).toEqual([{ subtype: 'set_model', model: 'sonnet' }, { subtype: 'set_model', model: null }, { subtype: 'set_permission_mode', mode: 'plan' }])
     expect(child.frames().filter((x) => x.type === 'user')).toHaveLength(1)
   })
