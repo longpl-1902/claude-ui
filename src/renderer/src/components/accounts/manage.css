@@ -1,0 +1,21 @@
+.ac-acc-card--edit { border-style: dashed; }
+.ac-acc-tag { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: var(--ac-radius-pill); border: 1px solid var(--ac-border-btn); color: var(--ac-text-muted); }
+.ac-acc-badge--lock { display: inline-flex; align-items: center; gap: 4px; background: var(--ac-warn-bg); color: var(--ac-warn-text); }
+.ac-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ac-acc-form { display: flex; flex-direction: column; gap: 12px; }
+.ac-acc-formrow { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.ac-acc-formrow > legend, .ac-acc-formlabel { font-size: 12px; font-weight: 600; color: var(--ac-text-muted); padding: 0; }
+.ac-acc-text, .ac-acc-select { background: var(--ac-bg-inset); color: var(--ac-text); border: 1px solid var(--ac-border-btn); border-radius: var(--ac-radius-control); padding: 8px 10px; font: inherit; font-size: 13px; min-width: 0; }
+.ac-acc-text:focus-visible, .ac-acc-select:focus-visible, .ac-acc-swatch:focus-visible, .ac-acc-inline-radio input:focus-visible { outline: 2px solid #8FB4FF; outline-offset: 2px; }
+.ac-acc-text[aria-invalid="true"] { border-color: var(--ac-danger-border); }
+.ac-acc-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ac-acc-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.ac-acc-swatch[aria-pressed="true"] { border-color: var(--ac-text); }
+.ac-acc-text--hex { width: 110px; }
+.ac-acc-inline-radios { display: flex; flex-wrap: wrap; gap: 16px; }
+.ac-acc-inline-radio { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.ac-acc-error { color: var(--ac-danger-text, #f0716f); font-size: 12px; }
+.ac-acc-rulecell-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.ac-acc-rule-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; margin-top: 8px; }
+.ac-acc-rule-form__actions { display: flex; gap: 8px; }
+.ac-acc-table__fixed td { color: var(--ac-text-muted); font-style: italic; }

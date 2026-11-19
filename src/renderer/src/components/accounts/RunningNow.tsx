@@ -6,6 +6,9 @@ export function RunningNow(): JSX.Element {
   return (
     <section className="ac-acc-section">
       <h2 className="ac-acc-h2">Running now</h2>
+      {accounts.sessions.length === 0 && (
+        <p className="ac-acc-empty">No sessions running. Start one from the lead console's Raw terminal.</p>
+      )}
       <div className="ac-acc-list">
         {accounts.sessions.map((s) => {
           const acc = accounts.accounts.find((a) => a.id === s.accountId)
