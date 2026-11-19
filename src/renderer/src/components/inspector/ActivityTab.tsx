@@ -4,6 +4,7 @@ import { toolColor } from '../../theme/colors'
 export function ActivityTab({ items }: { items: ActivityItem[] }): JSX.Element {
   return (
     <ol className="insp-activity">
+      {items.length === 0 && <li className="insp-empty">No tool calls yet</li>}
       {items.map((e, i) => {
         const color = toolColor(e.tool)
         return (
@@ -21,7 +22,7 @@ export function ActivityTab({ items }: { items: ActivityItem[] }): JSX.Element {
                 <span className="insp-event__target">{e.target}</span>
               </span>
               <span className={e.failed ? 'insp-event__result insp-event__result--failed' : 'insp-event__result'}>
-                {e.result}
+                {e.result === '…' ? 'running…' : e.result}
               </span>
             </span>
           </li>

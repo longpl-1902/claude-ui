@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@renderer/components/ui/Button'
 import { Avatar } from '@renderer/components/ui/Avatar'
 import { LockIcon } from '@renderer/components/ui/Icons'
-import { useConsoleStore } from '@renderer/store/useConsoleStore'
+import { selectTokensToday, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { formatTokens } from '@shared/format'
 import { AccountEditor } from './AccountEditor'
 import './manage.css'
@@ -11,6 +12,21 @@ export interface AccountCardsProps {
   adding: boolean
   onAdd(): void
   onCloseAdd(): void
+}
+
+function TokensToday({ accountId }: { accountId: string }): JSX.Element {
+  const t = useConsoleStore(useShallow(selectTokensToday(accountId)))
+  return (
+    <div className="ac-acc-usage__row">
+      <span className="ac-acc-usage__label">Tokens used today</span>
+      <span title="input + output + cache writes; cache reads shown separately">
+        {t === undefined ? '—' : formatTokens(t.headline)}
+        {t !== undefined && t.cacheRead > 0 && (
+          <span style={{ color: '#A4AAB4' }}> +{formatTokens(t.cacheRead)} cached</span>
+        )}
+      </span>
+    </div>
+  )
 }
 
 export function AccountCards({ adding, onAdd, onCloseAdd }: AccountCardsProps): JSX.Element {
@@ -82,10 +98,7 @@ export function AccountCards({ adding, onAdd, onCloseAdd }: AccountCardsProps): 
             </div>
 
             <div className="ac-acc-usage">
-              <div className="ac-acc-usage__row">
-                <span className="ac-acc-usage__label">Tokens used today</span>
-                <span>{a.tokensToday === undefined ? '—' : formatTokens(a.tokensToday)}</span>
-              </div>
+              <TokensToday accountId={a.id} />
             </div>
 
             {editingId === a.id ? (
