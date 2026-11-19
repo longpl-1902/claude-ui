@@ -7,10 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentGrid } from '@renderer/components/team/AgentGrid'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
-import { SharedTaskList } from '@renderer/components/team/SharedTaskList'
 import { TeamHeader } from '@renderer/components/team/TeamHeader'
-import { Timeline } from '@renderer/components/team/Timeline'
-import { WorktreeList } from '@renderer/components/team/WorktreeList'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { mockTeamSnapshot } from '@shared/mock'
 import type { Agent, SessionSummary, TeamSnapshot } from '@shared/types'
@@ -290,20 +287,23 @@ describe('R-12 live cards', () => {
 })
 
 describe('R-12 lead console', () => {
-  it('renders the live console lines and the Phase 3b hint', () => {
+  it('renders the live console lines; with no controlled session the prompt is disabled and offers Start a session', () => {
     seedLive()
     render(<LeadConsole />)
     expect(screen.getByText('first live line')).toBeInTheDocument()
     expect(screen.getByText('second live line')).toBeInTheDocument()
-    expect(screen.getByText('Sending prompts arrives in Phase 3b')).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Message the lead' })).toBeEnabled()
+    expect(screen.queryByText(/arrives in Phase 3b/)).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Message the lead' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start a session' })).toBeInTheDocument()
   })
 
-  it('has no Phase 3b hint in demo mode', () => {
+  it('demo mode keeps an enabled prompt and shows no control UI', () => {
     seedLive()
     useConsoleStore.getState().showDemo()
     render(<LeadConsole />)
-    expect(screen.queryByText('Sending prompts arrives in Phase 3b')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Message the lead' })).toBeEnabled()
+    expect(screen.queryByRole('group', { name: 'Console filter' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start a session' })).toBeNull()
   })
 
   it('scrolls to the newest line only when already at the bottom', () => {
@@ -330,53 +330,7 @@ describe('R-12 lead console', () => {
   })
 })
 
-describe('R-12 Phase 5 placeholders', () => {
-  it('shows placeholders in live mode', () => {
-    seedLive()
-    render(
-      <>
-        <WorktreeList />
-        <SharedTaskList />
-        <Timeline />
-      </>
-    )
-    expect(screen.getByText('Worktrees arrive in Phase 5')).toBeInTheDocument()
-    expect(screen.getByText('Shared tasks arrive in Phase 5')).toBeInTheDocument()
-    expect(screen.getByText('Timeline arrives in Phase 5')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Worktrees' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Shared tasks' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Timeline' })).toBeInTheDocument()
-  })
-
-  it('renders the mock sections in demo mode', () => {
-    seedLive()
-    useConsoleStore.getState().showDemo()
-    render(
-      <>
-        <WorktreeList />
-        <SharedTaskList />
-        <Timeline />
-      </>
-    )
-    expect(screen.queryByText(/arrive in Phase 5/)).toBeNull()
-    expect(screen.getByText(mockTeamSnapshot.worktrees[0]!.branch)).toBeInTheDocument()
-    expect(
-      screen.getByText(`#${mockTeamSnapshot.tasks[0]!.id} ${mockTeamSnapshot.tasks[0]!.title}`)
-    ).toBeInTheDocument()
-    expect(screen.getAllByRole('img', { name: /activity, last 20 minutes/ }).length).toBeGreaterThan(0)
-  })
-})
-
 describe('P3-C header actions and title', () => {
-  it('live mode: Pause all and + New teammate are disabled with a title', () => {
-    seedLive()
-    render(<TeamHeader />)
-    for (const n of ['Pause all', '+ New teammate']) {
-      const b = screen.getByRole('button', { name: n })
-      expect(b).toBeDisabled()
-      expect(b).toHaveAttribute('title', 'Arrives in Phase 4')
-    }
-  })
   it('demo mode: both are enabled', () => {
     useConsoleStore.setState({ teamMode: 'demo' })
     render(<TeamHeader />)
