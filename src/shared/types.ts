@@ -319,10 +319,10 @@ export interface UsageToday {
 export type ControlPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk'
 export type ControlState = 'draft' | 'starting' | 'idle' | 'busy' | 'stopping' | 'exited'
 export type ControlResume = { kind: 'resume'; sessionId: string; fork?: boolean } | { kind: 'continue' }
-export interface ControlStartRequest { cwd: string; accountId: string; confirmed?: boolean; resume?: ControlResume; model?: string; permissionMode?: ControlPermissionMode }
+export interface ControlStartRequest { cwd: string; accountId: string; confirmed?: boolean; resume?: ControlResume; model?: string; permissionMode?: ControlPermissionMode; effort?: Effort; outputStyle?: string; resumeAt?: string /* user message uuid, requires resume.fork */ }
 export interface ControlStartResult { ok: boolean; controlId?: string; reason?: LaunchBlock | 'needs-confirmation' | 'invalid-args' | 'session-live-elsewhere'; warnings?: LaunchWarning[] }
 export interface PermissionPrompt { requestId: string; toolName: string; displayName: string; toolUseId?: string; description?: string; inputPreview: string; decisionReason?: string; blockedPath?: string; receivedAt: string; canAllowSession?: boolean }
-export interface PermissionAnswer { behavior: 'allow' | 'deny'; message?: string; scope?: 'once' | 'session' }
+export interface PermissionAnswer { behavior: 'allow' | 'deny'; message?: string; scope?: 'once' | 'session'; answers?: Record<string, string> /* AskUserQuestion */ }
 export interface ControlSessionInfo { id: string; accountId: string; cwd: string; state: ControlState; permissionMode: ControlPermissionMode; model?: string; resume?: ControlResume; pid?: number; sessionId?: string; startedAt?: string; exitCode?: number; error?: string; slashCommands: string[]; pendingPermissions: number; lastResult?: 'success' | 'interrupted' | 'error'; queuedTurns: number }
 export type ControlStreamEvent =
   | { controlId: string; kind: 'typing'; messageId: string; text: string }
@@ -351,3 +351,40 @@ export interface AttentionItem { id: string; kind: AttentionKind; severity: Atte
 export interface ProjectStatus { key: string; name: string; root: string; git: boolean; accountIds: string[]; mixedAccounts: boolean; liveSessions: number; running: number; waiting: number; needsYou: number; tokensToday: number; lastActivityMs: number; hooksActive: boolean }
 export interface AttentionSnapshot { items: AttentionItem[]; projects: ProjectStatus[]; updatedAt: string }
 export interface AttentionPrefs { mutedProjects: string[]; dnd: boolean; notifyErrors: boolean; notifyIdle?: boolean; viewedProjectKey?: string }
+
+// ---- Contract v5: VS Code parity (T23) ----
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type CommandSource = 'builtin' | 'user' | 'project' | 'plugin' | 'skill' | 'mcp' | 'unknown'
+export interface SlashCommandInfo { name: string; description: string; argumentHint?: string; source: CommandSource; aliases?: string[] }
+export type McpLiveStatus = 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled'
+export interface McpServerLive { name: string; status: McpLiveStatus; serverInfo?: { name: string; version: string }; error?: string }
+export interface ContextUsage { totalTokens: number; maxTokens: number; percentage: number; categories: { name: string; tokens: number; percentage: number }[]; model?: string; fetchedAt: string }
+export interface TurnCost { costUsd?: number; input: number; output: number; cacheCreation: number; cacheRead: number; durationMs?: number }
+export interface UserTurnRef { uuid: string; text: string; time: string } // text <= 120 chars
+export interface ControlDetails {
+  controlId: string
+  commands: SlashCommandInfo[]
+  agents: { name: string; description?: string }[]
+  models: { value: string; displayName: string; description?: string }[]
+  outputStyle?: string
+  availableOutputStyles: string[]
+  effort?: Effort
+  mcp: McpServerLive[]
+  tools: string[]
+  context?: ContextUsage
+  lastTurn?: TurnCost
+  sessionCostUsd: number
+  userTurns: UserTurnRef[]
+  checkpointing: boolean
+  title?: string
+}
+export interface ImageAttachment { mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string; name?: string } // <= 5 MiB decoded each, <= 5 per turn
+export interface RewindPreview { canRewind: boolean; filesChanged: string[]; insertions: number; deletions: number; error?: string }
+export interface FileSuggestion { path: string; score?: number }
+export type CatalogKind = 'skill' | 'agent' | 'command' | 'output-style'
+export interface CatalogItem { kind: CatalogKind; name: string; description?: string; scope: 'user' | 'project' | 'plugin'; plugin?: string; path: string; argumentHint?: string; model?: string }
+export interface PluginInfo { id: string; name: string; marketplace?: string; version?: string; enabled: boolean; scope?: string; description?: string }
+export interface McpConfigured { name: string; scope: 'local' | 'user' | 'project' | 'plugin' | 'unknown'; transport?: string; target: string; status: string; pendingApproval?: boolean } // target masked
+export interface McpAddRequest { projectRoot: string; accountId: string; name: string; scope: 'local' | 'user' | 'project'; transport: 'stdio' | 'http' | 'sse'; commandOrUrl: string; args: string[]; env: Record<string, string>; headers: Record<string, string> }
+export interface CliPreview { previewId: string; argvDisplay: string[]; cwd: string; configDir: string; effect: string; warnings: string[] } // secrets masked in argvDisplay
+export interface CliRunResult { ok: boolean; reason?: string; output?: string } // output masked, <= 4 KiB

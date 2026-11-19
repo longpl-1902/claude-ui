@@ -4,7 +4,7 @@ import { safeExternalUrl } from '@shared/externalUrl'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
 import type {
-  AttentionPrefs, AttentionSnapshot, ControlPermissionMode, KillExternalRequest, OkResult, PtySpawnRequest, TeamSelection
+  AttentionPrefs, AttentionSnapshot, ControlPermissionMode, Effort, KillExternalRequest, OkResult, PtySpawnRequest, TeamSelection
 } from '@shared/types'
 import type { AccountsService } from '../accounts/accountsService'
 import type { ControlManager } from '../control/controlManager'
@@ -229,6 +229,13 @@ export function isControlStartRequest(v: unknown): boolean {
   if (o.confirmed !== undefined && typeof o.confirmed !== 'boolean') return false
   if (o.model !== undefined && !(typeof o.model === 'string' && MODEL_RE.test(o.model))) return false
   if (o.permissionMode !== undefined && !PERMISSION_MODES.includes(o.permissionMode)) return false
+  if (o.effort !== undefined && !isEffort(o.effort)) return false
+  if (o.outputStyle !== undefined && !str(o.outputStyle, 128)) return false
+  if (o.resumeAt !== undefined) {
+    if (!isUuid(o.resumeAt)) return false
+    const rs = o.resume as Record<string, unknown> | undefined
+    if (!rs || rs.kind !== 'resume' || rs.fork !== true) return false
+  }
   if (o.resume !== undefined) {
     const r = o.resume
     if (typeof r !== 'object' || r === null) return false
@@ -245,7 +252,62 @@ export function isPermissionAnswer(v: unknown): boolean {
   const o = v as Record<string, unknown>
   if (o.behavior !== 'allow' && o.behavior !== 'deny') return false
   if (o.message !== undefined && !str(o.message, 4000)) return false
-  return o.scope === undefined || o.scope === 'once' || o.scope === 'session'
+  if (o.scope !== undefined && o.scope !== 'once' && o.scope !== 'session') return false
+  if (o.answers !== undefined) {
+    if (!isStringMap(o.answers, 4000)) return false
+  }
+  return true
+}
+
+const EFFORTS: readonly unknown[] = ['low', 'medium', 'high', 'xhigh', 'max'] satisfies Effort[]
+export const isEffort = (v: unknown): v is Effort => EFFORTS.includes(v)
+
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+export const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v)
+
+const MAX_MAP_ENTRIES = 50
+const MAX_MAP_VALUE = 4096
+function isStringMap(v: unknown, maxValue = MAX_MAP_VALUE): v is Record<string, string> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const entries = Object.entries(v)
+  if (entries.length > MAX_MAP_ENTRIES) return false
+  return entries.every(([k, val]) => k.length > 0 && k.length <= 256 && typeof val === 'string' && val.length <= maxValue)
+}
+
+const IMAGE_TYPES: readonly unknown[] = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+export const MAX_IMAGES_PER_TURN = 5
+const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/
+
+export function isImageAttachment(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  if (!IMAGE_TYPES.includes(o.mediaType)) return false
+  if (typeof o.dataBase64 !== 'string' || o.dataBase64.length === 0 || o.dataBase64.length % 4 !== 0) return false
+  // decoded size from the encoded length, checked before the charset scan
+  const pad = o.dataBase64.endsWith('==') ? 2 : o.dataBase64.endsWith('=') ? 1 : 0
+  if ((o.dataBase64.length / 4) * 3 - pad > MAX_IMAGE_BYTES) return false
+  if (!BASE64_RE.test(o.dataBase64)) return false
+  return o.name === undefined || str(o.name, 256)
+}
+
+export function isImageList(v: unknown): boolean {
+  return Array.isArray(v) && v.length <= MAX_IMAGES_PER_TURN && v.every(isImageAttachment)
+}
+
+const MCP_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/
+export const isMcpName = (v: unknown): v is string => typeof v === 'string' && MCP_NAME_RE.test(v)
+
+export function isMcpAddRequest(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  if (!str(o.projectRoot) || o.projectRoot === '' || !str(o.accountId) || o.accountId === '') return false
+  if (!isMcpName(o.name)) return false
+  if (o.scope !== 'local' && o.scope !== 'user' && o.scope !== 'project') return false
+  if (o.transport !== 'stdio' && o.transport !== 'http' && o.transport !== 'sse') return false
+  if (!str(o.commandOrUrl, MAX_MAP_VALUE) || o.commandOrUrl === '') return false
+  if (!Array.isArray(o.args) || o.args.length > MAX_MAP_ENTRIES || !o.args.every((a) => str(a, MAX_MAP_VALUE))) return false
+  return isStringMap(o.env) && isStringMap(o.headers)
 }
 
 export function isKillExternalRequest(v: unknown): boolean {
@@ -327,6 +389,40 @@ function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefa
     'control:list': () => [],
     'control:get-stream': () => null,
     'session:kill-external': (req) => (isKillExternalRequest(req) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    // Contract v5 stubs (R-19): never start anything, never spend tokens.
+    'control:details': () => null,
+    'control:send-rich': (id, text, images) =>
+      allStrings(id, text) && text.length <= MAX_SEND && isImageList(images) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS },
+    'control:refresh-context': (id) => (allStrings(id) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:mcp-toggle': (id, name, enabled) =>
+      allStrings(id) && str(name, 64) && typeof enabled === 'boolean' ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS },
+    'control:mcp-reconnect': (id, name) => (allStrings(id) && str(name, 64) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:file-suggestions': () => [],
+    'control:rewind-preview': (id, uuid) =>
+      allStrings(id) && isUuid(uuid)
+        ? { canRewind: false, filesChanged: [], insertions: 0, deletions: 0, error: 'not-implemented' }
+        : { canRewind: false, filesChanged: [], insertions: 0, deletions: 0, error: 'invalid-args' },
+    'control:rewind': (id, uuid) => (allStrings(id) && isUuid(uuid) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:fork-at': (id, uuid) => (allStrings(id) && isUuid(uuid) ? { ok: false } : { ok: false, reason: 'invalid-args' }),
+    'control:set-effort': (id, effort) => (allStrings(id) && (effort === null || isEffort(effort)) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:set-output-style': (id, style) =>
+      allStrings(id) && (style === null || str(style, 128)) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS },
+    'control:rename': (id, title) => (allStrings(id) && str(title, 200) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:get-plan': () => ({ exists: false }),
+    'catalog:list': () => [],
+    'catalog:open': (path) => (str(path, 4096) && path !== '' ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'mcp:list': () => ({ servers: [], ranAt: new Date(0).toISOString(), error: 'not-implemented' }),
+    'mcp:preview-add': (req) => (isMcpAddRequest(req) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'mcp:preview-remove': (root, accountId, name, scope) =>
+      str(root) && root !== '' && str(accountId) && accountId !== '' && isMcpName(name) && (scope === null || scope === 'local' || scope === 'user' || scope === 'project')
+        ? { ...NOT_IMPLEMENTED }
+        : { ...INVALID_ARGS },
+    'plugins:list': () => ({ plugins: [], error: 'not-implemented' }),
+    'plugins:preview': (accountId, action, id) =>
+      str(accountId) && accountId !== '' && (action === 'enable' || action === 'disable' || action === 'install' || action === 'uninstall') && str(id, 256) && id !== ''
+        ? { ...NOT_IMPLEMENTED }
+        : { ...INVALID_ARGS },
+    'cli:apply': (previewId) => (str(previewId) && previewId !== '' ? { ok: false, reason: 'not-implemented' } : { ok: false, reason: 'invalid-args' }),
     'git:watch': (root) => ({
       root: typeof root === 'string' ? root : null,
       base: null,
