@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Agent Console — Team view</title>
+<script src="f573ae2a-506f-48ee-95eb-754eb8013f5a"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7SUc.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7SUc.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7SUc.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7SUc.woff2) format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7SUc.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7SUc.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("b7d18406-5b8b-4ad1-b405-2bcf83994a87") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7SUc.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7SUc.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7SUc.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7SUc.woff2) format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7SUc.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7SUc.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("b7d18406-5b8b-4ad1-b405-2bcf83994a87") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7SUc.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7SUc.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7SUc.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7SUc.woff2) format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7SUc.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7SUc.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("b7d18406-5b8b-4ad1-b405-2bcf83994a87") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7SUc.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7SUc.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7SUc.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7SUc.woff2) format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7SUc.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7SUc.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("b7d18406-5b8b-4ad1-b405-2bcf83994a87") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwhsk.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwhsk.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwhsk.woff2) format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwhsk.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwhsk.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("f9e0294d-04ce-49b6-b8d9-114294c7cf9a") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwhsk.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwhsk.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwhsk.woff2) format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwhsk.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwhsk.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("f9e0294d-04ce-49b6-b8d9-114294c7cf9a") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>
+body{margin:0;background:#0E0F11}
+a{color:#7AA7FF}a:hover{color:#A9C6FF}
+@keyframes ac-pulse{0%{box-shadow:0 0 0 0 rgba(242,165,65,.55)}70%{box-shadow:0 0 0 6px rgba(242,165,65,0)}100%{box-shadow:0 0 0 0 rgba(242,165,65,0)}}
+.ac-pulse{animation:ac-pulse 1.6s infinite}
+.ac-btn:hover{background:#242830}
+.ac-card:hover{border-color:#4A5160}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0E0F11; color: #E6E7EA; font-family: Inter, system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 20px; border-top: 3px solid #6E9BF0; border-bottom: 1px solid #23262C; background: #121417">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="22" height="22" sc-camel-view-box="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+      <span style="font-weight: 700; font-size: 15px; letter-spacing: .2px">Agent Console</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #A4AAB4">
+      <span>hicas/sheet-automation</span><span style="color: #5C636E">/</span><span style="color: #E6E7EA">team: sheet-export</span>
+    </div>
+    <a href="Accounts.dc.html" aria-label="Account: Company. Manage accounts" style="display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 8px; border-radius: 999px; border: 1px solid #2B3A5C; background: #151C2C; color: #E6E7EA; text-decoration: none; font-size: 12px">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #6E9BF0; color: #0E0F11; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+      <span>Company</span>
+      <span style="color: #8E95A0">you@company.com</span>
+      <svg width="12" height="12" sc-camel-view-box="0 0 24 24" fill="none" stroke="#A4AAB4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </a>
+    <div style="flex: 1"></div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 12px; color: #A4AAB4">
+      <span><strong style="color: #E6E7EA">6</strong> agents</span>
+      <span><strong style="color: #F2A541">3</strong> running</span>
+      <span><strong style="color: #FF8A8A">1</strong> needs you</span>
+      <span>Tokens <strong style="color: #E6E7EA">1.12M</strong></span>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <button type="button" class="ac-btn" style="min-height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #2E323A; background: #1A1D22; color: #E6E7EA; font: inherit; font-size: 13px; cursor: pointer">Pause all</button>
+      <button type="button" style="min-height: 36px; padding: 0 14px; border-radius: 8px; border: 0; background: {{accent}}; color: #0E0F11; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">+ New teammate</button>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; flex: 1; min-height: 0">
+
+    <aside style="flex: 1 1 240px; max-width: 100%; border-right: 1px solid #23262C; background: #121417; padding: 16px; display: flex; flex-direction: column; gap: 22px; box-sizing: border-box">
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <h2 style="margin: 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #A4AAB4; font-weight: 600">Worktrees</h2>
+          <button type="button" aria-label="Add worktree" class="ac-btn" style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #2E323A; background: transparent; color: #A4AAB4; cursor: pointer; font-size: 16px; line-height: 1">+</button>
+        </div>
+        <sc-for list="{{worktrees}}" as="w" hint-placeholder-count="5">
+          <div style="border: 1px solid {{w.border}}; background: #16181C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <svg width="14" height="14" sc-camel-view-box="0 0 24 24" fill="none" stroke="#A4AAB4" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-6 3-11 6"></path></svg>
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.branch}}</span>
+            </div>
+            <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #8E95A0">{{w.path}}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px">
+              <span style="color: #C9CDD4">{{w.agents}}</span>
+              <span style="color: #8E95A0">·</span>
+              <span style="color: {{w.stateColor}}">{{w.state}}</span>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #A4AAB4; font-weight: 600">Shared tasks</h2>
+        <sc-for list="{{tasks}}" as="t" hint-placeholder-count="6">
+          <div style="display: flex; gap: 10px; align-items: flex-start; padding: 6px 2px">
+            <span style="flex: 0 0 auto; margin-top: 3px; width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid {{t.color}}; background: {{t.fill}}"></span>
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+              <span style="font-size: 13px; color: #E6E7EA">{{t.title}}</span>
+              <span style="font-size: 11px; color: {{t.metaColor}}">{{t.meta}}</span>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; background: #2A1F14; border: 1px solid #5A3E1E; color: #F5C98A; font-size: 13px; flex-wrap: wrap">
+        <svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="#F2A541" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"></path><line x1="12" y1="10" x2="12" y2="14"></line><line x1="12" y1="17.5" x2="12" y2="17.6"></line></svg>
+        <span style="flex: 1; min-width: 240px">File overlap: <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">src/Api/SheetDto.cs</span> is being edited by api-designer and test-writer in different worktrees.</span>
+        <button type="button" class="ac-btn" style="min-height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #5A3E1E; background: transparent; color: #F5C98A; font: inherit; font-size: 12px; cursor: pointer">Compare diffs</button>
+      </div>
+
+      <section style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <h1 style="margin: 0; font-size: 18px; font-weight: 600">Team</h1>
+          <span style="font-size: 12px; color: #8E95A0">Click an agent to inspect what it is doing</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px">
+          <sc-for list="{{agents}}" as="a" hint-placeholder-count="6">
+            <button type="button" class="ac-card" sc-camel-on-click="{{a.pick}}" aria-pressed="{{a.selected}}" style="text-align: left; border: 1px solid {{a.border}}; background: {{a.bg}}; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; color: #E6E7EA; font: inherit; min-width: 0">
+              <div style="display: flex; align-items: center; gap: 10px; width: 100%">
+                <span style="flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; background: {{a.avatar}}; color: #0E0F11; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center">{{a.initials}}</span>
+                <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                  <span style="font-weight: 600; font-size: 14px">{{a.name}}</span>
+                  <span style="font-size: 11px; color: #8E95A0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.role}}</span>
+                </span>
+                <span style="flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 999px; background: {{a.pillBg}}; color: {{a.color}}">
+                  <span class="{{a.dotClass}}" style="width: 7px; height: 7px; border-radius: 50%; background: {{a.color}}"></span>{{a.label}}
+                </span>
+              </div>
+              <span style="display: block; width: 100%; box-sizing: border-box; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #D5D8DE; background: #0E0F11; border: 1px solid #1F2227; border-radius: 6px; padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="color: {{a.toolColor}}">{{a.tool}}</span> {{a.target}}</span>
+              <span style="display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #8E95A0; width: 100%">
+                <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; color: #A9B4C6">⎇ {{a.wt}}</span>
+                <span>{{a.elapsed}}</span>
+                <span>{{a.tokens}} tok</span>
+                <span>{{a.calls}} calls</span>
+              </span>
+            </button>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="border: 1px solid #23262C; background: #16181C; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px">
+          <h2 style="margin: 0; font-size: 14px; font-weight: 600">Timeline</h2>
+          <span style="font-size: 12px; color: #8E95A0">last 20 min</span>
+          <div style="flex: 1"></div>
+          <sc-for list="{{legend}}" as="l" hint-placeholder-count="5">
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #A4AAB4"><span style="width: 10px; height: 10px; border-radius: 2px; background: {{l.color}}"></span>{{l.label}}</span>
+          </sc-for>
+        </div>
+        <div style="overflow-x: auto">
+          <div style="min-width: 560px; display: flex; flex-direction: column; gap: 8px">
+            <sc-for list="{{agents}}" as="a" hint-placeholder-count="6">
+              <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 12px">
+                <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: {{a.laneText}}">{{a.name}}</span>
+                <div style="position: relative; height: 18px; background: #0E0F11; border-radius: 4px; overflow: hidden">
+                  <sc-for list="{{a.segs}}" as="s" hint-placeholder-count="4">
+                    <span title="{{s.tip}}" style="position: absolute; top: 3px; bottom: 3px; left: {{s.l}}%; width: {{s.w}}%; background: {{s.color}}; border-radius: 2px"></span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px">
+              <span></span>
+              <div style="display: flex; justify-content: space-between; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #7D848F"><span>10:24</span><span>10:29</span><span>10:34</span><span>10:39</span><span>now</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style="border: 1px solid #23262C; background: #0B0C0E; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1F2227; background: #121417">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #F2A541"></span>
+          <h2 style="margin: 0; font-size: 13px; font-weight: 600">Lead console</h2>
+          <span style="font-size: 11px; color: #8E95A0">all team events, newest last</span>
+        </div>
+        <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.5">
+          <sc-for list="{{log}}" as="g" hint-placeholder-count="8">
+            <div style="display: flex; gap: 10px; min-width: 0">
+              <span style="flex: 0 0 auto; color: #6E7580">{{g.t}}</span>
+              <span style="flex: 0 0 96px; color: {{g.color}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{g.who}}</span>
+              <span style="color: #D5D8DE; min-width: 0; overflow-wrap: anywhere">{{g.msg}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-top: 1px solid #1F2227">
+          <label for="ac-prompt" style="font-family: 'JetBrains Mono', ui-monospace, monospace; color: {{accent}}; font-size: 14px">›</label>
+          <input id="ac-prompt" type="text" placeholder="Message the lead, @agent to talk to a teammate, / for commands" style="flex: 1; min-width: 0; min-height: 36px; background: transparent; border: 0; outline: none; color: #E6E7EA; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px">
+          <span style="font-size: 11px; color: #7D848F; border: 1px solid #2E323A; border-radius: 4px; padding: 2px 6px">Enter</span>
+        </div>
+      </section>
+    </main>
+
+    <aside style="flex: 1 1 360px; max-width: 100%; border-left: 1px solid #23262C; background: #121417; padding: 18px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="width: 40px; height: 40px; border-radius: 10px; background: {{cur.avatar}}; color: #0E0F11; font-weight: 700; display: flex; align-items: center; justify-content: center">{{cur.initials}}</span>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0">
+          <span style="font-size: 16px; font-weight: 600">{{cur.name}}</span>
+          <span style="font-size: 12px; color: #8E95A0">{{cur.role}} · {{cur.model}}</span>
+        </div>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 999px; background: {{cur.pillBg}}; color: {{cur.color}}"><span class="{{cur.dotClass}}" style="width: 7px; height: 7px; border-radius: 50%; background: {{cur.color}}"></span>{{cur.label}}</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+        <div style="background: #16181C; border: 1px solid #23262C; border-radius: 8px; padding: 10px"><div style="font-size: 11px; color: #8E95A0">Elapsed</div><div style="font-size: 15px; font-weight: 600; margin-top: 2px">{{cur.elapsed}}</div></div>
+        <div style="background: #16181C; border: 1px solid #23262C; border-radius: 8px; padding: 10px"><div style="font-size: 11px; color: #8E95A0">Tokens</div><div style="font-size: 15px; font-weight: 600; margin-top: 2px">{{cur.tokens}}</div></div>
+        <div style="background: #16181C; border: 1px solid #23262C; border-radius: 8px; padding: 10px"><div style="font-size: 11px; color: #8E95A0">Tool calls</div><div style="font-size: 15px; font-weight: 600; margin-top: 2px">{{cur.calls}}</div></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px; background: #16181C; border: 1px solid #23262C; border-radius: 8px; padding: 10px 12px">
+        <span style="font-size: 11px; color: #8E95A0">Assigned task</span>
+        <span style="font-size: 13px">{{cur.task}}</span>
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #A9B4C6">⎇ {{cur.wt}}</span>
+      </div>
+
+      <div role="tablist" style="display: flex; gap: 4px; border-bottom: 1px solid #23262C">
+        <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="3">
+          <button type="button" role="tab" aria-selected="{{tb.on}}" sc-camel-on-click="{{tb.pick}}" style="min-height: 40px; padding: 0 12px; background: transparent; border: 0; border-bottom: 2px solid {{tb.line}}; color: {{tb.color}}; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">{{tb.label}}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{showActivity}}" hint-placeholder-val="{{ true }}">
+        <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+          <sc-for list="{{cur.events}}" as="e" hint-placeholder-count="5">
+            <li style="display: grid; grid-template-columns: 58px 14px minmax(0, 1fr); gap: 8px; padding-bottom: 14px">
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #7D848F; padding-top: 2px">{{e.t}}</span>
+              <span style="display: flex; flex-direction: column; align-items: center"><span style="width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: {{e.color}}"></span><span style="flex: 1; width: 1px; background: #2A2E35; margin-top: 4px"></span></span>
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere"><span style="color: {{e.color}}; font-weight: 500">{{e.tool}}</span> <span style="color: #D5D8DE">{{e.target}}</span></span>
+                <span style="font-size: 12px; color: {{e.resColor}}">{{e.result}}</span>
+              </span>
+            </li>
+          </sc-for>
+        </ol>
+      </sc-if>
+
+      <sc-if value="{{showFiles}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <sc-for list="{{cur.files}}" as="f" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #16181C; border: 1px solid #23262C; border-radius: 6px">
+              <span style="flex: 1; min-width: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere">{{f.path}}</span>
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #5ED3A8">+{{f.add}}</span>
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #FF8A8A">−{{f.del}}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{noFiles}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #8E95A0">No files changed yet.</span></sc-if>
+          <a href="#" style="font-size: 12px; margin-top: 4px">Open full diff against main</a>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showMsgs}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <sc-for list="{{cur.msgs}}" as="m" hint-placeholder-count="2">
+            <div style="background: #16181C; border: 1px solid #23262C; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 11px; color: #8E95A0"><span style="color: #C9CDD4">{{m.dir}}</span> · {{m.t}}</span>
+              <span style="font-size: 13px; line-height: 1.45">{{m.text}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <div style="flex: 1"></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <button type="button" class="ac-btn" style="min-height: 40px; border-radius: 8px; border: 1px solid #2E323A; background: #1A1D22; color: #E6E7EA; font: inherit; font-size: 13px; cursor: pointer">Message agent</button>
+        <button type="button" class="ac-btn" style="min-height: 40px; border-radius: 8px; border: 1px solid #2E323A; background: #1A1D22; color: #E6E7EA; font: inherit; font-size: 13px; cursor: pointer">Open worktree</button>
+        <button type="button" class="ac-btn" style="min-height: 40px; border-radius: 8px; border: 1px solid #2E323A; background: #1A1D22; color: #E6E7EA; font: inherit; font-size: 13px; cursor: pointer">Pause</button>
+        <button type="button" class="ac-btn" style="min-height: 40px; border-radius: 8px; border: 1px solid #5A2A2A; background: #1A1D22; color: #FF8A8A; font: inherit; font-size: 13px; cursor: pointer">Stop</button>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#7AA7FF&quot;,&quot;options&quot;:[&quot;#7AA7FF&quot;,&quot;#F2A541&quot;,&quot;#5ED3A8&quot;,&quot;#C49BFF&quot;]},&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1260}}">
+class Component extends DCLogic {
+  data() {
+    const ST = {
+      running: { label: 'Running', color: '#F2A541', pillBg: '#2E2415', dotClass: 'ac-pulse' },
+      waiting: { label: 'Waiting', color: '#8FB4FF', pillBg: '#18213A', dotClass: '' },
+      error:   { label: 'Needs you', color: '#FF8A8A', pillBg: '#361A1C', dotClass: '' },
+      done:    { label: 'Done', color: '#5ED3A8', pillBg: '#14302A', dotClass: '' }
+    };
+    const TOOL = { Edit: '#8FB4FF', Write: '#8FB4FF', Read: '#A4AAB4', Grep: '#A4AAB4', Bash: '#C49BFF', SendMessage: '#5ED3A8', TaskUpdate: '#5ED3A8', Spawn: '#F2A541', Wait: '#7D848F', Fail: '#FF8A8A' };
+    const SEG = { think: '#3A4150', read: '#5C6370', edit: '#6E9BF0', bash: '#A77FEF', wait: '#252930', error: '#FF8A8A' };
+    const agents = [
+      { id: 'lead', name: 'lead', initials: 'LD', avatar: '#F2A541', role: 'Team lead · orchestrator', model: 'Opus', status: 'running', tool: 'SendMessage', target: '→ test-writer  "Rebase on feat/api-schema"', wt: 'main', elapsed: '18m 42s', tokens: '412k', calls: 37, task: 'Coordinate sheet-export feature across 5 teammates',
+        segs: [['think',0,8],['bash',8,4],['think',12,10],['read',22,6],['think',28,30],['think',62,20],['think',86,14]],
+        events: [['10:43:51','SendMessage','→ test-writer','"Rebase on feat/api-schema before re-running tests"'],['10:43:20','TaskUpdate','#5 → blocked','Integration tests failing (2)'],['10:41:02','Read','docs/PLAN.md','214 lines'],['10:24:10','Spawn','test-writer','worktree feat/tests'],['10:24:02','Spawn','api-designer, backend-impl, ui-builder','3 worktrees created']],
+        files: [['docs/PLAN.md',24,3]],
+        msgs: [['from api-designer','10:42','SheetDto v2 ready. Breaking change: SheetNumber is now string. Please review.'],['to ui-builder','10:31','Hold the sheet panel until task #2 lands.']] },
+      { id: 'api', name: 'api-designer', initials: 'AD', avatar: '#8FB4FF', role: 'API contract', model: 'Sonnet', status: 'running', tool: 'Edit', target: 'src/Api/SheetDto.cs  L120–184', wt: 'feat/api-schema', elapsed: '19m 20s', tokens: '186k', calls: 22, task: '#2 Schema v2 for SheetDto',
+        segs: [['read',0,10],['think',10,6],['edit',16,12],['think',28,5],['bash',33,6],['edit',39,20],['think',59,8],['edit',67,33]],
+        events: [['10:44:02','Edit','src/Api/SheetDto.cs','+38 −12 · in progress'],['10:42:15','SendMessage','→ lead','Schema v2 ready for review'],['10:38:40','Bash','dotnet build','Build succeeded · 0 warnings'],['10:33:12','Edit','src/Api/ViewportDto.cs','+14 −2'],['10:25:00','Grep','"SheetNumber" in src/','17 matches in 6 files']],
+        files: [['src/Api/SheetDto.cs',38,12],['src/Api/ViewportDto.cs',14,2],['src/Api/Contracts.md',22,0]],
+        msgs: [['to lead','10:42','SheetDto v2 ready. Breaking change: SheetNumber is now string.']] },
+      { id: 'be', name: 'backend-impl', initials: 'BE', avatar: '#C49BFF', role: 'Server + Revit export', model: 'Sonnet', status: 'running', tool: 'Bash', target: 'dotnet test --filter "Category=Export"', wt: 'feat/backend-auth', elapsed: '17m 05s', tokens: '241k', calls: 31, task: '#3 Export endpoints',
+        segs: [['read',4,8],['edit',12,14],['bash',26,6],['edit',32,18],['bash',50,8],['think',58,6],['edit',64,22],['bash',86,14]],
+        events: [['10:44:10','Bash','dotnet test --filter "Category=Export"','Running · 31 / 48'],['10:41:30','Edit','src/Services/SheetExportService.cs','+96 −20'],['10:37:05','Bash','dotnet build','Build succeeded'],['10:32:44','Edit','src/Commands/ExportSheetsCommand.cs','+41 −8'],['10:28:01','Read','src/Services/ExcelWriter.cs','310 lines']],
+        files: [['src/Services/SheetExportService.cs',96,20],['src/Commands/ExportSheetsCommand.cs',41,8],['tests/ExportTests.cs',60,0]],
+        msgs: [['to lead','10:36','Export endpoints compile against SheetDto v1; will switch once #2 lands.']] },
+      { id: 'ui', name: 'ui-builder', initials: 'UI', avatar: '#5ED3A8', role: 'WPF sheet panel', model: 'Sonnet', status: 'waiting', tool: 'Wait', target: 'blocked by task #2 (api-designer)', wt: 'feat/ui-panel', elapsed: '6m 12s', tokens: '58k', calls: 9, task: '#4 Sheet panel UI',
+        segs: [['read',0,8],['think',8,6],['edit',14,10],['wait',24,76]],
+        events: [['10:31:20','Wait','task #2','Blocked by lead instruction'],['10:30:02','Edit','src/UI/SheetPanel.xaml','+120 −0'],['10:27:40','Read','src/UI/Styles.xaml','88 lines']],
+        files: [['src/UI/SheetPanel.xaml',120,0]],
+        msgs: [['from lead','10:31','Hold the sheet panel until task #2 lands.']] },
+      { id: 'test', name: 'test-writer', initials: 'TW', avatar: '#FF8A8A', role: 'Integration tests', model: 'Haiku', status: 'error', tool: 'Fail', target: 'dotnet test exited 1 · 2 of 48 failed', wt: 'feat/tests', elapsed: '20m 01s', tokens: '97k', calls: 26, task: '#5 Integration tests',
+        segs: [['read',0,12],['edit',12,20],['bash',32,8],['edit',40,16],['bash',56,10],['think',66,10],['bash',76,16],['error',92,8]],
+        events: [['10:43:18','Bash','dotnet test','FAIL · SheetDto_RoundTrip, Export_ToExcel'],['10:40:55','Edit','src/Api/SheetDto.cs','+4 −1 · overlaps api-designer'],['10:36:30','Edit','tests/SheetDtoTests.cs','+72 −0'],['10:29:10','Bash','dotnet test','46 passed']],
+        files: [['tests/SheetDtoTests.cs',72,0],['src/Api/SheetDto.cs',4,1]],
+        msgs: [['from lead','10:43','Rebase on feat/api-schema before re-running tests.']] },
+      { id: 'rev', name: 'reviewer', initials: 'RV', avatar: '#A9B4C6', role: 'Code review (read-only)', model: 'Opus', status: 'done', tool: 'Done', target: '3 comments on feat/api-schema', wt: 'main', elapsed: '8m 40s', tokens: '131k', calls: 18, task: '#6 Review API contract',
+        segs: [['read',30,24],['think',54,12],['read',66,8]],
+        events: [['10:38:55','SendMessage','→ api-designer','3 review comments'],['10:34:10','Read','git diff main...feat/api-schema','5 files'],['10:30:00','Spawn','reviewer','by lead']],
+        files: [],
+        msgs: [['to api-designer','10:38','SheetNumber as string is fine; add a migration note for existing JSON exports.']] }
+    ];
+    return { ST, TOOL, SEG, agents };
+  }
+  renderVals() {
+    const accent = this.props.accent ?? '#7AA7FF';
+    const { ST, TOOL, SEG, agents } = this.data();
+    const sel = this.state.sel ?? 'be';
+    const tab = this.state.tab ?? 'activity';
+    const resColor = (r) => r.indexOf('FAIL') === 0 ? '#FF8A8A' : '#8E95A0';
+    const list = agents.map((a) => {
+      const s = ST[a.status];
+      const on = a.id === sel;
+      return Object.assign({}, a, s, {
+        selected: on,
+        border: on ? accent : '#262A31',
+        bg: on ? '#1A2030' : '#16181C',
+        laneText: on ? '#E6E7EA' : '#A4AAB4',
+        toolColor: TOOL[a.tool] || '#5ED3A8',
+        pick: () => this.setState({ sel: a.id }),
+        segs: a.segs.map((g) => ({ color: SEG[g[0]], l: g[1], w: g[2], tip: g[0] })),
+        events: a.events.map((e) => ({ t: e[0], tool: e[1], target: e[2], result: e[3], color: TOOL[e[1]] || '#A4AAB4', resColor: resColor(e[3]) })),
+        files: a.files.map((f) => ({ path: f[0], add: f[1], del: f[2] })),
+        msgs: a.msgs.map((m) => ({ dir: m[0], t: m[1], text: m[2] }))
+      });
+    });
+    const cur = list.find((a) => a.selected) || list[0];
+    const tabs = [['activity', 'Activity'], ['files', 'Files'], ['msgs', 'Messages']].map((t) => ({
+      label: t[1], on: tab === t[0], line: tab === t[0] ? accent : 'transparent', color: tab === t[0] ? '#E6E7EA' : '#8E95A0',
+      pick: () => this.setState({ tab: t[0] })
+    }));
+    return {
+      accent, agents: list, cur, tabs,
+      showActivity: tab === 'activity', showFiles: tab === 'files', showMsgs: tab === 'msgs', noFiles: cur.files.length === 0,
+      legend: [['Thinking', SEG.think], ['Read / Grep', SEG.read], ['Edit', SEG.edit], ['Bash', SEG.bash], ['Error', SEG.error]].map((l) => ({ label: l[0], color: l[1] })),
+      worktrees: [
+        { branch: 'main', path: '~/repos/sheet-automation', agents: 'lead, reviewer', state: 'clean', stateColor: '#5ED3A8', border: '#23262C' },
+        { branch: 'feat/api-schema', path: '.worktrees/api-schema', agents: 'api-designer', state: '3 files · ↑2', stateColor: '#C9CDD4', border: '#23262C' },
+        { branch: 'feat/backend-auth', path: '.worktrees/backend', agents: 'backend-impl', state: '3 files · ↑4', stateColor: '#C9CDD4', border: '#23262C' },
+        { branch: 'feat/ui-panel', path: '.worktrees/ui-panel', agents: 'ui-builder', state: '1 file · ↑1', stateColor: '#C9CDD4', border: '#23262C' },
+        { branch: 'feat/tests', path: '.worktrees/tests', agents: 'test-writer', state: 'overlaps feat/api-schema', stateColor: '#F2A541', border: '#5A3E1E' }
+      ],
+      tasks: [
+        { title: '#1 Define API contract', meta: 'Done · api-designer', color: '#5ED3A8', fill: '#5ED3A8', metaColor: '#8E95A0' },
+        { title: '#2 Schema v2 for SheetDto', meta: 'In progress · api-designer', color: '#F2A541', fill: 'transparent', metaColor: '#8E95A0' },
+        { title: '#3 Export endpoints', meta: 'In progress · backend-impl', color: '#F2A541', fill: 'transparent', metaColor: '#8E95A0' },
+        { title: '#4 Sheet panel UI', meta: 'Blocked by #2 · ui-builder', color: '#8FB4FF', fill: 'transparent', metaColor: '#8FB4FF' },
+        { title: '#5 Integration tests', meta: '2 failing · test-writer', color: '#FF8A8A', fill: 'transparent', metaColor: '#FF8A8A' },
+        { title: '#6 Review API contract', meta: 'Done · reviewer', color: '#5ED3A8', fill: '#5ED3A8', metaColor: '#8E95A0' }
+      ],
+      log: [
+        { t: '10:24:00', who: 'you', color: accent, msg: 'Split sheet-export into API, backend, UI, tests + a reviewer. One worktree each.' },
+        { t: '10:24:02', who: 'lead', color: '#F2A541', msg: 'Created team "sheet-export", 4 worktrees, 6 tasks' },
+        { t: '10:38:55', who: 'reviewer', color: '#A9B4C6', msg: 'Review done → 3 comments for api-designer' },
+        { t: '10:42:15', who: 'api-designer', color: '#8FB4FF', msg: 'SheetDto v2 ready (breaking: SheetNumber → string)' },
+        { t: '10:43:18', who: 'test-writer', color: '#FF8A8A', msg: 'dotnet test FAILED: SheetDto_RoundTrip, Export_ToExcel' },
+        { t: '10:43:51', who: 'lead', color: '#F2A541', msg: 'Asked test-writer to rebase on feat/api-schema, task #5 marked blocked' },
+        { t: '10:44:10', who: 'backend-impl', color: '#C49BFF', msg: 'Running export tests (31/48)…' }
+      ]
+    };
+  }
+}
+</script>
+
+
+</body></html>
