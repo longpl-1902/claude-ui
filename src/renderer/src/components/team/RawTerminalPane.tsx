@@ -10,7 +10,6 @@ export function RawTerminalPane(): JSX.Element {
       const [{ Terminal }, { FitAddon }] = await Promise.all([
         import('@xterm/xterm'),
         import('@xterm/addon-fit'),
-        // @ts-ignore - CSS side-effect import has no type declarations in the web tsconfig
         import('@xterm/xterm/css/xterm.css')
       ])
       if (disposed || !host.current) return
