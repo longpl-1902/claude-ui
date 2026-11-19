@@ -9,8 +9,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "node scripts/vitest.mjs run",
+    "test:watch": "node scripts/vitest.mjs",
     "rebuild:pty": "electron-rebuild -f -w node-pty",
     "package:win": "electron-vite build && electron-builder --win"
   },
