@@ -1,0 +1,5 @@
+.ac-acc-step--error .ac-acc-step__n { border-color: var(--ac-danger-text, #f0716f); color: var(--ac-danger-text, #f0716f); }
+.ac-acc-flow__error { color: var(--ac-danger-text, #f0716f); font-size: 13px; line-height: 1.5; }
+.ac-acc-flow__term { height: 220px; border: 1px solid var(--ac-border); border-radius: 8px; overflow: hidden; }
+.ac-acc-warnline { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ac-warn-text); }
+.ac-acc-empty { font-size: 13px; color: var(--ac-text-soft); padding: 8px 0; }
