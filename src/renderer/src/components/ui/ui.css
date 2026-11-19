@@ -55,3 +55,10 @@
   font-family: var(--ac-font-ui);
   user-select: none;
 }
+
+/* ErrorBanner: light-on-dark danger text (>= 4.5:1 on the tinted background in both themes). */
+.ac-errbanner { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px 10px; border: 1px solid var(--ac-danger-border); border-radius: var(--ac-radius-sm); background: color-mix(in srgb, var(--ac-status-needs-you) 12%, var(--ac-bg-card, transparent)); color: var(--ac-text); font-size: 12px; line-height: 1.4; }
+.ac-errbanner__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ac-errbanner__x { flex: none; border: 0; background: transparent; color: var(--ac-text-muted); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: var(--ac-radius-sm); }
+.ac-errbanner__x:hover { color: var(--ac-text); }
+.ac-errbanner__x:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 1px; }

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { HooksStatus } from '@shared/types'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
+import { ErrorBanner } from '../ui/ErrorBanner'
+import { isKnownReason, reasonText } from '../ui/reasonText'
 import { useWorkspaceStore } from '../../store/useWorkspaceStore'
 import '../inspector/inspector.css'
 
@@ -85,7 +87,9 @@ export function HooksDialog({ open, onClose }: { open: boolean; onClose: () => v
           {' - '}
           {STATE_TEXT[state] ?? state}
         </p>
-        {hooks?.reason && <p className="hooks__reason">{hooks.reason}</p>}
+        {hooks?.reason && (
+          <p className="hooks__reason">{isKnownReason(hooks.reason) ? reasonText(hooks.reason) : hooks.reason}</p>
+        )}
         <p className="hooks__row">
           Project: <code title={root ?? undefined}>{root ?? 'none selected'}</code>
         </p>
@@ -105,9 +109,10 @@ export function HooksDialog({ open, onClose }: { open: boolean; onClose: () => v
           </div>
         )}
         {error && (
-          <p className="hooks__error" role="alert">
-            {error}
-          </p>
+          <ErrorBanner
+            message={isKnownReason(error) ? reasonText(error) : error}
+            onDismiss={() => useWorkspaceStore.setState({ hooksError: undefined })}
+          />
         )}
         {done && !preview && (
           <p className="hooks__done" role="status">

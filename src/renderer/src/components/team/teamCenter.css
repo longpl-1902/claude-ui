@@ -122,3 +122,23 @@
   .ac-tc-perm__actions { flex-direction: column; align-items: stretch; }
   .ac-tc-kbd { display: none; }
 }
+
+/* UX S3: density toggle, compact one-row cards, collapsed finished sub-agents. */
+.ac-tc-head { flex-wrap: wrap; }
+.ac-tc-density { display: inline-flex; gap: 0; margin-left: auto; border: 1px solid var(--ac-border-btn); border-radius: var(--ac-radius-sm); overflow: hidden; }
+.ac-tc-density button { border: 0; background: transparent; color: var(--ac-text-muted); font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.ac-tc-density button[aria-checked='true'] { background: var(--ac-bg-selected); color: var(--ac-text); }
+.ac-tc-density button:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: -2px; }
+.ac-tc-grid--compact { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.ac-card--compact { flex-direction: row; align-items: center; gap: 10px; height: 32px; min-height: 32px; padding: 0 10px; box-sizing: border-box; overflow: hidden; }
+.ac-card--compact .ac-card__name { font-size: 13px; flex: none; max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-card__dot-wrap { display: inline-flex; flex: none; }
+.ac-card__dot-wrap .ac-pill__dot { width: 8px; height: 8px; border-radius: 50%; }
+.ac-card__sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ac-card__tool--inline { flex: 1; min-width: 0; width: auto; padding: 2px 8px; }
+.ac-card__meta--inline { flex: none; width: auto; flex-wrap: nowrap; white-space: nowrap; }
+.ac-tc-done-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border: 1px dashed var(--ac-border); border-radius: var(--ac-radius-sm); color: var(--ac-text-muted); font-size: 12px; background: transparent; font-family: inherit; cursor: pointer; text-align: left; width: 100%; box-sizing: border-box; }
+.ac-tc-done-row:hover { border-color: var(--ac-border-hover); color: var(--ac-text); }
+.ac-tc-done-row:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 1px; }
+.ac-tc-done-row__show { margin-left: auto; color: var(--ac-accent); }
+@media (max-width: 899px) { .ac-card--compact .ac-card__meta--inline span:last-child { display: none; } }

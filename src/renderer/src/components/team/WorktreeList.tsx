@@ -4,8 +4,16 @@ import { rendererPlatform, selectWorktreeViews, useWorkspaceStore } from '../../
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
+import { ErrorBanner } from '../ui/ErrorBanner'
 import { BranchIcon } from '../ui/Icons'
+import { isKnownReason, reasonText } from '../ui/reasonText'
 import './teamLeft.css'
+
+const errText = (e: string): string => (isKnownReason(e) ? reasonText(e) : e)
+const shortErr = (e: string): string => {
+  const t = errText(e)
+  return t.length > 80 ? `${t.slice(0, 79)}…` : t
+}
 
 function LiveWorktrees(): JSX.Element {
   const agents = useConsoleStore((s) => s.team.agents)
@@ -20,7 +28,7 @@ function LiveWorktrees(): JSX.Element {
   } else if (!workspace) {
     body = <p className="ac-left-placeholder">Loading worktrees…</p>
   } else if (workspace.error && workspace.worktrees.length === 0) {
-    body = <p className="ac-wt__error">{workspace.error}</p>
+    body = <ErrorBanner message={errText(workspace.error)} />
   } else {
     const { worktrees } = selectWorktreeViews(workspace, agents, platform)
     const ordered = [...worktrees.filter((w) => w.isMain), ...worktrees.filter((w) => !w.isMain)]
@@ -78,7 +86,7 @@ function LiveWorktrees(): JSX.Element {
                 )}
                 {overlaps.length > 0 && <span className="ac-wt__overlap">{`overlaps ${overlaps.join(', ')}`}</span>}
               </div>
-              {w.error && <div className="ac-wt__error">{w.error}</div>}
+              {w.error && <ErrorBanner message={shortErr(w.error)} title={errText(w.error)} />}
             </div>
           )
         })}
