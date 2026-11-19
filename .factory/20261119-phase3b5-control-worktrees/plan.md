@@ -384,3 +384,115 @@ Send / Allow / Deny / Interrupt / Stop / model-mode changes clicked by the user.
 - **F4 Jump works from any screen.** T22: `focusItem` calls `navigate('team')` first; Ctrl+J/Ctrl+Shift+J work on every
   screen (global listener). T22 also owns adding the same "● N need you" button to
   src/renderer/src/components/accounts/AccountsHeader.tsx (no other wave-7 task touches it).
+
+## VS Code parity (added after T01-T22 were frozen; waves 9-11)
+Requirement (user): MCP, skills, etc. "as complete as Claude Code for VS Code". T01-T22 are unchanged; T23-T30 extend
+their files in later waves (one owner per shared file per wave).
+
+Requirements: R-27 slash palette with descriptions/sources (built-in, custom, skills, plugins, MCP prompts);
+R-28 read-only catalog of skills/agents/commands/output styles (user, project, plugin) with open-in-editor;
+R-29 composer parity: @-mentions, image attach/paste, AskUserQuestion + plan approval cards, prompt history;
+R-30 model/effort/permission-mode/output-style pickers, context meter, cost per turn/session, rename;
+R-31 checkpoints: rewind files (dry-run preview + confirm) and fork from an earlier prompt;
+R-32 MCP: live status + per-session enable/disable/reconnect; configured servers and plugins managed only through a
+previewed `claude mcp|plugin` command (hard rule 3), health check only on explicit refresh.
+
+### Verified facts (installed CLI 2.1.328 + VS Code extension 2.1.326, read-only, no sessions run)
+- P1 Control requests the extension itself sends (grep of extension.js): initialize, interrupt, set_model,
+  set_permission_mode, set_max_thinking_tokens, mcp_status, mcp_toggle, mcp_reconnect, mcp_authenticate,
+  mcp_clear_auth, mcp_set_servers, rewind_files, rename_session, reload_skills, reload_plugins, reload_output_styles,
+  get_plan, get_settings, update_settings, get_usage, get_status, list_permission_rules, stop_task, side_question,
+  seed_read_state, read_file ... -> everything below is available to a stream-json client.
+- P2 Schemas (CLI zod): `initialize` response {commands[{name, description, argumentHint, aliases?, builtin?}],
+  agents, output_style, available_output_styles, models[]}; `mcp_status` -> mcpServers[{name, status: connected|failed|
+  needs-auth|pending|disabled, serverInfo?, error?}]; `mcp_toggle {serverName, enabled}`; `mcp_reconnect {serverName}`;
+  `get_context_usage {detail?}` -> {totalTokens, maxTokens, percentage, categories/gridRows, model, memoryFiles};
+  `get_session_cost`; `rewind_files {user_message_id, dry_run?}` -> {canRewind, error?, filesChanged[], insertions,
+  deletions}; `file_suggestions {query}` -> {suggestions[{path, score?}], cwd}; `apply_flag_settings {settings}`;
+  `rename_session {title}`; `get_plan` -> {exists, content?, path?}; `list_models`; push `system/commands_changed`.
+- P3 `system/init` carries slash_commands (names), tools, agents, skills, plugins, mcp_servers, model,
+  permissionMode, output_style (fact 5).
+- P4 Flags: `--effort low|medium|high|xhigh|max`, `--settings <json>` (in-memory flag settings),
+  `--replay-user-messages` (echo with uuid), hidden `--resume-session-at <uuid>` (used by the extension with
+  `--fork-session`), env `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING` (extension `enableFileCheckpointing`; the pty layer
+  strips it, control sessions set it to 1). Settings keys `effortLevel` (low..xhigh) and `outputStyle` exist.
+- P5 AskUserQuestion answers go back as `updatedInput.answers` {question -> label(s), comma-joined} (sdk-tools.d.ts);
+  ExitPlanMode arrives as a `can_use_tool` request.
+- P6 `claude mcp list|get|add|add-json|remove|login|logout|reset-project-choices` (scopes local|user|project; `-e`,
+  `-H`, `-t`); `mcp list` health-checks (starts) every approved server. `claude plugin list --json`,
+  `enable|disable|install|uninstall|update|details`. None of these calls the model.
+- P7 Disk layout (`~/.claude`): skills/NAME/SKILL.md, agents/, commands/, plugins/ (installed_plugins.json), plans/.
+- P8 Extension-only features (package.json): editor diff accept/reject, attach open file/selection, sidebar/tab
+  placement, walkthrough, logout, "mark unread", session tab groups.
+
+### Parity matrix
+| VS Code feature | Stream-json client? | Our plan |
+|---|---|---|
+| Chat with streaming, tool calls, interrupt | yes | have (T07/T15) |
+| Permission prompts Allow/Deny, "for this session" | yes | have (T07/T15/T22) |
+| Plan mode + plan approval | yes (can_use_tool ExitPlanMode, get_plan) | add T28 plan card |
+| AskUserQuestion UI | yes (updatedInput.answers) | add T28 |
+| Slash palette incl. custom/skills/plugins/MCP prompts | yes (initialize.commands, commands_changed) | add T26/T28 |
+| @-mention files/folders | yes (file_suggestions) | add T28 (git ls-files before the first Send) |
+| Image paste/attach | yes (image content blocks) | add T28 (ASSUMPTION: API block shape) |
+| Model picker | yes (initialize.models, set_model) | add T29 (static list until running) |
+| Effort / thinking | yes (--effort, apply_flag_settings effortLevel) | add T29 |
+| Permission mode | yes | have (T15) |
+| Output style | yes (--settings outputStyle, available_output_styles) | add T29 |
+| Context usage meter | yes (get_context_usage, local) | add T29 |
+| Cost per turn / session | yes (result.total_cost_usd, usage) | add T29 |
+| Checkpoints: rewind files | yes (rewind_files + checkpoint env) | add T26/T29 |
+| Fork / rewind conversation | yes (--resume-session-at + --fork-session) | add T26/T29 |
+| Session history, resume, continue | yes | have (picker, T15) |
+| Rename session | yes (rename_session) | add T29 |
+| MCP status, enable/disable, reconnect | yes | add T26/T29/T30 |
+| MCP add/remove/config | yes via `claude mcp` CLI | add T25/T30 (preview + Run command) |
+| MCP OAuth authenticate | yes (mcp_authenticate) | **not in-app (PD6)**: point to `/mcp` in the Raw terminal |
+| Plugins install/enable/disable | yes via `claude plugin` CLI | add T25/T30 |
+| Skills / agents / commands browser | disk + initialize | add T25/T30 (read-only, open in editor) |
+| Todo / task list | transcripts | have (T06/T16) |
+| Hooks | settings | have (T04/T10/T17) |
+| Prompt suggestions | yes, but each costs a model call | **rejected (R-19)** |
+| Side question (/btw) | yes, user-initiated slash command | available through the palette as text; no extra UI |
+| Inline editor diff accept/reject, attach open file/selection | editor-only | **not possible** (no editor host); Files tab + Compare diffs + Open in VS Code instead |
+| Sidebar/tab placement, walkthrough, mark unread, tab groups | editor-only | not applicable |
+| Logout | `claude auth logout` | not added (sign-in stays CLI-owned; hard rule 1) |
+| Voice, Chrome, cloud/remote sessions, ultrareview | cloud/extra cost | out of scope |
+
+### Decisions (parity)
+- PD1 `initialize`, `mcp_status`, `get_context_usage` are sent automatically **only** inside an already running session
+  and are local (no model call), so R-19 holds. The process still starts only on the user's first Send. Before that,
+  the palette uses the built-in fallback list plus the disk catalog.
+- PD2 The context meter refreshes after each `result` and on click. Cost is labelled "API-equivalent".
+- PD3 Effort/output style: launch flags for drafts. A running session uses `apply_flag_settings` (ASSUMPTION: same keys
+  as settings; if rejected, the UI says "applies on next start").
+- PD4 Checkpointing is on for all controlled sessions (env). Rewind = files only, always dry-run + confirm, refused
+  while busy. Fork-at creates a draft; nothing is sent.
+- PD5 `@path` mentions are inserted as text (ASSUMPTION: same expansion as the terminal). The fallback list before
+  the first Send comes from `git ls-files`.
+- PD6 MCP OAuth is not done in-app (browser callback flows are risky to proxy). `needs-auth` points to `/mcp` in the
+  Raw terminal. MCP and plugin config changes run only the exact `claude ...` argv shown in the preview. Secrets are
+  masked in display/output. No config file is read or hand-edited (MCP env values can be secrets).
+- PD7 `claude mcp list` starts the configured servers, so it runs only on "Check health".
+- PD8 The catalog reads only `.md` heads under the account configDir, `<project>/.claude`, and plugin install paths
+  from `claude plugin list --json`.
+
+### Waves (parity)
+| Wave | Tasks | Why this order |
+|---|---|---|
+| 9 | T23 contract v5, T24 protocol/args v2, T25 catalog + claude CLI runner | T23 owns all contract files; T24/T25 are pure/main modules with local types. |
+| 10 | T26 control manager v2 + handlers/index wiring, T27 renderer stores v2 + extensions screen id | Wiring needs T23-T25; stores need T23. |
+| 11 | T28 composer + question/plan cards, T29 session controls/context/rewind, T30 Extensions screen | Disjoint renderer files; all need T26/T27. |
+
+| Criterion | Task(s) | Test file |
+|---|---|---|
+| R-27 | T24, T26, T27, T28 | protocolV2.test.ts, controlV2.test.ts, detailsStore.test.ts, composer.test.tsx |
+| R-28 | T25, T30 | catalog.test.ts, extensionsView.test.tsx |
+| R-29 | T24, T28 | protocolV2.test.ts, composer.test.tsx |
+| R-30 | T24, T26, T29 | args.test.ts, controlV2.test.ts, sessionControls.test.tsx |
+| R-31 | T26, T29 | controlV2.test.ts, sessionControls.test.tsx |
+| R-32 | T25, T26, T30 | claudeCli.test.ts, mask.test.ts, extensionsView.test.tsx |
+
+Manual (after wave 11, no tokens): open Extensions, check that the skills/agents/commands of `~/.claude` and this repo
+are listed, run "Check health" once, preview (do not run) an MCP add. Token-using checks (palette after start,
+rewind, images) only if the user agrees.
