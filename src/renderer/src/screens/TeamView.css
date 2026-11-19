@@ -40,3 +40,48 @@
   flex-direction: column;
   gap: 16px;
 }
+
+.ac-team__skip {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.ac-team__skip:focus {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  margin: 0;
+  clip: auto;
+  padding: 8px 12px;
+  background: var(--ac-bg-card);
+  border: 1px solid var(--ac-border-btn);
+  border-radius: 6px;
+}
+
+.ac-team__center {
+  overflow-x: hidden;
+}
+
+@media (max-width: 1100px) {
+  .ac-team__right {
+    flex-basis: 100%;
+    border-left: 0;
+    border-top: 1px solid var(--ac-border);
+  }
+}
+
+@media (max-width: 760px) {
+  .ac-team__left {
+    flex-basis: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--ac-border);
+  }
+}

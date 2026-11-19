@@ -11,6 +11,9 @@ import './TeamView.css'
 export function TeamView() {
   return (
     <div className="ac-team">
+      <a className="ac-team__skip" href="#ac-agents">
+        Skip to agents
+      </a>
       <TeamHeader />
       <div className="ac-team__cols">
         <aside className="ac-team__left" aria-label="Worktrees and tasks">
@@ -19,13 +22,15 @@ export function TeamView() {
         </aside>
         <main className="ac-team__center">
           <OverlapBanner />
-          <AgentGrid />
+          <div id="ac-agents">
+            <AgentGrid />
+          </div>
           <Timeline />
           <LeadConsole />
         </main>
-        <aside className="ac-team__right" aria-label="Agent inspector">
+        <div className="ac-team__right">
           <Inspector />
-        </aside>
+        </div>
       </div>
     </div>
   )
