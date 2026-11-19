@@ -45,6 +45,8 @@ import type {
   SignInStatus,
   TeamSelection,
   TeamSnapshot,
+  ThemeSource,
+  ThemeState,
   UsageToday
 } from './types'
 
@@ -141,6 +143,16 @@ export const IPC = {
   // v5 push; the invoke 'control:details' owns that exact name, so the push is 'control:details-changed'
   controlDetailsChanged: 'control:details-changed'
 } as const
+/**
+ * Theme channels (T31). Kept apart from IPC: the main process registers these itself (src/main/theme.ts), so they
+ * are not part of the generic invoke-handler table.
+ */
+export const THEME_IPC = {
+  get: 'theme:get', // invoke -> ThemeState
+  setSource: 'theme:set-source', // invoke (ThemeSource) -> ThemeState
+  changed: 'theme:changed' // main -> renderer push (ThemeState)
+} as const
+
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]
 
 export const PUSH_CHANNELS = [
@@ -439,5 +451,10 @@ export interface ConsoleApi {
   }
   cli: { apply(previewId: string): Promise<CliRunResult> }
   worktree: { openInEditor(path: string): Promise<OkResult> }
+  theme?: {
+    get(): Promise<ThemeState>
+    setSource(source: ThemeSource): Promise<ThemeState>
+    onChanged(cb: (s: ThemeState) => void): () => void
+  }
   app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string>; openExternal(url: string): Promise<OkResult> }
 }

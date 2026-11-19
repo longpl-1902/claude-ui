@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useConsoleStore } from '../store/useConsoleStore'
 import { selectControlForSession, useControlStore } from '../store/useControlStore'
 import { useLayoutStore } from '../store/useLayoutStore'
+import { useThemeStore } from '../theme/useThemeStore'
 
 export interface ShortcutDef {
   keys: string
@@ -18,6 +19,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: 'Ctrl+Shift+A', action: 'Accounts' },
   { keys: 'Ctrl+Shift+E', action: 'Extensions (MCP servers, plugins, skills)' },
   { keys: 'Ctrl+Shift+C', action: 'Switch between Team and Chat view' },
+  { keys: 'Ctrl+Shift+L', action: 'Cycle the theme: System / Light / Dark' },
   { keys: 'Ctrl+Shift+M', action: 'Maximize / restore the lead console' },
   { keys: 'Ctrl+B', action: 'Collapse / expand the left column' },
   { keys: 'Ctrl+I', action: 'Collapse / expand the inspector' },
@@ -111,6 +113,9 @@ export function handleShortcut(e: KeyboardEvent): boolean {
         return done()
       case 'e':
         st.navigate('extensions')
+        return done()
+      case 'l':
+        useThemeStore.getState().cycle()
         return done()
       case 'j':
         if (!bridge.focusPrev) return false

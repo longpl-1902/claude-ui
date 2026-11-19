@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { readXtermTheme } from '../../theme/xtermTheme'
+import { useThemeStore } from '../../theme/useThemeStore'
 import './terminal.css'
 
 export interface TerminalViewProps {
@@ -29,7 +31,7 @@ export function TerminalView({ ptyId, ariaLabel, className, interactive = true }
       ])
       if (disposed) return
       const term = new Terminal({
-        theme: { background: '#0B0C0E', foreground: '#E6E7EA' },
+        theme: readXtermTheme(),
         fontFamily: 'JetBrains Mono, Consolas, monospace',
         fontSize: 12,
         disableStdin: !interactive,
@@ -40,6 +42,12 @@ export function TerminalView({ ptyId, ariaLabel, className, interactive = true }
       term.loadAddon(fit)
       term.open(container)
       cleanups.push(() => term.dispose())
+      // Follow the app theme live (the store updates the document tokens before it notifies).
+      cleanups.push(
+        useThemeStore.subscribe((s, prev) => {
+          if (s.mode !== prev.mode || s.accentApplied !== prev.accentApplied) term.options.theme = readXtermTheme()
+        })
+      )
 
       // Subscribe before reading the buffer so no output is lost; hold live data until the buffer is written.
       let ready = false

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import './jestDom'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -342,7 +344,11 @@ describe('responsive: narrow width', () => {
     await userEvent.click(screen.getByRole('button', { name: 'More controls' }))
     expect(screen.getByRole('combobox', { name: 'Effort' })).toBeInTheDocument()
     const strip = screen.getByTestId('session-details-strip')
-    expect(strip).toHaveStyle({ flexWrap: 'wrap' })
+    // css is not loaded under vitest: the wrap rule lives in controlBar.css (theme-token stylesheet, no inline styles)
+    expect(strip).toHaveClass('ac-ctl-strip')
+    expect(readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/controlBar.css'), 'utf8')).toMatch(
+      /\.ac-ctl-strip\s*\{[^}]*flex-wrap:\s*wrap/
+    )
     expect(within(strip).getByRole('button', { name: 'MCP github: connected' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Fewer controls' })).toBeInTheDocument())
   })

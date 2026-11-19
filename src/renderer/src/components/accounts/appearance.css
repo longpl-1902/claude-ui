@@ -1,0 +1,2 @@
+.ac-appearance__options { display: flex; flex-wrap: wrap; gap: 12px; }
+.ac-appearance__options .ac-acc-radio { flex: 1 1 220px; min-width: 0; }

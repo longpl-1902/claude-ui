@@ -6,9 +6,9 @@ import { useConsoleStore } from '@renderer/store/useConsoleStore'
 import './signIn.css'
 
 const STEP_COLORS = {
-  done: { ring: '#5ED3A8', fill: '#5ED3A8', num: '#0E0F11', text: '#C9CDD4' },
-  current: { ring: '#F2A541', fill: 'transparent', num: '#F2A541', text: '#E6E7EA' },
-  todo: { ring: '#5C636E', fill: 'transparent', num: '#8E95A0', text: '#8E95A0' }
+  done: { ring: 'var(--ac-status-done)', fill: 'var(--ac-status-done)', num: 'var(--ac-on-status)', text: 'var(--ac-text-soft)' },
+  current: { ring: 'var(--ac-status-running)', fill: 'transparent', num: 'var(--ac-status-running)', text: 'var(--ac-text)' },
+  todo: { ring: 'var(--ac-account-fallback)', fill: 'transparent', num: 'var(--ac-text-subtle)', text: 'var(--ac-text-subtle)' }
 }
 
 function errorMessage(reason?: string): string {
@@ -79,7 +79,7 @@ export function SignInPanel(): JSX.Element | null {
       {done ? (
         <div className="ac-acc-flow__done">
           <span className="ac-acc-flow__check">
-            <CheckIcon size={16} color="#5ED3A8" />
+            <CheckIcon size={16} color="var(--ac-status-done)" />
           </span>
           <div className="ac-acc-flow__donetext">
             <span className="ac-acc-flow__title" aria-live="polite">{`Signed in as ${email}`}</span>

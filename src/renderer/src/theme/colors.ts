@@ -1,40 +1,44 @@
 import type { ActivityKind, AgentStatus } from '../../../shared/types'
 
+/**
+ * Every colour here is a CSS variable reference resolved by the active theme (styles/tokens.css), so the same
+ * strings work in both the dark and the light theme. Never put a hex literal in a component.
+ */
 export const STATUS_META: Record<
   AgentStatus,
   { label: string; color: string; bg: string; pulse: boolean }
 > = {
-  running: { label: 'Running', color: '#F2A541', bg: '#2E2415', pulse: true },
-  waiting: { label: 'Waiting', color: '#8FB4FF', bg: '#18213A', pulse: false },
-  'needs-you': { label: 'Needs you', color: '#FF8A8A', bg: '#361A1C', pulse: false },
-  done: { label: 'Done', color: '#5ED3A8', bg: '#14302A', pulse: false }
+  running: { label: 'Running', color: 'var(--ac-status-running)', bg: 'var(--ac-status-running-bg)', pulse: true },
+  waiting: { label: 'Waiting', color: 'var(--ac-status-waiting)', bg: 'var(--ac-status-waiting-bg)', pulse: false },
+  'needs-you': { label: 'Needs you', color: 'var(--ac-status-needs-you)', bg: 'var(--ac-status-needs-you-bg)', pulse: false },
+  done: { label: 'Done', color: 'var(--ac-status-done)', bg: 'var(--ac-status-done-bg)', pulse: false }
 }
 
 export const TOOL_COLORS: Record<string, string> = {
-  Edit: '#8FB4FF',
-  Write: '#8FB4FF',
-  Read: '#A4AAB4',
-  Grep: '#A4AAB4',
-  Bash: '#C49BFF',
-  SendMessage: '#5ED3A8',
-  TaskUpdate: '#5ED3A8',
-  Spawn: '#F2A541',
-  Wait: '#7D848F',
-  Fail: '#FF8A8A',
-  Done: '#5ED3A8'
+  Edit: 'var(--ac-tool-edit)',
+  Write: 'var(--ac-tool-edit)',
+  Read: 'var(--ac-tool-read)',
+  Grep: 'var(--ac-tool-read)',
+  Bash: 'var(--ac-tool-bash)',
+  SendMessage: 'var(--ac-tool-message)',
+  TaskUpdate: 'var(--ac-tool-message)',
+  Spawn: 'var(--ac-tool-spawn)',
+  Wait: 'var(--ac-tool-wait)',
+  Fail: 'var(--ac-tool-fail)',
+  Done: 'var(--ac-tool-done)'
 }
 
 export function toolColor(tool: string): string {
-  return TOOL_COLORS[tool] ?? '#A4AAB4'
+  return TOOL_COLORS[tool] ?? 'var(--ac-tool-read)'
 }
 
 export const SEGMENT_COLORS: Record<ActivityKind, string> = {
-  think: '#3A4150',
-  read: '#5C6370',
-  edit: '#6E9BF0',
-  bash: '#A77FEF',
-  wait: '#252930',
-  error: '#FF8A8A'
+  think: 'var(--ac-seg-think)',
+  read: 'var(--ac-seg-read)',
+  edit: 'var(--ac-seg-edit)',
+  bash: 'var(--ac-seg-bash)',
+  wait: 'var(--ac-seg-wait)',
+  error: 'var(--ac-seg-error)'
 }
 
 export const TIMELINE_LEGEND: { label: string; kind: ActivityKind }[] = [
@@ -45,4 +49,4 @@ export const TIMELINE_LEGEND: { label: string; kind: ActivityKind }[] = [
   { label: 'Error', kind: 'error' }
 ]
 
-export const ACCOUNT_FALLBACK_COLOR = '#5C636E'
+export const ACCOUNT_FALLBACK_COLOR = 'var(--ac-account-fallback)'

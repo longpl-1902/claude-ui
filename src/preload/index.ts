@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC } from '@shared/ipc'
+import { IPC, THEME_IPC } from '@shared/ipc'
 import type { ConsoleApi, InvokeChannel, IpcInvokeMap } from '@shared/ipc'
 import type {
   AccountsSnapshot,
@@ -15,6 +15,7 @@ import type {
   SessionSummary,
   SignInStatus,
   TeamSnapshot,
+  ThemeState,
   UsageToday
 } from '@shared/types'
 
@@ -150,6 +151,11 @@ const api: ConsoleApi = {
   },
   worktree: {
     openInEditor: (path) => invoke(IPC.worktreeOpenInEditor, path)
+  },
+  theme: {
+    get: () => ipcRenderer.invoke(THEME_IPC.get) as Promise<ThemeState>,
+    setSource: (source) => ipcRenderer.invoke(THEME_IPC.setSource, source) as Promise<ThemeState>,
+    onChanged: (cb) => on<ThemeState>(THEME_IPC.changed, cb)
   },
   app: {
     getVersion: () => invoke(IPC.appGetVersion),

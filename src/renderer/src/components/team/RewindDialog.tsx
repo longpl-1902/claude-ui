@@ -3,6 +3,7 @@ import type { ControlStartResult, OkResult, RewindPreview, UserTurnRef } from '@
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
 import { isKnownReason, reasonText } from '../ui/reasonText'
+import './controlBar.css'
 
 export const BUSY_REASON = 'Wait for Claude to finish this turn (or interrupt it) before using checkpoints.'
 export const REWIND_EXPLAIN =
@@ -98,13 +99,13 @@ export function RewindDialog({
       )}
       {message && <p role="status">{message}</p>}
       {rows.length === 0 && <p className="ac-tc-hint">No earlier prompts yet.</p>}
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <ul className="ac-rw__list">
         {rows.map((t) => (
-          <li key={t.uuid} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-            <span title={t.text} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <li key={t.uuid} className="ac-rw__item">
+            <span title={t.text} className="ac-rw__text">
               {t.text || '(empty prompt)'}
             </span>
-            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <span className="ac-rw__actions">
               <span className="ac-tc-hint">{t.time}</span>
               <Button
                 size="sm"
@@ -126,21 +127,21 @@ export function RewindDialog({
               </Button>
             </span>
             {pending?.uuid === t.uuid && (
-              <div role="group" aria-label="Rewind preview" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div role="group" aria-label="Rewind preview" className="ac-rw__preview">
                 {pending.p.canRewind ? (
                   <>
                     <span>
                       {pending.p.filesChanged.length} file(s) would change: +{pending.p.insertions} / -
                       {pending.p.deletions}
                     </span>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    <ul className="ac-rw__files">
                       {pending.p.filesChanged.map((f) => (
-                        <li key={f} title={f} style={{ overflowWrap: 'anywhere' }}>
+                        <li key={f} title={f} className="ac-rw__file">
                           {f}
                         </li>
                       ))}
                     </ul>
-                    <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <span className="ac-rw__actions">
                       <Button size="sm" variant="warn" disabled={busy || working} onClick={() => void confirm()}>
                         Restore files
                       </Button>

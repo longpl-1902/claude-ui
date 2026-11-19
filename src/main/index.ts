@@ -1,9 +1,9 @@
 import { execFile, spawn as nodeSpawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { watch as chokidarWatch } from 'chokidar'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, shell } from 'electron'
-import { existsSync, promises as fsp } from 'node:fs'
-import { homedir } from 'node:os'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, systemPreferences } from 'electron'
+import { existsSync, promises as fsp, readFileSync, writeFileSync } from 'node:fs'
+import { homedir, release as osRelease } from 'node:os'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import { createAccountsService } from './accounts/accountsService'
@@ -29,6 +29,7 @@ import { ensureScriptInstalled, resolveNode } from './hooks/hookRuntime'
 import { createHookServer } from './hooks/hookServer'
 import { createHooksService } from './hooks/hooksService'
 import { createHandlers, registerIpcHandlers } from './ipc/handlers'
+import { createThemeController, isThemeSource, type ThemeController } from './theme'
 import { resolveClaudeCommand } from './pty/claudeBinary'
 import { createPtyManager, loadNodePty } from './pty/ptyManager'
 import { createExecFn } from './transcripts/projectResolver'
@@ -113,13 +114,16 @@ const nodeTextFs = {
 
 const mainWindow = (): BrowserWindow | undefined => BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
 
+// Theme wiring (T31): created when the app is ready, before the first window.
+let theme: ThemeController | undefined
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0E0F11',
+    ...theme?.windowOptions(),
     title: 'Agent Console',
     show: false,
     autoHideMenuBar: true,
@@ -132,7 +136,10 @@ function createWindow(): void {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => {
+    theme?.applyToWindow(win)
+    win.show()
+  })
   registerContextMenu(win.webContents, {
     buildMenu: (t) => Menu.buildFromTemplate(t as Electron.MenuItemConstructorOptions[]),
     writeClipboard: (text) => clipboard.writeText(text)
@@ -153,6 +160,31 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('com.longpl.agentconsole')
+  const themeFile = join(app.getPath('userData'), 'theme.json')
+  theme = createThemeController({
+    nativeTheme,
+    systemPreferences,
+    platform: process.platform,
+    osRelease: osRelease(),
+    windows: () => BrowserWindow.getAllWindows(),
+    ipc: { handle: (channel, fn) => ipcMain.handle(channel, fn) },
+    readSource: () => {
+      try {
+        const v = (JSON.parse(readFileSync(themeFile, 'utf8')) as { source?: unknown }).source
+        return isThemeSource(v) ? v : 'system'
+      } catch {
+        return 'system'
+      }
+    },
+    writeSource: (source) => {
+      try {
+        writeFileSync(themeFile, JSON.stringify({ source }))
+      } catch {
+        // best effort; the renderer also persists the choice
+      }
+    }
+  })
+  theme.start()
   const host: HostEnv = { home: homedir(), platform: process.platform, env: process.env, appData: process.env['APPDATA'] }
   const pty = createPtyManager({
     loadPty: loadNodePty,

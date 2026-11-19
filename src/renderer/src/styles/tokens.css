@@ -21,9 +21,9 @@
   --ac-text-soft: #C9CDD4;
   --ac-text-code: #D5D8DE;
   --ac-text-branch: #A9B4C6;
-  --ac-text-dim: #858C97;
-  --ac-text-faint: #7F8691;
-  --ac-text-sep: #6B727D;
+  --ac-text-dim: #8F96A1;
+  --ac-text-faint: #8D949F;
+  --ac-text-sep: #8A919C;
 
   --ac-accent: #7AA7FF;
   --ac-accent-hover: #A9C6FF;
@@ -55,6 +55,66 @@
   --ac-seg-wait: #252930;
   --ac-seg-error: #FF8A8A;
 
+  --ac-on-accent: #0E0F11;
+  --ac-on-status: #0E0F11;
+  --ac-on-avatar: #0E0F11;
+
+  --ac-status-error: #FF8A8A;
+  --ac-danger-text: #FF8A8A;
+  --ac-ok-text: #5ED3A8;
+
+  --ac-warn-solid: #F2A541;
+  --ac-warn-solid-hover: #F5B462;
+  --ac-on-warn: #0E0F11;
+
+  --ac-chip-bg: #151C2C;
+  --ac-chip-border: #2B3A5C;
+  --ac-badge-bg: #1E2638;
+  --ac-badge-text: #B5CEFF;
+  --ac-line: #2A2E35;
+  --ac-account-fallback: #6A717C;
+
+  --ac-tool-edit: #8FB4FF;
+  --ac-tool-read: #A4AAB4;
+  --ac-tool-bash: #C49BFF;
+  --ac-tool-message: #5ED3A8;
+  --ac-tool-spawn: #F2A541;
+  --ac-tool-wait: #8A919C;
+  --ac-tool-fail: #FF8A8A;
+  --ac-tool-done: #5ED3A8;
+
+  --ac-overlay: rgba(0, 0, 0, 0.55);
+  --ac-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --ac-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --ac-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --ac-shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --ac-pulse-rgb: 242, 165, 65;
+
+  --ac-scroll-thumb: rgba(164, 170, 180, 0.28);
+  --ac-scroll-thumb-hover: rgba(164, 170, 180, 0.5);
+  --ac-scroll-thumb-active: rgba(164, 170, 180, 0.7);
+
+  --ac-term-bg: #0B0C0E;
+  --ac-term-fg: #E6E7EA;
+  --ac-term-cursor: #E6E7EA;
+  --ac-term-selection: rgba(122, 167, 255, 0.35);
+  --ac-term-black: #1A1D22;
+  --ac-term-red: #FF8A8A;
+  --ac-term-green: #5ED3A8;
+  --ac-term-yellow: #F2A541;
+  --ac-term-blue: #7AA7FF;
+  --ac-term-magenta: #C49BFF;
+  --ac-term-cyan: #6FD3E0;
+  --ac-term-white: #C9CDD4;
+  --ac-term-bright-black: #8A919C;
+  --ac-term-bright-red: #FFA8A8;
+  --ac-term-bright-green: #86E3C0;
+  --ac-term-bright-yellow: #F7C06E;
+  --ac-term-bright-blue: #A9C6FF;
+  --ac-term-bright-magenta: #D7B8FF;
+  --ac-term-bright-cyan: #98E4EE;
+  --ac-term-bright-white: #E6E7EA;
+
   --ac-radius-control: 8px;
   --ac-radius-sm: 6px;
   --ac-radius-card: 10px;
@@ -63,4 +123,176 @@
 
   --ac-font-ui: Inter, system-ui, sans-serif;
   --ac-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Light theme: same roles, same layout. Text pairs >= 4.5:1, graphics >= 3:1 (see tests/renderer/theme.test.tsx). */
+:root[data-theme='light'] {
+  --ac-bg-app: #F3F4F7;
+  --ac-bg-panel: #FFFFFF;
+  --ac-bg-card: #FAFBFC;
+  --ac-bg-console: #FFFFFF;
+  --ac-bg-inset: #EEF0F4;
+  --ac-bg-btn: #EEF0F4;
+  --ac-bg-btn-hover: #E1E5EB;
+  --ac-bg-selected: #E3EBFC;
+
+  --ac-border: #E1E4EA;
+  --ac-border-card: #D8DCE3;
+  --ac-border-btn: #C9CED7;
+  --ac-border-inset: #DDE1E8;
+  --ac-border-hover: #8A93A3;
+  --ac-border-dashed: #B6BDC9;
+
+  --ac-text: #1A1D23;
+  --ac-text-muted: #444B56;
+  --ac-text-subtle: #4F5662;
+  --ac-text-soft: #2F353E;
+  --ac-text-code: #262B33;
+  --ac-text-branch: #364A6B;
+  --ac-text-dim: #565D69;
+  --ac-text-faint: #5A616D;
+  --ac-text-sep: #5F6671;
+
+  --ac-accent: #2557D6;
+  --ac-accent-hover: #1A44B0;
+  --ac-accent-2: #2F63C9;
+
+  --ac-status-running: #8A4B00;
+  --ac-status-running-bg: #FDEFD6;
+  --ac-status-waiting: #2447A8;
+  --ac-status-waiting-bg: #E4ECFD;
+  --ac-status-needs-you: #B0201C;
+  --ac-status-needs-you-bg: #FCE4E4;
+  --ac-status-done: #0F6B49;
+  --ac-status-done-bg: #DCF3E8;
+
+  --ac-account-company: #2F63C9;
+  --ac-account-personal: #A35A00;
+
+  --ac-warn-bg: #FFF1D6;
+  --ac-warn-border: #E3B66B;
+  --ac-warn-text: #7A4A00;
+  --ac-flow-bg: #FBF4E8;
+
+  --ac-danger-border: #E7A9A6;
+
+  --ac-seg-think: #AEB6C4;
+  --ac-seg-read: #7D8696;
+  --ac-seg-edit: #3F6FD8;
+  --ac-seg-bash: #7A4FD0;
+  --ac-seg-wait: #D5DAE2;
+  --ac-seg-error: #D13B3B;
+
+  --ac-on-accent: #FFFFFF;
+  --ac-on-status: #FFFFFF;
+  --ac-on-avatar: #0E0F11;
+
+  --ac-status-error: #B0201C;
+  --ac-danger-text: #B0201C;
+  --ac-ok-text: #0F6B49;
+
+  --ac-warn-solid: #F2A541;
+  --ac-warn-solid-hover: #F7BE74;
+  --ac-on-warn: #1A1206;
+
+  --ac-chip-bg: #E8EEFB;
+  --ac-chip-border: #B9C9EE;
+  --ac-badge-bg: #E1E9FB;
+  --ac-badge-text: #1F3F94;
+  --ac-line: #D5DAE2;
+  --ac-account-fallback: #6B7380;
+
+  --ac-tool-edit: #2447A8;
+  --ac-tool-read: #4A515C;
+  --ac-tool-bash: #6B3FC0;
+  --ac-tool-message: #0F6B49;
+  --ac-tool-spawn: #8A4B00;
+  --ac-tool-wait: #5A616D;
+  --ac-tool-fail: #B0201C;
+  --ac-tool-done: #0F6B49;
+
+  --ac-overlay: rgba(15, 20, 30, 0.4);
+  --ac-shadow-sm: 0 2px 8px rgba(15, 20, 40, 0.16);
+  --ac-shadow-md: 0 4px 16px rgba(15, 20, 40, 0.16);
+  --ac-shadow-lg: 0 8px 24px rgba(15, 20, 40, 0.2);
+  --ac-shadow-xl: 0 16px 48px rgba(15, 20, 40, 0.24);
+  --ac-pulse-rgb: 176, 98, 0;
+
+  --ac-scroll-thumb: rgba(68, 75, 86, 0.3);
+  --ac-scroll-thumb-hover: rgba(68, 75, 86, 0.5);
+  --ac-scroll-thumb-active: rgba(68, 75, 86, 0.7);
+
+  --ac-term-bg: #FFFFFF;
+  --ac-term-fg: #1A1D23;
+  --ac-term-cursor: #1A1D23;
+  --ac-term-selection: rgba(37, 87, 214, 0.25);
+  --ac-term-black: #1A1D23;
+  --ac-term-red: #B0201C;
+  --ac-term-green: #0F6B49;
+  --ac-term-yellow: #8A5A00;
+  --ac-term-blue: #2557D6;
+  --ac-term-magenta: #8A3FB0;
+  --ac-term-cyan: #0B6E7E;
+  --ac-term-white: #5A616D;
+  --ac-term-bright-black: #5F6671;
+  --ac-term-bright-red: #C73A35;
+  --ac-term-bright-green: #1B7F5C;
+  --ac-term-bright-yellow: #9A6400;
+  --ac-term-bright-blue: #3A6BE0;
+  --ac-term-bright-magenta: #9D52C4;
+  --ac-term-bright-cyan: #167F90;
+  --ac-term-bright-white: #3A404A;
+}
+
+/* Windows high contrast: system colours win; meaning stays in the text labels. */
+@media (forced-colors: active) {
+  :root,
+  :root[data-theme='light'] {
+    --ac-bg-app: Canvas;
+    --ac-bg-panel: Canvas;
+    --ac-bg-card: Canvas;
+    --ac-bg-console: Canvas;
+    --ac-bg-inset: Canvas;
+    --ac-bg-btn: ButtonFace;
+    --ac-bg-btn-hover: ButtonFace;
+    --ac-bg-selected: Canvas;
+    --ac-border: CanvasText;
+    --ac-border-card: CanvasText;
+    --ac-border-btn: ButtonText;
+    --ac-border-inset: CanvasText;
+    --ac-border-hover: Highlight;
+    --ac-border-dashed: CanvasText;
+    --ac-text: CanvasText;
+    --ac-text-muted: CanvasText;
+    --ac-text-subtle: CanvasText;
+    --ac-text-soft: CanvasText;
+    --ac-text-code: CanvasText;
+    --ac-text-branch: CanvasText;
+    --ac-text-dim: CanvasText;
+    --ac-text-faint: CanvasText;
+    --ac-text-sep: CanvasText;
+    --ac-accent: LinkText;
+    --ac-accent-hover: LinkText;
+    --ac-accent-2: Highlight;
+    --ac-on-accent: HighlightText;
+    --ac-on-status: HighlightText;
+    --ac-status-running: CanvasText;
+    --ac-status-waiting: CanvasText;
+    --ac-status-needs-you: CanvasText;
+    --ac-status-done: CanvasText;
+    --ac-status-error: CanvasText;
+    --ac-danger-text: CanvasText;
+    --ac-ok-text: CanvasText;
+    --ac-status-running-bg: Canvas;
+    --ac-status-waiting-bg: Canvas;
+    --ac-status-needs-you-bg: Canvas;
+    --ac-status-done-bg: Canvas;
+    --ac-warn-bg: Canvas;
+    --ac-warn-text: CanvasText;
+    --ac-chip-bg: Canvas;
+    --ac-badge-bg: Canvas;
+    --ac-badge-text: CanvasText;
+    --ac-term-bg: Canvas;
+    --ac-term-fg: CanvasText;
+  }
 }

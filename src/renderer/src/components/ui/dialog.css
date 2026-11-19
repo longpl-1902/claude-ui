@@ -7,7 +7,7 @@
   justify-content: center;
   padding: 16px;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--ac-overlay);
 }
 
 .ac-dialog {
@@ -20,7 +20,7 @@
   color: var(--ac-text);
   border: 1px solid var(--ac-border-btn);
   border-radius: var(--ac-radius-card);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--ac-shadow-xl);
 }
 
 .ac-dialog:focus {
