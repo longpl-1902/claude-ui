@@ -110,6 +110,12 @@
     min-height: 0;
   }
   .ac-team__left {
+    flex: 0 0 var(--ac-left-w);
+  }
+  .ac-team__right {
+    flex: 0 0 var(--ac-right-w);
+  }
+  .ac-team__left {
     overflow-y: auto;
   }
   .ac-team__right {
@@ -134,6 +140,8 @@
     flex-shrink: 0;
   }
   .ac-team__center {
+    flex: 1 1 0;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
