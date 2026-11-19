@@ -159,6 +159,26 @@ describe('F2 idle items are quiet', () => {
   })
 })
 
+describe('F2 notifyIdle pref', () => {
+  const idle = (over: Record<string, unknown> = {}) => item({ kind: 'input', severity: 'idle', detail: 'Ready for your next prompt', ...over })
+  it('F2 with notifyIdle on an idle item toasts once; still no flash and overlay stays 0', () => {
+    const s = setup({ prefs: { notifyIdle: true } })
+    s.nt.update(snap([idle()]))
+    expect(s.show).toHaveBeenCalledTimes(1)
+    expect(s.show.mock.calls[0]![0].body).toContain('acme')
+    expect(s.flash.mock.calls.some((c) => c[0] === true)).toBe(false)
+    expect(s.overlay).toHaveBeenLastCalledWith(0)
+  })
+  it('F2 notifyIdle still respects dnd and muted projects', () => {
+    const a = setup({ prefs: { notifyIdle: true, dnd: true } })
+    a.nt.update(snap([idle()]))
+    expect(a.show).not.toHaveBeenCalled()
+    const b = setup({ prefs: { notifyIdle: true, mutedProjects: [PROJ] } })
+    b.nt.update(snap([idle()]))
+    expect(b.show).not.toHaveBeenCalled()
+  })
+})
+
 describe('R-24 flash and overlay', () => {
   it('R-24 overlay shows the number of blocked items and 0 clears it', () => {
     const s = setup()

@@ -3,11 +3,11 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { INVOKE_CHANNELS, type InvokeChannel } from '@shared/ipc'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
-import { createHandlers, registerIpcHandlers } from '../../src/main/ipc/handlers'
+import { createHandlers, registerIpcHandlers, type HandlerDeps } from '../../src/main/ipc/handlers'
 
 type Listener = (event: unknown, ...args: unknown[]) => unknown
 
-function register(deps?: { version?: string }) {
+function register(deps?: HandlerDeps) {
   const handle = vi.fn()
   registerIpcHandlers({ handle } as never, createHandlers(deps))
   const listeners = new Map<string, Listener>()
@@ -330,5 +330,213 @@ describe('R-03 main/index.ts wiring', () => {
     const code = src.replace(/\/\/.*$/gm, '')
     expect(code).toMatch(/registerIpcHandlers\(\s*ipcMain\s*,\s*createHandlers\(\s*\{[^}]*app\.getVersion\(\)/)
     expect(code.indexOf('registerIpcHandlers(')).toBeLessThan(code.indexOf('createWindow()', code.indexOf('whenReady')))
+  })
+})
+
+const OK = { ok: true }
+function fakeControl(over: Record<string, unknown> = {}) {
+  const calls: string[] = []
+  const rec = (name: string, ret: unknown) => (...args: unknown[]) => {
+    calls.push(`${name}:${JSON.stringify(args)}`)
+    return typeof ret === 'function' ? (ret as () => unknown)() : ret
+  }
+  const control = {
+    create: rec('create', { id: 'c1' }),
+    send: rec('send', Promise.resolve(OK)),
+    interrupt: rec('interrupt', OK),
+    interruptAll: rec('interruptAll', 2),
+    answer: rec('answer', OK),
+    setModel: rec('setModel', OK),
+    setMode: rec('setMode', OK),
+    stop: rec('stop', Promise.resolve(OK)),
+    remove: rec('remove', OK),
+    list: rec('list', []),
+    get: rec('get', undefined),
+    streamState: rec('streamState', null),
+    onChanged: rec('onChanged', () => {}),
+    onStream: rec('onStream', () => {}),
+    disposeAll: rec('disposeAll', undefined),
+    ...over
+  }
+  return { control: control as never, calls }
+}
+const GOOD_START = { cwd: 'C:/p', accountId: 'a' }
+const accountsWith = (launch: (...a: any[]) => Promise<unknown> = vi.fn(async () => ({ ok: true, controlId: 'c1' }))) => ({ launchControlled: launch }) as never
+
+describe('T13 control handlers', () => {
+  it('control:start validates, then delegates to accounts.launchControlled', async () => {
+    const launch = vi.fn(async () => ({ ok: true, controlId: 'c1' }))
+    const { control } = fakeControl()
+    const { invoke } = register({ accounts: accountsWith(launch), control })
+    expect(await invoke('control:start', GOOD_START)).toEqual({ ok: true, controlId: 'c1' })
+    expect(launch).toHaveBeenCalledWith(GOOD_START)
+    expect(await invoke('control:start', { cwd: '', accountId: 'a' })).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('control:start', null)).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(launch).toHaveBeenCalledTimes(1)
+  })
+
+  it('control:start refuses to resume a session that is live elsewhere, but allows fork and unrelated sessions', async () => {
+    const launch = vi.fn(async () => ({ ok: true, controlId: 'c1' }))
+    const isSessionLive = vi.fn(async (_a: string, id: string) => id === 'LIVE')
+    const { control } = fakeControl()
+    const { invoke } = register({ accounts: accountsWith(launch), control, isSessionLive })
+    expect(await invoke('control:start', { ...GOOD_START, resume: { kind: 'resume', sessionId: 'LIVE' } })).toEqual({
+      ok: false,
+      reason: 'session-live-elsewhere'
+    })
+    expect(launch).not.toHaveBeenCalled()
+    expect(isSessionLive).toHaveBeenCalledWith('a', 'LIVE')
+    expect(((await invoke('control:start', { ...GOOD_START, resume: { kind: 'resume', sessionId: 'LIVE', fork: true } })) as { ok: boolean }).ok).toBe(true)
+    expect(((await invoke('control:start', { ...GOOD_START, resume: { kind: 'resume', sessionId: 'OTHER' } })) as { ok: boolean }).ok).toBe(true)
+    expect(((await invoke('control:start', { ...GOOD_START, resume: { kind: 'continue' } })) as { ok: boolean }).ok).toBe(true)
+    expect(launch).toHaveBeenCalledTimes(3)
+  })
+
+  it('control:send/interrupt/stop/answer/set-model/set-mode/list/get-stream reach the manager on valid args', async () => {
+    const { control, calls } = fakeControl()
+    const { invoke } = register({ control })
+    expect(await invoke('control:send', 'c1', 'hello')).toEqual(OK)
+    expect(await invoke('control:interrupt', 'c1')).toEqual(OK)
+    expect(await invoke('control:stop', 'c1')).toEqual(OK)
+    expect(await invoke('control:answer', 'c1', 'r1', { behavior: 'allow', scope: 'once' })).toEqual(OK)
+    expect(await invoke('control:set-model', 'c1', 'claude-opus-4-1')).toEqual(OK)
+    expect(await invoke('control:set-model', 'c1', null)).toEqual(OK)
+    expect(await invoke('control:set-mode', 'c1', 'plan')).toEqual(OK)
+    expect(await invoke('control:list')).toEqual([])
+    expect(await invoke('control:get-stream', 'c1')).toBeNull()
+    expect(calls).toEqual([
+      'send:["c1","hello"]',
+      'interrupt:["c1"]',
+      'stop:["c1"]',
+      'answer:["c1","r1",{"behavior":"allow","scope":"once"}]',
+      'setModel:["c1","claude-opus-4-1"]',
+      'setModel:["c1",null]',
+      'setMode:["c1","plan"]',
+      'list:[]',
+      'streamState:["c1"]'
+    ])
+  })
+
+  it('control handlers answer invalid-args without touching the manager', async () => {
+    const { control, calls } = fakeControl()
+    const { invoke } = register({ control })
+    const bad = { ok: false, reason: 'invalid-args' }
+    expect(await invoke('control:send', 1, 'x')).toEqual(bad)
+    expect(await invoke('control:send', 'c1', 'x'.repeat(32_001))).toEqual(bad)
+    expect(await invoke('control:interrupt', 5)).toEqual(bad)
+    expect(await invoke('control:stop', null)).toEqual(bad)
+    expect(await invoke('control:answer', 'c1', 'r1', { behavior: 'maybe' })).toEqual(bad)
+    expect(await invoke('control:answer', 'c1', 2, { behavior: 'allow' })).toEqual(bad)
+    expect(await invoke('control:set-model', 'c1', 'bad model!')).toEqual(bad)
+    expect(await invoke('control:set-model', 'c1', 7)).toEqual(bad)
+    expect(await invoke('control:set-mode', 'c1', 'bypassPermissions')).toEqual(bad)
+    expect(await invoke('control:get-stream', 3)).toBeNull()
+    expect(calls).toEqual([])
+    expect(((await invoke('control:send', 'c1', 'x'.repeat(32_000))) as { ok: boolean }).ok).toBe(true)
+  })
+
+  it('team:pause-all reports the interrupted count, or nothing-running', async () => {
+    const a = register({ control: fakeControl().control })
+    expect(await a.invoke('team:pause-all')).toEqual({ ok: true, reason: '2' })
+    const b = register({ control: fakeControl({ interruptAll: () => 0 }).control })
+    expect(await b.invoke('team:pause-all')).toEqual({ ok: false, reason: 'nothing-running' })
+  })
+
+  it('R-19 creating handlers never calls send/start/create; only an invoked handler does', async () => {
+    const { control, calls } = fakeControl()
+    const launch = vi.fn(async () => ({ ok: true }))
+    const { invoke } = register({ accounts: accountsWith(launch), control })
+    expect(calls).toEqual([])
+    expect(launch).not.toHaveBeenCalled()
+    await invoke('control:list')
+    expect(calls.filter((c) => /^(send|create|setMode|answer)/.test(c))).toEqual([])
+    expect(launch).not.toHaveBeenCalled()
+    await invoke('control:send', 'c1', 'go')
+    expect(calls).toContain('send:["c1","go"]')
+  })
+
+  it('R-19 index.ts never calls control.send or starts a session itself', () => {
+    const code = readFileSync(resolve(__dirname, '../../src/main/index.ts'), 'utf8').replace(/\/\/.*$/gm, '')
+    expect(code).not.toMatch(/control\.(send|start)\(/)
+    expect(code).not.toMatch(/launchControlled|launchClaude/)
+  })
+})
+
+describe('T13 external kill, editor, git, hooks, attention handlers', () => {
+  it('session:kill-external validates and delegates', async () => {
+    const kill = vi.fn(async () => OK)
+    const { invoke } = register({ externalKiller: { kill } })
+    const req = { accountId: 'a', sessionId: 's', pid: 42 }
+    expect(await invoke('session:kill-external', req)).toEqual(OK)
+    expect(kill).toHaveBeenCalledWith(req)
+    expect(await invoke('session:kill-external', { ...req, pid: -1 })).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('session:kill-external', { ...req, pid: '42' })).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('session:kill-external', null)).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(kill).toHaveBeenCalledTimes(1)
+  })
+
+  it('worktree:open-in-editor validates and delegates', async () => {
+    const open = vi.fn(async () => OK)
+    const { invoke } = register({ openInEditor: { open } })
+    expect(await invoke('worktree:open-in-editor', 'C:/p/wt')).toEqual(OK)
+    expect(open).toHaveBeenCalledWith('C:/p/wt')
+    expect(await invoke('worktree:open-in-editor', 5)).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('worktree:open-in-editor', '')).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('worktree:open-in-editor', 'x'.repeat(1025))).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('git:watch accepts a string or null; git:compare needs two strings', async () => {
+    const snap = { root: null, base: null, worktrees: [], overlaps: [], updatedAt: 'x' }
+    const watch = vi.fn(async (_r: string | null) => snap)
+    const compare = vi.fn(async () => [])
+    const { invoke } = register({ worktrees: { watch, compare } as never })
+    await invoke('git:watch', 'C:/p')
+    await invoke('git:watch', null)
+    expect(watch.mock.calls).toEqual([['C:/p'], [null]])
+    await invoke('git:watch', 'x'.repeat(1025))
+    await invoke('git:watch', 42)
+    expect(watch.mock.calls.slice(2)).toEqual([[null], [null]])
+    expect(await invoke('git:compare', 'C:/p', 'a.ts')).toEqual([])
+    expect(compare).toHaveBeenCalledWith('C:/p', 'a.ts')
+    expect(await invoke('git:compare', 'C:/p', 5)).toEqual([])
+    expect(await invoke('git:compare', 1, 'a.ts')).toEqual([])
+    expect(compare).toHaveBeenCalledTimes(1)
+  })
+
+  it('hooks:status/preview/apply validate and delegate', async () => {
+    const status = vi.fn(async (r: string | null) => ({ projectRoot: r }))
+    const preview = vi.fn(async () => ({ previewId: 'p1' }))
+    const apply = vi.fn(async () => OK)
+    const { invoke } = register({ hooks: { status, preview, apply } as never })
+    expect(await invoke('hooks:status', 'C:/p')).toEqual({ projectRoot: 'C:/p' })
+    expect(await invoke('hooks:status', null)).toEqual({ projectRoot: null })
+    expect(await invoke('hooks:status', 9)).toEqual({ projectRoot: null })
+    expect(await invoke('hooks:preview', 'C:/p', 'install')).toEqual({ previewId: 'p1' })
+    expect(await invoke('hooks:preview', 'C:/p', 'wipe')).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('hooks:preview', 3, 'install')).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(preview).toHaveBeenCalledTimes(1)
+    expect(await invoke('hooks:apply', 'p1')).toEqual(OK)
+    expect(await invoke('hooks:apply', 4)).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(apply).toHaveBeenCalledTimes(1)
+  })
+
+  it('attention:get / get-prefs / set-prefs (set-prefs validates, accepts notifyIdle)', async () => {
+    const snapshot = { items: [], projects: [], updatedAt: 'x' }
+    const prefs = { mutedProjects: [], dnd: false, notifyErrors: false, notifyIdle: false }
+    const setPrefs = vi.fn(async (_p: unknown) => OK)
+    const { invoke } = register({ attention: { snapshot: () => snapshot, getPrefs: () => prefs, setPrefs } })
+    expect(await invoke('attention:get')).toEqual(snapshot)
+    expect(await invoke('attention:get-prefs')).toEqual(prefs)
+    expect(await invoke('attention:set-prefs', { ...prefs, notifyIdle: true })).toEqual(OK)
+    expect(setPrefs).toHaveBeenCalledWith({ ...prefs, notifyIdle: true })
+    expect(await invoke('attention:set-prefs', { ...prefs, notifyIdle: 'yes' })).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(await invoke('attention:set-prefs', { mutedProjects: [], dnd: 1, notifyErrors: false })).toEqual({ ok: false, reason: 'invalid-args' })
+    expect(setPrefs).toHaveBeenCalledTimes(1)
+  })
+
+  it('electron-builder ships the hook script as an extra resource', () => {
+    const yml = readFileSync(resolve(__dirname, '../../electron-builder.yml'), 'utf8')
+    expect(yml).toMatch(/extraResources:\s*\n\s*- from: resources\/hook\s*\n\s*to: hook/)
   })
 })

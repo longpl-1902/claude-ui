@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { createAttentionPrefs } from '../../../src/main/attention/prefs'
 
 const FILE = 'C:/Users/u/AppData/Roaming/agent-console/attention-prefs.json'
-const DEFAULTS = { mutedProjects: [], dnd: false, notifyErrors: false }
+const DEFAULTS = { mutedProjects: [], dnd: false, notifyErrors: false, notifyIdle: false }
 
 function setup(initial?: string) {
   const files = new Map<string, string>(initial === undefined ? [] : [[FILE, initial]])
@@ -19,6 +19,16 @@ function setup(initial?: string) {
   return { prefs: createAttentionPrefs({ filePath: FILE, fs } as never), files, writes }
 }
 
+describe('F2 notifyIdle pref', () => {
+  it('F2 defaults to false, loads true, and rejects a non-boolean', async () => {
+    expect((await setup(JSON.stringify({ mutedProjects: [], dnd: false, notifyErrors: false })).prefs.load()).notifyIdle).toBe(false)
+    expect((await setup(JSON.stringify({ mutedProjects: [], dnd: false, notifyErrors: false, notifyIdle: true })).prefs.load()).notifyIdle).toBe(true)
+    expect(await setup(JSON.stringify({ mutedProjects: [], dnd: false, notifyErrors: false, notifyIdle: 'yes' })).prefs.load()).toEqual(DEFAULTS)
+    const s = setup()
+    expect((await s.prefs.save({ mutedProjects: [], dnd: false, notifyErrors: false, notifyIdle: 1 as never })).ok).toBe(false)
+  })
+})
+
 describe('R-24 prefs load', () => {
   it('R-24 a missing file gives the defaults and writes nothing', async () => {
     const s = setup()
@@ -27,8 +37,8 @@ describe('R-24 prefs load', () => {
     expect(s.prefs.get()).toEqual(DEFAULTS)
   })
   it('R-24 a valid file is loaded (including viewedProjectKey)', async () => {
-    const s = setup(JSON.stringify({ mutedProjects: ['c:/users/u/acme'], dnd: true, notifyErrors: true, viewedProjectKey: 'c:/users/u/beta' }))
-    expect(await s.prefs.load()).toEqual({ mutedProjects: ['c:/users/u/acme'], dnd: true, notifyErrors: true, viewedProjectKey: 'c:/users/u/beta' })
+    const s = setup(JSON.stringify({ mutedProjects: ['c:/users/u/acme'], dnd: true, notifyErrors: true, notifyIdle: false, viewedProjectKey: 'c:/users/u/beta' }))
+    expect(await s.prefs.load()).toEqual({ mutedProjects: ['c:/users/u/acme'], dnd: true, notifyErrors: true, notifyIdle: false, viewedProjectKey: 'c:/users/u/beta' })
     expect(s.prefs.get().dnd).toBe(true)
   })
   it('R-24 corrupt JSON -> defaults', async () => {
@@ -56,7 +66,7 @@ describe('R-24 prefs load', () => {
 describe('R-24 prefs save', () => {
   it('R-24 save writes the JSON atomically to the prefs file and get() reflects it', async () => {
     const s = setup()
-    const p = { mutedProjects: ['c:/users/u/acme'], dnd: true, notifyErrors: false }
+    const p = { mutedProjects: ['c:/users/u/acme'], dnd: true, notifyErrors: false, notifyIdle: false }
     expect((await s.prefs.save(p)).ok).toBe(true)
     expect(s.writes).toHaveLength(1)
     expect(s.writes[0]!.path.replace(/\\/g, '/')).toBe(FILE)
@@ -65,7 +75,7 @@ describe('R-24 prefs save', () => {
   })
   it('R-24 a save followed by a fresh load round-trips', async () => {
     const s = setup()
-    const p = { mutedProjects: ['a', 'b'], dnd: false, notifyErrors: true, viewedProjectKey: 'a' }
+    const p = { mutedProjects: ['a', 'b'], dnd: false, notifyErrors: true, notifyIdle: false, viewedProjectKey: 'a' }
     await s.prefs.save(p)
     const again = createAttentionPrefs({ filePath: FILE, fs: { readText: async (x: string) => s.files.get(x) ?? null, writeTextAtomic: async () => {}, mkdirp: async () => {} } } as never)
     expect(await again.load()).toEqual(p)

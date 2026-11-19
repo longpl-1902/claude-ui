@@ -8,3 +8,7 @@ asarUnpack:
 win:
   target: nsis
   artifactName: AgentConsole-Setup-${version}.${ext}
+
+extraResources:
+  - from: resources/hook
+    to: hook

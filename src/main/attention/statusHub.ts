@@ -16,6 +16,8 @@ export interface StatusHubDeps {
   controls: () => ControlEntry[]
   sessionFile: (s: SessionSummary) => string
   usageByProject: () => Record<string, TokenTotals>
+  /** True when our hooks are installed for the project root; ProjectStatus.hooksActive = installed OR a hook event in 24 h. */
+  hooksInstalled?: (root: string) => Promise<boolean>
   setTimer: (fn: () => void, ms: number) => unknown
   clearTimer: (t: unknown) => void
 }
@@ -289,6 +291,16 @@ export function createStatusHub(deps: StatusHubDeps): StatusHub {
       }
       if (s.mtimeMs > g.last) g.last = s.mtimeMs
     }
+    const installed = new Map<string, boolean>()
+    await Promise.all(
+      [...groups.values()].map(async (g) => {
+        try {
+          installed.set(g.p.key, (await deps.hooksInstalled?.(g.p.root)) === true)
+        } catch {
+          installed.set(g.p.key, false)
+        }
+      })
+    )
     const projects: ProjectStatus[] = [...groups.values()]
       .map((g) => {
         const mine = items.filter((i) => i.projectKey === g.p.key)
@@ -301,7 +313,7 @@ export function createStatusHub(deps: StatusHubDeps): StatusHub {
           needsYou: mine.filter((i) => i.severity === 'blocked').length,
           tokensToday: t ? tokenHeadline(t) : 0,
           lastActivityMs: g.last,
-          hooksActive: hookKeys.has(g.p.key)
+          hooksActive: hookKeys.has(g.p.key) || installed.get(g.p.key) === true
         }
       })
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.key < b.key ? -1 : 1))
