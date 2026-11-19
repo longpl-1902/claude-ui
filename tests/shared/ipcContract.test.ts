@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { INVOKE_CHANNELS, IPC } from '@shared/ipc'
+import { INVOKE_CHANNELS, IPC, PUSH_CHANNELS } from '@shared/ipc'
 
 describe('IPC contract', () => {
   const values = Object.values(IPC)
@@ -15,5 +17,83 @@ describe('IPC contract', () => {
 
   it('every channel matches the naming pattern', () => {
     for (const v of values) expect(v).toMatch(/^[a-z]+:[a-z-]+$/)
+  })
+})
+
+// ---- Phase 2 (contract v2) ----
+
+const NEW_INVOKE = {
+  accountsScan: 'accounts:scan',
+  accountsLinkDetected: 'accounts:link-detected',
+  accountsSaveProfile: 'accounts:save-profile',
+  accountsRemoveProfile: 'accounts:remove-profile',
+  accountsSetRules: 'accounts:set-rules',
+  accountsSetSafety: 'accounts:set-safety',
+  accountsSetLimitPolicy: 'accounts:set-limit-policy',
+  accountsResolveFolder: 'accounts:resolve-folder',
+  accountsCheckLaunch: 'accounts:check-launch',
+  accountsReopenSignIn: 'accounts:reopen-sign-in',
+  ptySpawn: 'pty:spawn',
+  ptyWrite: 'pty:write',
+  ptyResize: 'pty:resize',
+  ptyKill: 'pty:kill',
+  ptyList: 'pty:list',
+  ptyGetBuffer: 'pty:get-buffer',
+  appPickFolder: 'app:pick-folder',
+  appGetDefaultCwd: 'app:get-default-cwd'
+} as const
+
+const NEW_PUSH = {
+  accountsChanged: 'accounts:changed',
+  accountsSignInStatus: 'accounts:sign-in-status',
+  ptyData: 'pty:data',
+  ptyExit: 'pty:exit'
+} as const
+
+describe('R-01 IPC contract v2', () => {
+  const ipc = IPC as Record<string, string>
+
+  it.each(Object.entries(NEW_INVOKE))('R-01 IPC.%s = %s and is an invoke channel', (key, channel) => {
+    expect(ipc[key]).toBe(channel)
+    expect(INVOKE_CHANNELS).toContain(channel)
+  })
+
+  it.each(Object.entries(NEW_PUSH))('R-01 IPC.%s = %s is a push-only channel', (key, channel) => {
+    expect(ipc[key]).toBe(channel)
+    expect(PUSH_CHANNELS).toContain(channel)
+    expect(INVOKE_CHANNELS).not.toContain(channel)
+  })
+
+  it('R-01 PUSH_CHANNELS is exactly teamEvent plus the four new pushes', () => {
+    expect([...PUSH_CHANNELS].sort()).toEqual(
+      [IPC.teamEvent, 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit'].sort()
+    )
+  })
+
+  it('R-01 INVOKE_CHANNELS = every channel minus PUSH_CHANNELS (no gaps, no duplicates)', () => {
+    const expected = Object.values(IPC).filter((c) => !(PUSH_CHANNELS as readonly string[]).includes(c))
+    expect([...INVOKE_CHANNELS].sort()).toEqual([...expected].sort())
+    expect(new Set(INVOKE_CHANNELS).size).toBe(INVOKE_CHANNELS.length)
+  })
+
+  it('R-01 every new channel matches the naming pattern and is unique', () => {
+    for (const c of [...Object.values(NEW_INVOKE), ...Object.values(NEW_PUSH)]) expect(c).toMatch(/^[a-z]+:[a-z-]+$/)
+    expect(new Set(Object.values(IPC)).size).toBe(Object.values(IPC).length)
+  })
+
+  it('R-01 the preload bridge references every new channel constant', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/preload/index.ts'), 'utf8')
+    for (const key of [...Object.keys(NEW_INVOKE), ...Object.keys(NEW_PUSH)]) expect(src).toContain(`IPC.${key}`)
+  })
+
+  it('R-01 the preload exposes the new ConsoleApi surface', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/preload/index.ts'), 'utf8')
+    for (const name of [
+      'scan', 'linkDetected', 'saveProfile', 'removeProfile', 'setRules', 'setSafety', 'setLimitPolicy', 'resolveFolder',
+      'checkLaunch', 'reopenSignIn', 'onChanged', 'onSignInStatus', 'spawn', 'write', 'resize', 'kill', 'list', 'getBuffer',
+      'onData', 'onExit', 'pickFolder', 'getDefaultCwd'
+    ]) {
+      expect(src, `preload should define ${name}`).toMatch(new RegExp(`\b${name}\b`))
+    }
   })
 })
