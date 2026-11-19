@@ -73,6 +73,19 @@ function ChatViewContent(): JSX.Element {
     else setNewBelow(true)
   }, [lineCount, tail])
 
+  // A new question / permission always comes into view; a card taller than the log shows from its top.
+  const lastPerm = perms[perms.length - 1]?.requestId
+  useEffect(() => {
+    const el = logRef.current
+    if (!el || lastPerm === undefined) return
+    const card = el.querySelector<HTMLElement>(`[data-perm="${CSS.escape(lastPerm)}"]`)
+    if (card && card.offsetHeight > el.clientHeight) {
+      el.scrollTop = Math.max(0, card.offsetTop - 8)
+      atBottom.current = false
+    } else toBottom()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastPerm])
+
   const who = (id: string): { name: string; color: string; isYou: boolean } => {
     if (id === 'you') return { name: 'you', color: 'var(--ac-accent)', isYou: true }
     const a = team.agents.find((x) => x.id === id)
@@ -154,8 +167,9 @@ function ChatViewContent(): JSX.Element {
             ))}
             {control &&
               perms.map((p) => (
-                <div key={`p${p.requestId}`} className="ac-chat__permmark">
-                  Waiting for your answer: {p.displayName}
+                // Inline at the end of the conversation (one scroll area), like the VS Code panel.
+                <div key={`p${p.requestId}`} className="ac-chat__card" data-perm={p.requestId}>
+                  <PermissionCard prompt={p} controlId={control.id} onAnswer={(a) => void answer(control.id, p.requestId, a)} />
                 </div>
               ))}
             {stream?.typing && (
@@ -185,13 +199,6 @@ function ChatViewContent(): JSX.Element {
       </div>
       <div className="ac-chat__dock">
         <div className="ac-chat__col">
-          {control && perms.length > 0 && (
-            <div className="ac-tc-perms">
-              {perms.map((p) => (
-                <PermissionCard key={p.requestId} prompt={p} controlId={control.id} onAnswer={(a) => void answer(control.id, p.requestId, a)} />
-              ))}
-            </div>
-          )}
           {external ? (
             <div className="ac-chat__external">
               <p>{reason}</p>

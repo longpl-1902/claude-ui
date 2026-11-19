@@ -196,15 +196,16 @@ describe('T33 ChatView', () => {
     }
   })
 
-  it('pending permission is pinned above the composer and answered through the store', async () => {
+  it('pending permission sits inline at the end of the conversation (one scroll area) and is answered through the store', async () => {
     seed()
     useControlStore.setState({
       sessions: [ctl({ state: 'busy', pendingPermissions: 1 })],
       streams: { c1: { controlId: 'c1', thinking: false, permissions: [perm()], notices: [] } }
     })
     render(<ChatView />)
-    expect(screen.getByText('Waiting for your answer: Bash')).toBeInTheDocument()
-    const card = screen.getByRole('alertdialog')
+    const log = screen.getByRole('log', { name: 'Conversation' })
+    const card = within(log).getByRole('alertdialog')
+    expect(screen.queryByText(/Waiting for your answer/)).toBeNull()
     await userEvent.click(within(card).getByRole('button', { name: /^Allow/ }))
     expect(control.answer).toHaveBeenCalledWith('c1', 'r1', expect.objectContaining({ behavior: 'allow' }))
   })

@@ -164,3 +164,7 @@
 .ac-composer__opt:hover { background: var(--ac-bg-btn-hover); color: var(--ac-text); }
 .ac-composer__opt.is-on { border-color: var(--ac-accent); color: var(--ac-text); }
 .ac-composer__opt:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 1px; }
+
+/* Question / permission cards sit inline at the end of the conversation (one scroll area) */
+.ac-chat__card { margin: 12px 0 4px; }
+.ac-qcard__other { flex: none; width: 100%; min-height: 52px; max-height: 200px; padding: 6px 8px; font: inherit; font-size: 13px; line-height: 1.4; resize: vertical; box-sizing: border-box; }

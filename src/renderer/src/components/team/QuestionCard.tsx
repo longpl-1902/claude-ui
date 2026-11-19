@@ -133,12 +133,25 @@ export function QuestionCard({ prompt, questions, onAnswer }: CardProps & { ques
               <span className="ac-qcard__label">Other</span>
             </label>
             {p.otherOn && (
-              <input
-                className="ac-tc-perm__msg"
+              <textarea
+                className="ac-tc-perm__msg ac-qcard__other"
                 aria-label={`Other answer for: ${q.question}`}
-                placeholder="Type your answer"
+                placeholder="Type your answer (Ctrl+Enter sends)"
+                rows={2}
+                autoFocus
                 value={p.other}
-                onChange={(e) => patch(q.question, (s) => ({ ...s, other: e.target.value }))}
+                onChange={(e) => {
+                  const t = e.currentTarget
+                  t.style.height = 'auto'
+                  t.style.height = `${Math.min(t.scrollHeight + 2, 200)}px`
+                  patch(q.question, (s) => ({ ...s, other: e.target.value }))
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && ready) {
+                    e.preventDefault()
+                    submit()
+                  }
+                }}
               />
             )}
           </fieldset>
@@ -148,8 +161,12 @@ export function QuestionCard({ prompt, questions, onAnswer }: CardProps & { ques
         <Button size="sm" variant="primary" disabled={!ready} onClick={submit}>
           Send answers
         </Button>
-        <Button size="sm" onClick={() => onAnswer({ behavior: 'deny', message: 'User dismissed the question' })}>
-          Dismiss
+        <Button
+          size="sm"
+          title="Claude is told you skipped the question and carries on"
+          onClick={() => onAnswer({ behavior: 'deny', message: 'User dismissed the question' })}
+        >
+          Skip question
         </Button>
       </div>
     </div>

@@ -505,8 +505,23 @@ describe('T28 question and plan cards', () => {
     await userEvent.type(screen.getByLabelText('Other answer for: Name?'), 'Zed')
     await userEvent.click(screen.getByRole('button', { name: 'Send answers' }))
     expect(onAnswer).toHaveBeenLastCalledWith({ behavior: 'allow', answers: { 'Name?': 'Zed' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Skip question' }))
     expect(onAnswer).toHaveBeenLastCalledWith({ behavior: 'deny', message: 'User dismissed the question' })
+  })
+
+  it('AskUserQuestion: Other is a multi-line box (focused, not a tall single line); Ctrl+Enter sends', async () => {
+    const onAnswer = vi.fn()
+    const one = ask({ inputPreview: JSON.stringify({ questions: [{ question: 'Name?', multiSelect: false, options: [{ label: 'A' }] }] }) })
+    render(<PermissionCard prompt={one} onAnswer={onAnswer} />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Other' }))
+    const box = screen.getByLabelText('Other answer for: Name?')
+    expect(box.tagName).toBe('TEXTAREA')
+    expect(box).toHaveFocus()
+    expect(box).toHaveClass('ac-qcard__other')
+    await userEvent.type(box, 'line one{Shift>}{Enter}{/Shift}line two')
+    expect(onAnswer).not.toHaveBeenCalled()
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    expect(onAnswer).toHaveBeenLastCalledWith({ behavior: 'allow', answers: { 'Name?': 'line one\nline two' } })
   })
 
   it('an unparseable AskUserQuestion falls back to the generic permission card', () => {
