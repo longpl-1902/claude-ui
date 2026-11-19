@@ -55,8 +55,13 @@ export function TeamHeader() {
         <span className="ac-header__title">Agent Console</span>
       </div>
       <div className="ac-header__repo" title={`${team.repo} / team: ${team.teamName}`}>
-        <span>{team.repo}</span>
-        <span className="ac-header__sep" aria-hidden="true">/</span>
+        {/* In live mode the Project picker already names the repo; show only the session title. */}
+        {demo && (
+          <>
+            <span>{team.repo}</span>
+            <span className="ac-header__sep" aria-hidden="true">/</span>
+          </>
+        )}
         <span className="ac-header__team">team: {team.teamName}</span>
       </div>
       {demo && (
