@@ -90,7 +90,8 @@ export function createSpanTracker(o?: { maxPerAgent?: number }): SpanTracker {
         .sort((x, y) => x.startMs - y.startMs)
       const out: ActivitySpan[] = []
       for (const s of visible) {
-        const prev = out[out.length - 1]
+        let prev: ActivitySpan | undefined
+        for (let i = out.length - 1; i >= 0 && i >= out.length - 3; i--) if (out[i]!.kind === s.kind) { prev = out[i]; break }
         if (prev && prev.kind === s.kind && prev.endMs !== null && s.startMs - prev.endMs < MERGE_GAP_MS) {
           prev.endMs = s.endMs === null ? null : Math.max(prev.endMs, s.endMs)
         } else out.push(s)
