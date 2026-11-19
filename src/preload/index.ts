@@ -5,6 +5,7 @@ import type {
   AccountsSnapshot,
   AgentEvent,
   AttentionSnapshot,
+  ControlDetails,
   ControlSessionInfo,
   ControlStreamEvent,
   HooksStatus,
@@ -94,7 +95,21 @@ const api: ConsoleApi = {
     list: () => invoke(IPC.controlList),
     getStream: (id) => invoke(IPC.controlGetStream, id),
     onChanged: (cb) => on<ControlSessionInfo[]>(IPC.controlChanged, cb),
-    onStream: (cb) => on<ControlStreamEvent[]>(IPC.controlStream, cb)
+    onStream: (cb) => on<ControlStreamEvent[]>(IPC.controlStream, cb),
+    details: (id) => invoke(IPC.controlDetails, id),
+    sendRich: (id, text, images) => invoke(IPC.controlSendRich, id, text, images),
+    refreshContext: (id) => invoke(IPC.controlRefreshContext, id),
+    mcpToggle: (id, name, enabled) => invoke(IPC.controlMcpToggle, id, name, enabled),
+    mcpReconnect: (id, name) => invoke(IPC.controlMcpReconnect, id, name),
+    fileSuggestions: (id, cwd, query) => invoke(IPC.controlFileSuggestions, id, cwd, query),
+    rewindPreview: (id, uuid) => invoke(IPC.controlRewindPreview, id, uuid),
+    rewind: (id, uuid) => invoke(IPC.controlRewind, id, uuid),
+    forkAt: (id, uuid) => invoke(IPC.controlForkAt, id, uuid),
+    setEffort: (id, effort) => invoke(IPC.controlSetEffort, id, effort),
+    setOutputStyle: (id, style) => invoke(IPC.controlSetOutputStyle, id, style),
+    rename: (id, title) => invoke(IPC.controlRename, id, title),
+    getPlan: (id) => invoke(IPC.controlGetPlan, id),
+    onDetails: (cb) => on<ControlDetails>(IPC.controlDetailsChanged, cb)
   },
   session: {
     killExternal: (req) => invoke(IPC.sessionKillExternal, req)
@@ -116,6 +131,22 @@ const api: ConsoleApi = {
     setPrefs: (p) => invoke(IPC.attentionSetPrefs, p),
     onChanged: (cb) => on<AttentionSnapshot>(IPC.attentionChanged, cb),
     onFocus: (cb) => on<{ itemId: string }>(IPC.attentionFocus, cb)
+  },
+  catalog: {
+    list: (root, accountId) => invoke(IPC.catalogList, root, accountId),
+    open: (path) => invoke(IPC.catalogOpen, path)
+  },
+  mcp: {
+    list: (root, accountId) => invoke(IPC.mcpList, root, accountId),
+    previewAdd: (req) => invoke(IPC.mcpPreviewAdd, req),
+    previewRemove: (root, accountId, name, scope) => invoke(IPC.mcpPreviewRemove, root, accountId, name, scope)
+  },
+  plugins: {
+    list: (accountId) => invoke(IPC.pluginsList, accountId),
+    preview: (accountId, action, id) => invoke(IPC.pluginsPreview, accountId, action, id)
+  },
+  cli: {
+    apply: (previewId) => invoke(IPC.cliApply, previewId)
   },
   worktree: {
     openInEditor: (path) => invoke(IPC.worktreeOpenInEditor, path)

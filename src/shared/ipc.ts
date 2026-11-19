@@ -3,6 +3,17 @@ import type {
   AgentEvent,
   AttentionPrefs,
   AttentionSnapshot,
+  CatalogItem,
+  CliPreview,
+  CliRunResult,
+  ControlDetails,
+  Effort,
+  FileSuggestion,
+  ImageAttachment,
+  McpAddRequest,
+  McpConfigured,
+  PluginInfo,
+  RewindPreview,
   ControlPermissionMode,
   ControlSessionInfo,
   ControlStartRequest,
@@ -92,6 +103,27 @@ export const IPC = {
   attentionGet: 'attention:get',
   attentionGetPrefs: 'attention:get-prefs',
   attentionSetPrefs: 'attention:set-prefs',
+  controlDetails: 'control:details',
+  controlSendRich: 'control:send-rich',
+  controlRefreshContext: 'control:refresh-context',
+  controlMcpToggle: 'control:mcp-toggle',
+  controlMcpReconnect: 'control:mcp-reconnect',
+  controlFileSuggestions: 'control:file-suggestions',
+  controlRewindPreview: 'control:rewind-preview',
+  controlRewind: 'control:rewind',
+  controlForkAt: 'control:fork-at',
+  controlSetEffort: 'control:set-effort',
+  controlSetOutputStyle: 'control:set-output-style',
+  controlRename: 'control:rename',
+  controlGetPlan: 'control:get-plan',
+  catalogList: 'catalog:list',
+  catalogOpen: 'catalog:open',
+  mcpList: 'mcp:list',
+  mcpPreviewAdd: 'mcp:preview-add',
+  mcpPreviewRemove: 'mcp:preview-remove',
+  pluginsList: 'plugins:list',
+  pluginsPreview: 'plugins:preview',
+  cliApply: 'cli:apply',
   // main -> renderer pushes (not invokable)
   accountsChanged: 'accounts:changed',
   accountsSignInStatus: 'accounts:sign-in-status',
@@ -105,7 +137,9 @@ export const IPC = {
   gitChanged: 'git:changed',
   hooksChanged: 'hooks:changed',
   attentionChanged: 'attention:changed',
-  attentionFocus: 'attention:focus'
+  attentionFocus: 'attention:focus',
+  // v5 push; the invoke 'control:details' owns that exact name, so the push is 'control:details-changed'
+  controlDetailsChanged: 'control:details-changed'
 } as const
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]
 
@@ -123,7 +157,8 @@ export const PUSH_CHANNELS = [
   IPC.gitChanged,
   IPC.hooksChanged,
   IPC.attentionChanged,
-  IPC.attentionFocus
+  IPC.attentionFocus,
+  IPC.controlDetailsChanged
 ] as const
 
 export interface IpcInvokeMap {
@@ -180,6 +215,27 @@ export interface IpcInvokeMap {
   'attention:get': { args: []; result: AttentionSnapshot }
   'attention:get-prefs': { args: []; result: AttentionPrefs }
   'attention:set-prefs': { args: [p: AttentionPrefs]; result: OkResult }
+  'control:details': { args: [controlId: string]; result: ControlDetails | null }
+  'control:send-rich': { args: [controlId: string, text: string, images: ImageAttachment[]]; result: OkResult }
+  'control:refresh-context': { args: [controlId: string]; result: OkResult }
+  'control:mcp-toggle': { args: [controlId: string, name: string, enabled: boolean]; result: OkResult }
+  'control:mcp-reconnect': { args: [controlId: string, name: string]; result: OkResult }
+  'control:file-suggestions': { args: [controlId: string | null, cwd: string, query: string]; result: FileSuggestion[] }
+  'control:rewind-preview': { args: [controlId: string, uuid: string]; result: RewindPreview }
+  'control:rewind': { args: [controlId: string, uuid: string]; result: OkResult }
+  'control:fork-at': { args: [controlId: string, uuid: string]; result: ControlStartResult }
+  'control:set-effort': { args: [controlId: string, effort: Effort | null]; result: OkResult }
+  'control:set-output-style': { args: [controlId: string, style: string | null]; result: OkResult }
+  'control:rename': { args: [controlId: string, title: string]; result: OkResult }
+  'control:get-plan': { args: [controlId: string]; result: { exists: boolean; content?: string } }
+  'catalog:list': { args: [projectRoot: string | null, accountId: string]; result: CatalogItem[] }
+  'catalog:open': { args: [path: string]; result: OkResult }
+  'mcp:list': { args: [projectRoot: string, accountId: string]; result: { servers: McpConfigured[]; ranAt: string; error?: string } }
+  'mcp:preview-add': { args: [req: McpAddRequest]; result: CliPreview | OkResult }
+  'mcp:preview-remove': { args: [projectRoot: string, accountId: string, name: string, scope: 'local' | 'user' | 'project' | null]; result: CliPreview | OkResult }
+  'plugins:list': { args: [accountId: string]; result: { plugins: PluginInfo[]; error?: string } }
+  'plugins:preview': { args: [accountId: string, action: 'enable' | 'disable' | 'install' | 'uninstall', id: string]; result: CliPreview | OkResult }
+  'cli:apply': { args: [previewId: string]; result: CliRunResult }
 }
 export type InvokeChannel = keyof IpcInvokeMap
 
@@ -237,7 +293,28 @@ const invokeChannelList = [
   'hooks:apply',
   'attention:get',
   'attention:get-prefs',
-  'attention:set-prefs'
+  'attention:set-prefs',
+  'control:details',
+  'control:send-rich',
+  'control:refresh-context',
+  'control:mcp-toggle',
+  'control:mcp-reconnect',
+  'control:file-suggestions',
+  'control:rewind-preview',
+  'control:rewind',
+  'control:fork-at',
+  'control:set-effort',
+  'control:set-output-style',
+  'control:rename',
+  'control:get-plan',
+  'catalog:list',
+  'catalog:open',
+  'mcp:list',
+  'mcp:preview-add',
+  'mcp:preview-remove',
+  'plugins:list',
+  'plugins:preview',
+  'cli:apply'
 ] as const satisfies readonly InvokeChannel[]
 type MissingChannels = Exclude<InvokeChannel, (typeof invokeChannelList)[number]>
 const _exhaustive: [MissingChannels] extends [never] ? true : never = true
@@ -313,6 +390,20 @@ export interface ConsoleApi {
     getStream(controlId: string): Promise<ControlStreamState | null>
     onChanged(cb: (s: ControlSessionInfo[]) => void): () => void
     onStream(cb: (e: ControlStreamEvent[]) => void): () => void
+    details(controlId: string): Promise<ControlDetails | null>
+    sendRich(controlId: string, text: string, images: ImageAttachment[]): Promise<OkResult>
+    refreshContext(controlId: string): Promise<OkResult>
+    mcpToggle(controlId: string, name: string, enabled: boolean): Promise<OkResult>
+    mcpReconnect(controlId: string, name: string): Promise<OkResult>
+    fileSuggestions(controlId: string | null, cwd: string, query: string): Promise<FileSuggestion[]>
+    rewindPreview(controlId: string, uuid: string): Promise<RewindPreview>
+    rewind(controlId: string, uuid: string): Promise<OkResult>
+    forkAt(controlId: string, uuid: string): Promise<ControlStartResult>
+    setEffort(controlId: string, effort: Effort | null): Promise<OkResult>
+    setOutputStyle(controlId: string, style: string | null): Promise<OkResult>
+    rename(controlId: string, title: string): Promise<OkResult>
+    getPlan(controlId: string): Promise<{ exists: boolean; content?: string }>
+    onDetails(cb: (d: ControlDetails) => void): () => void
   }
   session: { killExternal(req: KillExternalRequest): Promise<OkResult> }
   git: {
@@ -333,6 +424,20 @@ export interface ConsoleApi {
     onChanged(cb: (s: AttentionSnapshot) => void): () => void
     onFocus(cb: (e: { itemId: string }) => void): () => void
   }
+  catalog: {
+    list(projectRoot: string | null, accountId: string): Promise<CatalogItem[]>
+    open(path: string): Promise<OkResult>
+  }
+  mcp: {
+    list(projectRoot: string, accountId: string): Promise<{ servers: McpConfigured[]; ranAt: string; error?: string }>
+    previewAdd(req: McpAddRequest): Promise<CliPreview | OkResult>
+    previewRemove(projectRoot: string, accountId: string, name: string, scope: 'local' | 'user' | 'project' | null): Promise<CliPreview | OkResult>
+  }
+  plugins: {
+    list(accountId: string): Promise<{ plugins: PluginInfo[]; error?: string }>
+    preview(accountId: string, action: 'enable' | 'disable' | 'install' | 'uninstall', id: string): Promise<CliPreview | OkResult>
+  }
+  cli: { apply(previewId: string): Promise<CliRunResult> }
   worktree: { openInEditor(path: string): Promise<OkResult> }
   app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string>; openExternal(url: string): Promise<OkResult> }
 }
