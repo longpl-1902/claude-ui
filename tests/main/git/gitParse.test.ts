@@ -102,7 +102,7 @@ describe('R-08 parseLeftRight', () => {
 
 describe('R-08 parseNumstatZ', () => {
   it('R-08 plain entries', () => {
-    expect(parseNumstatZ('3\t1\tsrc/a.ts\010\t0\tsrc/b.ts\0')).toEqual([
+    expect(parseNumstatZ('3\t1\tsrc/a.ts\x0010\t0\tsrc/b.ts\0')).toEqual([
       { path: 'src/a.ts', added: 3, removed: 1 },
       { path: 'src/b.ts', added: 10, removed: 0 }
     ])
@@ -111,7 +111,7 @@ describe('R-08 parseNumstatZ', () => {
     expect(parseNumstatZ('-\t-\timg/logo.png\0')).toEqual([{ path: 'img/logo.png', added: null, removed: null }])
   })
   it('R-08 rename form a\\td\\t\\0old\\0new\\0 uses the new path', () => {
-    const e = parseNumstatZ('5\t2\t\0old/a.ts\0new/a.ts\01\t1\tz.ts\0')
+    const e = parseNumstatZ('5\t2\t\0old/a.ts\0new/a.ts\x001\t1\tz.ts\0')
     expect(e).toEqual([
       { path: 'new/a.ts', added: 5, removed: 2 },
       { path: 'z.ts', added: 1, removed: 1 }
