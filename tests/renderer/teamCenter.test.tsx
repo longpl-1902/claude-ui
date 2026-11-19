@@ -11,6 +11,7 @@ import { Timeline } from '@renderer/components/team/Timeline'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
 import { RawTerminalPane } from '@renderer/components/team/RawTerminalPane'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { seedMockAccounts } from './seedAccounts'
 
 const xterm = vi.hoisted(() => ({
   open: vi.fn(),
@@ -170,14 +171,16 @@ describe('R-10 LeadConsole', () => {
     expect(screen.getByText('/status')).toBeInTheDocument()
   })
 
-  it('the Raw terminal toggle shows the placeholder and hides the event list', async () => {
+  it('the Raw terminal toggle shows the launcher and hides the event list', async () => {
+    seedMockAccounts()
     render(<LeadConsole />)
     const toggle = screen.getByRole('button', { name: 'Raw terminal' })
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.queryByText('Raw terminal: placeholder until Phase 2')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start claude' })).toBeNull()
     await userEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('Raw terminal: placeholder until Phase 2')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Start claude' })).toBeVisible()
+    expect(screen.queryByText('Raw terminal: placeholder until Phase 2')).toBeNull()
     expect(screen.queryByText('Created team "sheet-export", 4 worktrees, 6 tasks')).toBeNull()
     expect(useConsoleStore.getState().rawTerminalOpen).toBe(true)
     await userEvent.click(toggle)
@@ -186,13 +189,19 @@ describe('R-10 LeadConsole', () => {
 })
 
 describe('R-10 RawTerminalPane', () => {
-  it('renders fallback text, opens xterm with a placeholder message, disposes on unmount', async () => {
-    const { unmount } = render(<RawTerminalPane />)
-    expect(screen.getByText('Raw terminal: placeholder until Phase 2')).toBeInTheDocument()
-    await waitFor(() => expect(xterm.open).toHaveBeenCalled())
-    await waitFor(() => expect(xterm.write).toHaveBeenCalled())
-    expect(String(xterm.write.mock.calls[0]![0])).toContain('placeholder')
-    unmount()
-    await waitFor(() => expect(xterm.dispose).toHaveBeenCalled())
+  it('shows the "Add an account" hint when the store has no accounts', async () => {
+    render(<RawTerminalPane />)
+    expect(screen.getByText('Add an account in Accounts first')).toBeInTheDocument()
+    expect(screen.queryByText(/placeholder/)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Open Accounts' }))
+    expect(useConsoleStore.getState().screen).toBe('accounts')
+  })
+
+  it('shows the launcher form when accounts exist and opens no xterm', () => {
+    seedMockAccounts()
+    render(<RawTerminalPane />)
+    expect(screen.getByLabelText('Folder')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start claude' })).toBeInTheDocument()
+    expect(xterm.open).not.toHaveBeenCalled()
   })
 })

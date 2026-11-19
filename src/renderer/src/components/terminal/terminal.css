@@ -1,0 +1,19 @@
+.ac-term { width: 100%; height: 100%; min-height: 120px; padding: 8px 10px; box-sizing: border-box; background: var(--ac-bg-console); overflow: hidden; }
+.ac-term .xterm { height: 100%; }
+.ac-term .xterm-viewport { background-color: var(--ac-bg-console) !important; }
+.ac-term[data-exited='true'] { opacity: 0.85; }
+
+/* RawTerminalPane (launcher + live header); teamCenter.css owns the base .ac-tc-raw box */
+.ac-tc-raw { display: flex; flex-direction: column; }
+.ac-tc-raw--live > .ac-tc-raw__term { flex: 1; min-height: 0; padding: 0; }
+.ac-tc-raw--launcher { gap: 10px; padding: 14px; overflow: auto; color: var(--ac-text-soft); font-size: 12px; }
+.ac-tc-raw__bar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--ac-border); font-size: 12px; color: var(--ac-text-muted); }
+.ac-tc-raw__folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'JetBrains Mono', monospace; }
+.ac-tc-raw__chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid var(--ac-border-btn); border-radius: var(--ac-radius-sm); color: var(--ac-text); }
+.ac-tc-raw__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.ac-tc-raw__row { display: flex; align-items: center; gap: 8px; }
+.ac-tc-raw__input { flex: 1; min-width: 0; background: var(--ac-bg-inset); color: var(--ac-text); border: 1px solid var(--ac-border-inset); border-radius: var(--ac-radius-control); padding: 6px 8px; font: inherit; }
+.ac-tc-raw__hint { margin: 0; color: var(--ac-text-muted); }
+.ac-tc-raw__error { margin: 0; color: var(--ac-status-needs-you); }
+.ac-tc-raw__warn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; background: var(--ac-warn-bg); border: 1px solid var(--ac-warn-border); border-radius: var(--ac-radius-control); color: var(--ac-warn-text); }
+.ac-tc-raw__warn p { margin: 0; flex: 1 1 100%; }
