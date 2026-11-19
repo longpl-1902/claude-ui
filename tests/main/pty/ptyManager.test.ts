@@ -162,8 +162,8 @@ describe('R-09 ptyManager lifecycle', () => {
     await mgr.spawnClaude(req)
     ptys[0]!.emitData('hello ')
     ptys[0]!.emitData('world')
-    expect(a).toHaveBeenCalledWith('pty-1', 'hello ')
-    expect(a).toHaveBeenCalledWith('pty-1', 'world')
+    expect(a).toHaveBeenCalledWith('pty-1', 'hello ', 6)
+    expect(a).toHaveBeenCalledWith('pty-1', 'world', 11)
     expect(b).toHaveBeenCalledTimes(2)
     expect(mgr.buffer('pty-1')).toBe('hello world')
     off()
@@ -179,6 +179,16 @@ describe('R-09 ptyManager lifecycle', () => {
     ptys[0]!.emitData('ABCDE')
     expect(mgr.buffer('pty-1')).toBe('56789ABCDE')
     expect(mgr.buffer('nope')).toBe('')
+  })
+
+  it('R-13 snapshot returns the buffer with a running end offset that keeps counting past the ring trim', async () => {
+    const { mgr, ptys } = setup({ bufferLimit: 10 })
+    await mgr.spawnClaude(req)
+    expect(mgr.snapshot('pty-1')).toEqual({ data: '', end: 0 })
+    ptys[0]!.emitData('0123456789')
+    ptys[0]!.emitData('ABCDE')
+    expect(mgr.snapshot('pty-1')).toEqual({ data: '56789ABCDE', end: 15 })
+    expect(mgr.snapshot('nope')).toEqual({ data: '', end: 0 })
   })
 
   it('R-09 write and resize reach the pty; unknown ids return false', async () => {

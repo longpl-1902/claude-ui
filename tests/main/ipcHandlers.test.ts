@@ -96,7 +96,7 @@ describe('Phase 2 contract stubs', () => {
     ['accounts:resolve-folder', ['C:/x'], { accountId: 'ask', ruleIndex: -1 }],
     ['accounts:check-launch', ['C:/x', 'company'], { allowed: false, warnings: [], blockedReason: 'pty-unavailable', matched: { accountId: 'ask', ruleIndex: -1 } }],
     ['pty:list', [], []],
-    ['pty:get-buffer', ['p1'], ''],
+    ['pty:get-buffer', ['p1'], { data: '', end: 0 }],
     ['app:pick-folder', [], null],
     ['app:get-default-cwd', [], ''],
     ['accounts:remove-profile', ['company'], { ok: false, reason: 'not-implemented' }],
@@ -145,7 +145,8 @@ function fakeDeps() {
     resize: vi.fn(() => true),
     kill: vi.fn(() => true),
     list: vi.fn(() => [{ id: 'p1' }]),
-    buffer: vi.fn(() => 'buf')
+    buffer: vi.fn(() => 'buf'),
+    snapshot: vi.fn(() => ({ data: 'buf', end: 3 }))
   }
   const deps = { accounts, pty, pickFolder: vi.fn(async () => 'C:/picked'), defaultCwd: vi.fn(() => 'C:/cwd') }
   const handle = vi.fn()
@@ -191,7 +192,7 @@ describe('Phase 2 real handlers delegate to the services', () => {
     expect(pty.write).toHaveBeenCalledWith('p1', 'ls')
     expect(await invoke('pty:kill', 'p1')).toEqual({ ok: true })
     expect(await invoke('pty:list')).toEqual([{ id: 'p1' }])
-    expect(await invoke('pty:get-buffer', 'p1')).toBe('buf')
+    expect(await invoke('pty:get-buffer', 'p1')).toEqual({ data: 'buf', end: 3 })
     expect(await invoke('app:pick-folder')).toBe('C:/picked')
     expect(await invoke('app:get-default-cwd')).toBe('C:/cwd')
     expect(deps.pickFolder).toHaveBeenCalled()

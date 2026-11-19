@@ -43,12 +43,20 @@ export function TerminalView({ ptyId, ariaLabel, className, interactive = true }
 
       // Subscribe before reading the buffer so no output is lost; hold live data until the buffer is written.
       let ready = false
-      const pending: string[] = []
+      // Each push carries `end`, its offset after the chunk; drop or trim whatever the buffer already contains.
+      let bufferEnd = 0
+      const pending: Array<{ data: string; end: number }> = []
+      const writeChunk = (data: string, end: number): void => {
+        if (end <= bufferEnd) return
+        const start = end - data.length
+        term.write(start < bufferEnd ? data.slice(bufferEnd - start) : data)
+        bufferEnd = end
+      }
       cleanups.push(
         pty.onData((e) => {
           if (e.ptyId !== ptyId) return
-          if (ready) term.write(e.data)
-          else pending.push(e.data)
+          if (ready) writeChunk(e.data, e.end)
+          else pending.push({ data: e.data, end: e.end })
         })
       )
       cleanups.push(
@@ -88,12 +96,13 @@ export function TerminalView({ ptyId, ariaLabel, className, interactive = true }
       try {
         const buf = await pty.getBuffer(ptyId)
         if (disposed) return
-        if (buf) term.write(buf)
+        if (buf?.data) term.write(buf.data)
+        bufferEnd = buf?.end ?? 0
       } catch {
         // no buffer available
       }
       ready = true
-      for (const d of pending) term.write(d)
+      for (const c of pending) writeChunk(c.data, c.end)
       pending.length = 0
     })()
 

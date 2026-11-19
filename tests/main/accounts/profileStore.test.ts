@@ -178,13 +178,37 @@ describe('R-06 loadAccountsFile / saveAccountsFile', () => {
     expect(r.warnings.length).toBeGreaterThan(0)
   })
 
-  it('R-06 a parsable file with bad entries loads with warnings, not recovery', async () => {
+  it('R-06 a parsable file with dropped entries loads with warnings and keeps a .corrupt- copy of the original', async () => {
     const bad = { ...goodFile(), rules: [{ pattern: '', accountId: 'work', note: '' }] }
-    const fs = createMemoryFs({ [FILE]: JSON.stringify(bad) }, [], { caseInsensitive: true })
-    const r = await loadAccountsFile(fs, DIR)
-    expect(r.recoveredFrom).toBeUndefined()
+    const text = JSON.stringify(bad)
+    const fs = createMemoryFs({ [FILE]: text }, [], { caseInsensitive: true })
+    const r = await loadAccountsFile(fs, DIR, () => new Date(2026, 10, 19, 13, 45, 30))
     expect(r.data.rules).toEqual([])
     expect(r.warnings.length).toBeGreaterThan(0)
+    expect(r.recoveredFrom).toBeDefined()
+    const kept = fs.fileKeys().filter((k) => /accounts\.json\.corrupt-\d{8}-\d{6}$/.test(k))
+    expect(kept).toHaveLength(1)
+    expect(fs.content(kept[0]!)).toBe(text)
+  })
+
+  it('R-06 a future {version: 2} file is preserved under a .corrupt- name after load plus save', async () => {
+    const text = JSON.stringify({ version: 2, profiles: [{ id: 'x' }], extra: 'keep me' })
+    const fs = createMemoryFs({ [FILE]: text }, [], { caseInsensitive: true })
+    const r = await loadAccountsFile(fs, DIR, () => new Date(2026, 10, 19, 13, 45, 30))
+    expect(r.data).toEqual(emptyAccountsFile())
+    expect(r.recoveredFrom).toBeDefined()
+    await saveAccountsFile(fs, DIR, r.data)
+    expect(JSON.parse(fs.content(FILE)!).version).toBe(1)
+    const kept = fs.fileKeys().filter((k) => /accounts\.json\.corrupt-\d{8}-\d{6}$/.test(k))
+    expect(kept).toHaveLength(1)
+    expect(fs.content(kept[0]!)).toBe(text)
+  })
+
+  it('R-06 a clean file is not copied aside', async () => {
+    const fs = createMemoryFs({ [FILE]: JSON.stringify(goodFile()) }, [], { caseInsensitive: true })
+    const r = await loadAccountsFile(fs, DIR)
+    expect(r.recoveredFrom).toBeUndefined()
+    expect(fs.writes).toEqual([])
   })
 
   it('R-06 save writes derived folderRules into each profile', async () => {

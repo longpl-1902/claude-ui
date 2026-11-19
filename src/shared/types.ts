@@ -233,6 +233,13 @@ export interface PtySpawnResult {
 export interface PtyDataEvent {
   ptyId: string
   data: string
+  /** Running output offset (UTF-16 units written since spawn) after this chunk. */
+  end: number
+}
+/** Ring-buffer contents plus the running offset they end at. */
+export interface PtyBufferSnapshot {
+  data: string
+  end: number
 }
 export interface PtyExitEvent {
   ptyId: string

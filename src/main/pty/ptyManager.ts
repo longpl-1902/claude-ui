@@ -27,6 +27,8 @@ interface Entry {
   info: PtyInfo
   pty: IPtyLike
   buf: string
+  /** Total UTF-16 units ever appended; buf always ends at this offset. */
+  total: number
   alive: boolean
 }
 
@@ -53,7 +55,7 @@ export function createPtyManager(deps: {
   const newId = deps.newId ?? (() => randomUUID())
   const limit = deps.bufferLimit ?? DEFAULT_BUFFER
   const entries = new Map<string, Entry>()
-  const dataCbs = new Set<(id: string, data: string) => void>()
+  const dataCbs = new Set<(id: string, data: string, end: number) => void>()
   const exitCbs = new Set<(id: string, code: number) => void>()
   let loaded: Promise<NodePtyLike | null> | null = null
 
@@ -104,6 +106,7 @@ export function createPtyManager(deps: {
       const entry: Entry = {
         pty,
         buf: '',
+        total: 0,
         alive: true,
         info: {
           id,
@@ -118,8 +121,9 @@ export function createPtyManager(deps: {
       entries.set(id, entry)
       pty.onData((d) => {
         entry.buf += d
+        entry.total += d.length
         if (entry.buf.length > limit) entry.buf = entry.buf.slice(entry.buf.length - limit)
-        emit(dataCbs, id, d)
+        emit(dataCbs, id, d, entry.total)
       })
       pty.onExit((e) => {
         if (!entry.alive) return
@@ -161,6 +165,10 @@ export function createPtyManager(deps: {
       }
     },
     buffer: (id) => entries.get(id)?.buf ?? '',
+    snapshot(id) {
+      const e = entries.get(id)
+      return e ? { data: e.buf, end: e.total } : { data: '', end: 0 }
+    },
     list: () => [...entries.values()].map((e) => ({ ...e.info })),
     onData(cb) {
       dataCbs.add(cb)

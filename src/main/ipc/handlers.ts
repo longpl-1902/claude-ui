@@ -87,7 +87,7 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
         return pty.kill(id) ? { ok: true } : { ok: false, reason: 'not-found' }
       },
       'pty:list': () => pty.list(),
-      'pty:get-buffer': (id) => (allStrings(id) ? pty.buffer(id) : '')
+      'pty:get-buffer': (id) => (allStrings(id) ? pty.snapshot(id) : { data: '', end: 0 })
     } satisfies Partial<Handlers>)
   }
   const { pickFolder, defaultCwd } = deps
@@ -138,7 +138,7 @@ function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefa
       allStrings(ptyId) && typeof cols === 'number' && typeof rows === 'number' ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS },
     'pty:kill': (ptyId) => (allStrings(ptyId) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
     'pty:list': () => [],
-    'pty:get-buffer': () => '',
+    'pty:get-buffer': () => ({ data: '', end: 0 }),
     'app:pick-folder': () => null,
     'app:get-default-cwd': () => ''
   }

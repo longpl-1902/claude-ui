@@ -100,12 +100,12 @@ export function createAccountsService(deps: {
     return detected
   }
 
-  /** Normalise a user-supplied config dir into its display form; null when empty. */
+  /** Normalise a user-supplied config dir into its display form; null when empty or not absolute (after ~ expansion). */
   const displayDir = (dir: string): string | null => {
     const t = dir.trim()
     if (!t) return null
     const abs = expandHome(t, home)
-    if (!isAbsoluteFor(abs, platform)) return t
+    if (!isAbsoluteFor(abs, platform)) return null
     return isDefaultConfigDir(abs, home, platform) ? '~/.claude' : toDisplayPath(abs, home, platform)
   }
 
@@ -206,6 +206,9 @@ export function createAccountsService(deps: {
   }
 
   pty.onExit(() => void emitChanged())
+  signIn.onStatus((s) => {
+    if (s.step === 'done') void emitChanged()
+  })
 
   const validProfile = (p: ProfileInput): { name: string; color: string; dir: string; kind?: AccountKind } | null => {
     if (!isRecord(p)) return null
@@ -217,9 +220,8 @@ export function createAccountsService(deps: {
     return { name, color: p.color, dir, ...(p.kind !== undefined ? { kind: p.kind } : {}) }
   }
 
-  const check = async (folder: string, accountId: string): Promise<LaunchCheck> => {
-    const f = await serial(ensure)
-    return checkLaunchRules({
+  const checkWith = (f: AccountsFile, folder: string, accountId: string): LaunchCheck =>
+    checkLaunchRules({
       folder: String(folder),
       accountId,
       profiles: f.profiles,
@@ -228,7 +230,10 @@ export function createAccountsService(deps: {
       sessions: claudeSessions().map((s) => ({ path: s.cwd, accountId: s.accountId ?? '' })),
       match
     })
-  }
+  const check = async (folder: string, accountId: string): Promise<LaunchCheck> => checkWith(await serial(ensure), folder, accountId)
+
+  /** A non-empty config dir that cannot be used because it is not absolute. */
+  const isBadFolder = (dir: unknown): boolean => typeof dir === 'string' && dir.trim() !== '' && displayDir(dir) === null
 
   return {
     signIn,
@@ -242,7 +247,7 @@ export function createAccountsService(deps: {
     async linkDetected(req) {
       if (!isRecord(req) || typeof req.configDir !== 'string') return { ...INVALID }
       const dir = displayDir(req.configDir)
-      if (!dir) return { ...INVALID }
+      if (!dir) return isBadFolder(req.configDir) ? { ok: false, reason: 'invalid-folder' } : { ...INVALID }
       if (req.accountId !== undefined && typeof req.accountId !== 'string') return { ...INVALID }
       const r = await mutate<OkWithId>(async (f) => {
         if (req.accountId !== undefined) {
@@ -277,7 +282,7 @@ export function createAccountsService(deps: {
 
     async saveProfile(p) {
       const v = validProfile(p)
-      if (!v) return { ...INVALID }
+      if (!v) return isRecord(p) && isBadFolder(p.configDir) ? { ok: false, reason: 'invalid-folder' } : { ...INVALID }
       return mutate<OkWithId>((f) => {
         if (p.id !== undefined) {
           const cur = f.profiles.find((x) => x.id === p.id)
@@ -383,28 +388,31 @@ export function createAccountsService(deps: {
       }
       const cwd = expandHome(req.cwd.trim(), home)
       if (!isAbsoluteFor(cwd, platform) || !(await fs.exists(cwd))) return { ok: false, reason: 'invalid-folder' }
-      const chk = await check(cwd, req.accountId)
-      if (!chk.allowed) return { ok: false, reason: chk.blockedReason ?? 'unknown-account' }
-      if (chk.warnings.length > 0 && req.confirmed !== true) {
-        return { ok: false, reason: 'needs-confirmation', warnings: chk.warnings }
-      }
-      const f = await serial(ensure)
-      const profile = f.profiles.find((p) => p.id === req.accountId)
-      if (!profile) return { ok: false, reason: 'unknown-account' }
-      const abs = expandHome(profile.configDir, home)
-      if (!isAbsoluteFor(abs, platform)) return { ok: false, reason: 'spawn-failed' }
-      const out = await pty.spawnClaude({
-        purpose: 'claude',
-        cwd,
-        configDirAbs: isDefaultConfigDir(abs, home, platform) ? null : abs,
-        configDirDisplay: profile.configDir,
-        accountId: profile.id,
-        cols: req.cols,
-        rows: req.rows
+      // Check and spawn in one serial block so a second quick launch sees the first session.
+      const out = await serial(async (): Promise<PtySpawnResult> => {
+        const f = await ensure()
+        const chk = checkWith(f, cwd, req.accountId)
+        if (!chk.allowed) return { ok: false, reason: chk.blockedReason ?? 'unknown-account' }
+        if (chk.warnings.length > 0 && req.confirmed !== true) {
+          return { ok: false, reason: 'needs-confirmation', warnings: chk.warnings }
+        }
+        const profile = f.profiles.find((p) => p.id === req.accountId)
+        if (!profile) return { ok: false, reason: 'unknown-account' }
+        const abs = expandHome(profile.configDir, home)
+        if (!isAbsoluteFor(abs, platform)) return { ok: false, reason: 'spawn-failed' }
+        const r = await pty.spawnClaude({
+          purpose: 'claude',
+          cwd,
+          configDirAbs: isDefaultConfigDir(abs, home, platform) ? null : abs,
+          configDirDisplay: profile.configDir,
+          accountId: profile.id,
+          cols: req.cols,
+          rows: req.rows
+        })
+        return r.ok ? { ok: true, ptyId: r.id } : { ok: false, reason: r.reason }
       })
-      if (!out.ok) return { ok: false, reason: out.reason }
-      await emitChanged()
-      return { ok: true, ptyId: out.id }
+      if (out.ok) await emitChanged()
+      return out
     },
 
     onChanged(cb) {
