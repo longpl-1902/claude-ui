@@ -41,7 +41,9 @@ No code signing is configured (`CSC_IDENTITY_AUTO_DISCOVERY=false`).
 
 - **Accounts**: the app detects Claude Code config folders on this PC (the default one, and others you set up with
   `CLAUDE_CONFIG_DIR`), lets you link them and shows whether each is signed in. Signing in opens the `claude`
-  login flow in a terminal; the app never handles your password.
+  login flow in a terminal; the app never handles your password. The account chip in the header shows the account of
+  the session you are viewing (a running session keeps its account); its menu picks the account new sessions start
+  with, unless a folder rule chooses another.
 - **Folder rules**: choose which project folders appear (for example `C:/Users/u/acme`) and which are ignored.
 - **Safety toggles**: features that write anything (hooks, starting sessions, stopping processes) can be turned off,
   and every write shows a preview first.
