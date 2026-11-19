@@ -21,11 +21,13 @@ export function TeamView() {
           <SharedTaskList />
         </aside>
         <main className="ac-team__center">
-          <OverlapBanner />
-          <div id="ac-agents">
-            <AgentGrid />
+          <div className="ac-team__scroll">
+            <OverlapBanner />
+            <div id="ac-agents">
+              <AgentGrid />
+            </div>
+            <Timeline />
           </div>
-          <Timeline />
           <LeadConsole />
         </main>
         <div className="ac-team__right">

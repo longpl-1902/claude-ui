@@ -85,3 +85,64 @@
     border-bottom: 1px solid var(--ac-border);
   }
 }
+
+.ac-team__scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Wide layout: fill the viewport; each column scrolls internally. */
+@media (min-width: 1101px) {
+  .ac-team {
+    height: 100vh;
+    overflow: hidden;
+  }
+  .ac-team > .ac-header {
+    flex-shrink: 0;
+  }
+  .ac-team__cols {
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  .ac-team__left,
+  .ac-team__right {
+    min-height: 0;
+  }
+  .ac-team__left {
+    overflow-y: auto;
+  }
+  .ac-team__right {
+    overflow: hidden;
+  }
+  .ac-team__right > .insp {
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 0;
+    border-left: 0;
+    background: transparent;
+  }
+  .ac-team__right .insp > [role='tabpanel'] {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .ac-team__right .insp > .insp__spacer {
+    flex: 0 0 0;
+  }
+  .ac-team__right .insp > :not([role='tabpanel']) {
+    flex-shrink: 0;
+  }
+  .ac-team__center {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ac-team__center > .ac-team__scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .ac-team__center > :not(.ac-team__scroll) {
+    flex-shrink: 0;
+  }
+}
