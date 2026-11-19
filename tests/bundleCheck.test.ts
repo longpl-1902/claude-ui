@@ -20,8 +20,16 @@ function fixture(html: string, assets: Record<string, string>): string {
   for (const [name, code] of Object.entries(assets)) writeFileSync(join(dir, 'assets', name), code)
   return dir
 }
-function run(dir: string) {
-  return spawnSync(process.execPath, [script, dir], { encoding: 'utf8' })
+const GOOD_HOOK = "'use strict'\nconst http = require('node:http')\nprocess.exit(0)\n"
+function hookFile(code: string | null): string {
+  const dir = mkdtempSync(join(tmpdir(), 'check-hook-'))
+  dirs.push(dir)
+  const p = join(dir, 'agent-console-hook.cjs')
+  if (code !== null) writeFileSync(p, code)
+  return p
+}
+function run(dir: string, hook: string = hookFile(GOOD_HOOK)) {
+  return spawnSync(process.execPath, [script, dir], { encoding: 'utf8', env: { ...process.env, HOOK_SCRIPT: hook } })
 }
 
 afterEach(() => {
@@ -51,5 +59,41 @@ describe('check-bundle', () => {
     const r = run(fixture(html, { 'index.js': REACT }))
     expect(r.status).toBe(1)
     expect(r.stderr).toContain('connect-src')
+  })
+
+  const ok = (): string => fixture(PROD_HTML, { 'index.js': REACT })
+
+  it('fails when the hook script is missing', () => {
+    const r = run(ok(), hookFile(null))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('hook script missing')
+  })
+
+  it('fails when the hook script is not CommonJS', () => {
+    const r = run(ok(), hookFile("import http from 'node:http'\nprocess.exit(0)\n"))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('not CommonJS')
+  })
+
+  it('fails when the hook script prints or writes files', () => {
+    const r = run(ok(), hookFile(GOOD_HOOK + "console.log('x')\nrequire('fs').writeFileSync('a','b')\n"))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('console.')
+    expect(r.stderr).toContain('writeFile')
+  })
+
+  it('passes the real shipped hook script', () => {
+    const r = spawnSync(process.execPath, [script, fixture(PROD_HTML, { 'index.js': REACT })], {
+      encoding: 'utf8',
+      cwd: resolve(__dirname, '..')
+    })
+    expect(r.stderr).toBe('')
+    expect(r.status).toBe(0)
+  })
+
+  it('works from a narrow-width (small viewport) build: the check is layout independent', () => {
+    // Responsive addendum: this task has no UI; the CSP meta check must hold for the narrow-viewport build too.
+    const html = PROD_HTML + '<meta name="viewport" content="width=device-width, initial-scale=1" />'
+    expect(run(fixture(html, { 'index.js': REACT })).status).toBe(0)
   })
 })

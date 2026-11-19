@@ -8,6 +8,14 @@ asarUnpack:
 win:
   target: nsis
   artifactName: AgentConsole-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  owner: longpl-1902
+  repo: claude-ui
 
 extraResources:
   - from: resources/hook
