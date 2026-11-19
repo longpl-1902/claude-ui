@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "node scripts/vitest.mjs run",
     "test:watch": "node scripts/vitest.mjs",
+    "check:pty": "node scripts/check-pty.mjs",
     "rebuild:pty": "electron-rebuild -f -w node-pty",
     "package:win": "npm run build && electron-builder --win"
   },

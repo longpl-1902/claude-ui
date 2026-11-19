@@ -62,7 +62,7 @@ describe('R-03 Phase 1 handler behaviour', () => {
   it('accounts sign-in handlers follow the Phase 1 stubs', async () => {
     const { invoke } = register()
     expect(await invoke('accounts:start-sign-in', '~/.claude-personal')).toEqual({ ok: false, reason: 'not-implemented' })
-    expect(await invoke('accounts:check-sign-in', '~/.claude-personal')).toEqual({ step: 'waiting' })
+    expect(await invoke('accounts:check-sign-in', '~/.claude-personal')).toEqual({ configDir: '~/.claude-personal', step: 'waiting' })
     expect(await invoke('accounts:cancel-sign-in', '~/.claude-personal')).toEqual({ ok: true })
   })
 
@@ -88,6 +88,32 @@ describe('R-03 Phase 1 handler behaviour', () => {
   it('app:get-version returns the injected version, default 0.0.0', async () => {
     expect(await register({ version: '9.8.7' }).invoke('app:get-version')).toBe('9.8.7')
     expect(await register().invoke('app:get-version')).toBe('0.0.0')
+  })
+})
+
+describe('Phase 2 contract stubs', () => {
+  it.each([
+    ['accounts:resolve-folder', ['C:/x'], { accountId: 'ask', ruleIndex: -1 }],
+    ['accounts:check-launch', ['C:/x', 'company'], { allowed: false, warnings: [], blockedReason: 'pty-unavailable', matched: { accountId: 'ask', ruleIndex: -1 } }],
+    ['pty:list', [], []],
+    ['pty:get-buffer', ['p1'], ''],
+    ['app:pick-folder', [], null],
+    ['app:get-default-cwd', [], ''],
+    ['accounts:remove-profile', ['company'], { ok: false, reason: 'not-implemented' }],
+    ['accounts:set-limit-policy', ['pause'], { ok: false, reason: 'not-implemented' }],
+    ['accounts:reopen-sign-in', ['~/.claude'], { ok: false, reason: 'not-implemented' }],
+    ['pty:kill', ['p1'], { ok: false, reason: 'not-implemented' }],
+    ['pty:spawn', [{ cwd: 'C:/x', accountId: 'company', cols: 80, rows: 24 }], { ok: false, reason: 'pty-unavailable' }],
+    ['pty:spawn', [42], { ok: false, reason: 'invalid-args' }],
+    ['pty:resize', ['p1', 'x', 2], { ok: false, reason: 'invalid-args' }]
+  ] as [InvokeChannel, unknown[], unknown][])('%s stub returns its shape', async (channel, args, expected) => {
+    const { invoke } = register()
+    expect(await invoke(channel, ...args)).toEqual(expected)
+  })
+
+  it('accounts:scan returns the mock snapshot', async () => {
+    const { invoke } = register()
+    expect(await invoke('accounts:scan')).toEqual(mockAccountsSnapshot)
   })
 })
 

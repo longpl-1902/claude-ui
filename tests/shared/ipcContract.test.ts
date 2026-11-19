@@ -10,8 +10,8 @@ describe('IPC contract', () => {
     expect(new Set(values).size).toBe(values.length)
   })
 
-  it('INVOKE_CHANNELS covers every channel except teamEvent', () => {
-    expect(INVOKE_CHANNELS.length).toBe(values.length - 1)
+  it('INVOKE_CHANNELS covers every channel except the push channels', () => {
+    expect(INVOKE_CHANNELS.length).toBe(values.length - PUSH_CHANNELS.length)
     expect(INVOKE_CHANNELS).not.toContain(IPC.teamEvent)
   })
 
@@ -93,7 +93,7 @@ describe('R-01 IPC contract v2', () => {
       'checkLaunch', 'reopenSignIn', 'onChanged', 'onSignInStatus', 'spawn', 'write', 'resize', 'kill', 'list', 'getBuffer',
       'onData', 'onExit', 'pickFolder', 'getDefaultCwd'
     ]) {
-      expect(src, `preload should define ${name}`).toMatch(new RegExp(`\b${name}\b`))
+      expect(src, `preload should define ${name}`).toMatch(new RegExp(String.raw`\b${name}\b`))
     }
   })
 })

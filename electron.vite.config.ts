@@ -10,7 +10,9 @@ const alias = {
 
 export default defineConfig({
   main: {
-    resolve: { alias }
+    resolve: { alias },
+    // electron-vite externalizes only `dependencies`; node-pty is optional, so list it explicitly.
+    build: { externalizeDeps: { include: ['node-pty'] } }
   },
   preload: {
     resolve: { alias },

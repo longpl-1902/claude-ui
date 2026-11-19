@@ -100,11 +100,13 @@ export interface FolderRule {
   accountId: string | 'ask'
   note: string
 }
+export type AccountKind = 'company' | 'personal'
 export interface AccountProfile {
   id: string
   name: string
   color: string
   configDir: string
+  kind?: AccountKind
   folderRules: FolderRule[]
 }
 export interface AccountView extends AccountProfile {
@@ -113,6 +115,8 @@ export interface AccountView extends AccountProfile {
   plan?: string
   signedIn: boolean
   tokensToday?: number
+  locked?: boolean
+  isDefaultDir?: boolean
 }
 export interface DetectedLogin {
   configDir: string
@@ -122,6 +126,9 @@ export interface DetectedLogin {
   linkedAccountId?: string
   signedIn: boolean
   suggestedAccountId?: string
+  isDefaultDir?: boolean
+  exists?: boolean
+  warnings?: string[]
 }
 export type LimitPolicy = 'pause' | 'wait' | 'switch'
 export interface SafetySettings {
@@ -134,6 +141,7 @@ export interface RunningSession {
   path: string
   accountId: string
   agentCount: number
+  ptyId?: string
 }
 export interface AccountsSnapshot {
   accounts: AccountView[]
@@ -144,9 +152,89 @@ export interface AccountsSnapshot {
   safety: SafetySettings
   limitPolicy: LimitPolicy
   sessions: RunningSession[]
+  ptyAvailable?: boolean
+  claudeFound?: boolean
 }
-export type SignInStep = 'none' | 'waiting' | 'done'
+export type SignInStep = 'none' | 'waiting' | 'done' | 'error'
+export interface SignInStatus {
+  configDir: string
+  step: SignInStep
+  email?: string
+  org?: string
+  ptyId?: string
+  reason?: string
+}
+export interface AccountsFile {
+  version: 1
+  profiles: AccountProfile[]
+  rules: FolderRule[]
+  defaultAccountId: string | null
+  safety: SafetySettings
+  limitPolicy: LimitPolicy
+}
+export interface ProfileInput {
+  id?: string
+  name: string
+  color: string
+  configDir: string
+  kind?: AccountKind
+}
+export interface LinkDetectedRequest {
+  configDir: string
+  accountId?: string
+  name?: string
+  color?: string
+  kind?: AccountKind
+}
 export interface OkResult {
   ok: boolean
   reason?: string
+}
+export interface OkWithId extends OkResult {
+  accountId?: string
+}
+export interface FolderResolution {
+  accountId: string | 'ask'
+  ruleIndex: number // -1 = fallback
+  pattern?: string
+}
+export type LaunchWarning = 'personal-in-company-folder'
+export type LaunchBlock = 'account-locked' | 'unknown-account' | 'pty-unavailable' | 'claude-not-found' | 'invalid-folder'
+export interface LaunchCheck {
+  allowed: boolean
+  warnings: LaunchWarning[]
+  blockedReason?: LaunchBlock
+  matched: FolderResolution
+}
+export type PtyPurpose = 'claude' | 'login'
+export interface PtyInfo {
+  id: string
+  purpose: PtyPurpose
+  cwd: string
+  accountId?: string
+  configDir: string
+  pid: number
+  startedAt: string
+  exitCode?: number
+}
+export interface PtySpawnRequest {
+  cwd: string
+  accountId: string
+  cols: number
+  rows: number
+  confirmed?: boolean
+}
+export interface PtySpawnResult {
+  ok: boolean
+  ptyId?: string
+  reason?: LaunchBlock | 'needs-confirmation' | 'invalid-args' | 'spawn-failed'
+  warnings?: LaunchWarning[]
+}
+export interface PtyDataEvent {
+  ptyId: string
+  data: string
+}
+export interface PtyExitEvent {
+  ptyId: string
+  exitCode: number
 }
