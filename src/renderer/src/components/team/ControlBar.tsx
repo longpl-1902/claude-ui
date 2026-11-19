@@ -9,6 +9,7 @@ import type {
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { useControlStore } from '../../store/useControlStore'
 import { Button } from '../ui/Button'
+import { isKnownReason, reasonText } from '../ui/reasonText'
 import './teamCenter.css'
 
 // D8: bypassPermissions is intentionally not offered.
@@ -37,7 +38,8 @@ const BLOCK_TEXT: Record<string, string> = {
   'session-live-elsewhere':
     'That session is running somewhere else (VS Code or a terminal). Fork it instead of resuming it.'
 }
-const blockText = (r: string): string => BLOCK_TEXT[r] ?? `Could not start the session (${r}).`
+const blockText = (r: string): string =>
+  BLOCK_TEXT[r] ?? (isKnownReason(r) ? reasonText(r) : `Could not start the session (${r}).`)
 
 export const ASK_LEAD_TEXT = 'Start a teammate with the Agent tool (name: "", task: )'
 
@@ -83,7 +85,7 @@ export function ControlBar({
   const liveCustomValid = MODEL_RE.test(customLiveText) && !customLiveText.startsWith('-')
   const [liveError, setLiveError] = useState('')
   const report = (r: { ok: boolean; reason?: string }): void =>
-    setLiveError(r.ok ? '' : `Could not change that (${r.reason ?? 'failed'}).`)
+    setLiveError(r.ok ? '' : (isKnownReason(r.reason) ? reasonText(r.reason) : `Could not change that (${r.reason ?? 'failed'}).`))
 
   // --- start form
   const [folder, setFolder] = useState('')

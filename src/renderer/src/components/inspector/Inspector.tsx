@@ -22,6 +22,7 @@ import { StatusPill } from "../ui/StatusPill";
 import { useViewedAccount } from "../team/TeamHeader";
 import { ActivityTab } from "./ActivityTab";
 import { FilesTab } from "./FilesTab";
+import { CopyButton } from "../chat/CopyButton";
 import { MessagesTab } from "./MessagesTab";
 import "./inspector.css";
 
@@ -378,12 +379,26 @@ function InspectorBody({
           <dd>{projectName}</dd>
           <dt>Session</dt>
           <dd>{sessionTitle}</dd>
+          {summary?.sessionId && (
+            <>
+              <dt>Session id</dt>
+              <dd>
+                {summary.sessionId}
+                <CopyButton className="ac-copy--always" text={summary.sessionId} label="session id" />
+              </dd>
+            </>
+          )}
           <dt>Account</dt>
           <dd>{account?.name ?? "Default account"}</dd>
           <dt>Started from</dt>
           <dd>{entrypointLabel(summary?.entrypoint)}</dd>
           <dt>Process id</dt>
-          <dd>{registryPid}</dd>
+          <dd>
+            {registryPid}
+            {registryPid != null && (
+              <CopyButton className="ac-copy--always" text={String(registryPid)} label="process id" />
+            )}
+          </dd>
           <dt>Folder</dt>
           <dd title={summary?.cwd ?? team.cwd}>{summary?.cwd ?? team.cwd ?? "unknown"}</dd>
         </dl>

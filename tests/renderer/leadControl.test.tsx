@@ -203,7 +203,7 @@ describe('controlled prompt', () => {
     control.send.mockResolvedValue({ ok: false, reason: 'not-running' })
     render(<LeadConsole />)
     await userEvent.type(prompt(), 'hello{Enter}')
-    expect(await screen.findByRole('alert')).toHaveTextContent('not-running')
+    expect(await screen.findByRole('alert')).toHaveTextContent('That session is not running any more')
     expect(prompt().value).toBe('hello')
   })
 
