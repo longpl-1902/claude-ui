@@ -3,6 +3,22 @@ import { useConsoleStore } from '../../store/useConsoleStore'
 import './teamLeft.css'
 
 const SUBTLE = 'var(--ac-text-subtle)'
+const ORDER: Record<SharedTask['state'], number> = { in_progress: 0, failing: 1, blocked: 2, pending: 3, done: 4 }
+
+function pill(t: SharedTask): string {
+  switch (t.state) {
+    case 'done':
+      return 'done'
+    case 'in_progress':
+      return 'in progress'
+    case 'pending':
+      return 'to do'
+    case 'blocked':
+      return `blocked by #${t.blockedBy ?? t.blockers?.[0] ?? '?'}`
+    case 'failing':
+      return `failing ×${t.failingCount ?? 1}`
+  }
+}
 
 export function SharedTaskList() {
   const team = useConsoleStore((s) => s.team)
@@ -36,10 +52,27 @@ export function SharedTaskList() {
   }
 
   if (!demo) {
+    const sorted = [...team.tasks].sort((a, b) => ORDER[a.state] - ORDER[b.state])
     return (
       <section className="ac-left-section">
         <h2 className="ac-left-title">Shared tasks</h2>
-        <p className="ac-left-placeholder">Shared tasks arrive in Phase 5</p>
+        {sorted.length === 0 ? (
+          <p className="ac-left-placeholder">No tasks in this session (TaskCreate / TodoWrite)</p>
+        ) : (
+          <ul className="ac-tasks">
+            {sorted.map((t) => (
+              <li key={t.id} className="ac-task">
+                <div className="ac-task__body">
+                  <span className="ac-task__title">{`#${t.id} ${t.title}`}</span>
+                  <span className="ac-task__meta">
+                    <span className="ac-task__owner">{nameOf(t.ownerAgentId)}</span>
+                    <span className={`ac-task__pill ac-task__pill--${t.state}`}>{pill(t)}</span>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     )
   }
