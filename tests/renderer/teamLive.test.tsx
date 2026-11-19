@@ -258,7 +258,7 @@ describe('R-12 grid empty states', () => {
 })
 
 describe('R-12 live cards', () => {
-  it('renders agents in the given order with a status tooltip and depth indent', () => {
+  it('renders agents (all running: original order kept) with a status tooltip; children marked, no indent', () => {
     const snap = seedLive()
     const { container } = render(<AgentGrid />)
     const cells = Array.from(container.querySelectorAll<HTMLElement>('.ac-card-cell'))
@@ -266,16 +266,9 @@ describe('R-12 live cards', () => {
     const names = cells.map((c) => c.querySelector('.ac-card__name')!.textContent)
     expect(names).toEqual(snap.agents.map((a) => a.name))
     for (const c of cells) expect(c.getAttribute('title')).toMatch(/running tool/)
-    expect(cells[0]!.style.marginLeft).toBe('')
-    expect(cells[1]!.style.marginLeft).toBe('12px')
-    expect(cells[2]!.style.marginLeft).toBe('24px')
+    for (const c of cells) expect(c.style.marginLeft).toBe('')
+    expect(cells[0]).not.toHaveClass('ac-card-cell--child')
     expect(cells[2]).toHaveClass('ac-card-cell--child')
-  })
-
-  it('caps the indent at depth 3', () => {
-    seedLive({ agents: [liveAgent(0, { depth: 7 })] })
-    const { container } = render(<AgentGrid />)
-    expect(container.querySelector<HTMLElement>('.ac-card-cell')!.style.marginLeft).toBe('36px')
   })
 
   it('does not indent in demo mode', () => {
