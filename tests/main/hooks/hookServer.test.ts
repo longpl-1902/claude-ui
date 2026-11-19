@@ -36,7 +36,7 @@ function setup(over: Record<string, unknown> = {}) {
   const written: { port: number; token: string; pid: number }[] = []
   let removed = 0
   const endpoint = { write: async (i: { port: number; token: string; pid: number }) => void written.push(i), remove: async () => void removed++ }
-  const server = createHookServer({ parse: parseOk, onEvent: (e) => void events.push(e), endpoint, nowMs: () => 1_800_000_000_000, pid: 4321, ...over } as never)
+  const server = createHookServer({ parse: parseOk, onEvent: (e: unknown) => void events.push(e), endpoint, nowMs: () => 1_800_000_000_000, pid: 4321, ...over } as never)
   return { server, events, written, removed: () => removed }
 }
 
