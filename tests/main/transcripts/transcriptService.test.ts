@@ -9,6 +9,7 @@ import {
   registryEntry,
   subMeta,
   textBlock,
+  toolResult,
   toolUseBlock,
   usage,
   userPrompt,
@@ -47,7 +48,7 @@ interface FakeWatcher {
   closed: boolean
 }
 
-function setup(opts: { pty?: () => PtyHint | null; alive?: number[]; roots?: () => Promise<typeof ROOTS>; extraFiles?: Record<string, string> } = {}) {
+function setup(opts: { pty?: () => PtyHint | null; alive?: number[]; roots?: () => Promise<typeof ROOTS>; extraFiles?: Record<string, string>; localDay?: (ms: number) => string } = {}) {
   const tree = buildTranscriptTree()
   const fs = createMemoryByteFs({ ...tree.files, ...(opts.extraFiles ?? {}) }, { mtimes: tree.mtimes, caseInsensitive: true })
   const watchers: FakeWatcher[] = []
@@ -68,7 +69,7 @@ function setup(opts: { pty?: () => PtyHint | null; alive?: number[]; roots?: () 
     watchDir,
     isPidAlive: (pid) => alive.has(pid),
     nowMs: () => Date.now(),
-    localDay: utcDay,
+    localDay: opts.localDay ?? utcDay,
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>)
   })
@@ -388,5 +389,89 @@ describe('R-14 privacy', () => {
     const { fs } = track(await boot())
     const bad = fs.reads.filter((p) => !/(\.jsonl|\.meta\.json|[\\/]sessions[\\/]\d+\.json)$/i.test(p))
     expect(bad).toEqual([])
+  })
+})
+
+describe('P3-B auto stability (R-10)', () => {
+  it('R-10 auto keeps the current live pick when another session becomes newer; switches once it stops being live', async () => {
+    const { svc, fs, emit, tree, alive, teams } = track(await boot())
+    expect(svc.snapshot().sessionId).toBe(S1)
+    const pushesBefore = teams.length
+    // B = S4 becomes live and more recently written than A = S1
+    const regB = `${DEFAULT_DIR}/sessions/5555.json`
+    alive.add(5555)
+    fs.set(regB, JSON.stringify(registryEntry({ pid: 5555, sessionId: S4, status: 'busy', statusUpdatedAt: NOW_MS })))
+    fs.setMtime(tree.paths.s4, NOW_MS + 500)
+    emit('add', regB)
+    emit('change', tree.paths.registryLive)
+    await flush(2000)
+    expect(svc.snapshot().sessionId).toBe(S1)
+    expect(teams.slice(pushesBefore).some((t) => t.sessionId === S4)).toBe(false)
+    // A's process dies: the view moves to B
+    alive.delete(PID_LIVE)
+    emit('change', tree.paths.registryLive)
+    await flush(2000)
+    expect(svc.snapshot().sessionId).toBe(S4)
+  })
+})
+
+describe('P3-B usage at local midnight (R-09)', () => {
+  const localDay = (ms: number): string => {
+    const d = new Date(ms)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  it('R-09 an idle app pushes the new day with empty totals just after local midnight, and again the next midnight', async () => {
+    const d = new Date(NOW_MS)
+    d.setHours(23, 59, 0, 0)
+    vi.setSystemTime(d.getTime())
+    const env = track(await boot({ localDay }))
+    const before = env.usages.length
+    const day0 = localDay(Date.now())
+    await flush(30_000) // still before midnight: nothing new from the midnight timer
+    expect(env.usages.slice(before).some((u) => u.day !== day0)).toBe(false)
+    await flush(40_000) // crosses midnight + 1 s
+    const pushed = env.usages.slice(before).filter((u) => u.day !== day0)
+    expect(pushed.length).toBe(1)
+    expect(pushed[0]!.byAccount).toEqual({})
+    expect(pushed[0]!.day).toBe(localDay(Date.now()))
+    env.svc.dispose()
+    const n = env.usages.length
+    await flush(5000)
+    expect(env.usages.length).toBe(n)
+  })
+})
+
+describe('P3-B snapshot size (advisory)', () => {
+  it('a 55-agent team with 160 tool calls each stays well under 300 kB per push', async () => {
+    const tree = buildTranscriptTree()
+    const dir = tree.paths.sub1.replace(/\/[^/]+$/, '')
+    const extra: Record<string, string> = {}
+    const ids: string[] = []
+    for (let n = 0; n < 55; n++) {
+      const id = `b${String(n).padStart(2, '0')}c3d4e5f6a7b81`.slice(0, 17)
+      ids.push(id)
+      const lines: unknown[] = [userPrompt(`Task ${n}`, { ts: at(0), parentUuid: null, agentId: id, sessionId: S1 })]
+      for (let i = 0; i < 160; i++) {
+        const tid = `toolu_${n}_${i}`
+        lines.push(
+          ...assistantBlocks([toolUseBlock(tid, 'Bash', { command: `npm run build --workspace=packages/pkg-${n}-${i} && echo done` })], {
+            ts: at(1 + i * 2), messageId: `msg_sz_${n}_${i}`, stopReason: 'tool_use', usage: usage(10, 5), agentId: id, sessionId: S1
+          }),
+          toolResult(tid, `ok ${i}: ` + 'x'.repeat(60), { ts: at(2 + i * 2), agentId: id, sessionId: S1 })
+        )
+      }
+      extra[`${dir}/agent-${id}.jsonl`] = jsonl(lines)
+      // 50 finished, 5 still running
+      extra[`${dir}/agent-${id}.meta.json`] = JSON.stringify(subMeta({ toolUseId: `toolu_none_${n}`, description: `Worker number ${n} builds package ${n}`, ...(n < 50 ? { finished: true } : {}) }))
+    }
+    const { svc } = track(await boot({ extraFiles: extra }))
+    const snap = svc.snapshot()
+    expect(snap.agents.length).toBeGreaterThanOrEqual(56)
+    const fin = snap.agents.filter((a) => a.runtime?.finished && ids.includes(a.id))
+    expect(fin.length).toBe(50)
+    for (const a of fin) expect(a.activity.length).toBeLessThanOrEqual(10)
+    const bytes = JSON.stringify(snap).length
+    expect(bytes).toBeLessThan(300_000)
+    expect(snap.events.length).toBeLessThanOrEqual(150)
   })
 })

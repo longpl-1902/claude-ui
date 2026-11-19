@@ -102,6 +102,15 @@ const SESSIONS_DEBOUNCE_MS = 1000
 const USAGE_DEBOUNCE_MS = 2000
 const BATCH_LINES = 400
 const MAX_SUB_DEPTH = 4
+/** Pushed snapshots trim activity: finished agents always, running ones too in a large team (the model keeps more). */
+const LARGE_TEAM = 12
+const FINISHED_ACTIVITY_CAP = 30
+const LARGE_FINISHED_ACTIVITY_CAP = 10
+const LARGE_RUNNING_ACTIVITY_CAP = 50
+/** A push carries the newest part of the feed only (the model keeps more for history). */
+const SNAPSHOT_EVENTS_CAP = 150
+const SNAPSHOT_CONSOLE_CAP = 100
+const MIDNIGHT_SLACK_MS = 1000
 
 type Kind = 'main' | 'sub' | 'meta'
 interface FileRec {
@@ -149,6 +158,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
   let sessionsTimer: unknown = null
   let usageTimer: unknown = null
   let pollTimer: unknown = null
+  let midnightTimer: unknown = null
   let pumping = false
   const usageEnumerated = new Set<string>()
 
@@ -193,7 +203,17 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
 
   // ---- snapshots ---------------------------------------------------------------------------------------------
   function currentSnapshot(): TeamSnapshot {
-    if (selected) return selected.model.snapshot(deps.nowMs())
+    if (selected) {
+      const snap = selected.model.snapshot(deps.nowMs())
+      const large = snap.agents.length > LARGE_TEAM
+      for (const a of snap.agents) {
+        const cap = a.runtime?.finished ? (large ? LARGE_FINISHED_ACTIVITY_CAP : FINISHED_ACTIVITY_CAP) : large ? LARGE_RUNNING_ACTIVITY_CAP : Infinity
+        if (a.activity.length > cap) a.activity = a.activity.slice(-cap)
+      }
+      if (snap.events.length > SNAPSHOT_EVENTS_CAP) snap.events = snap.events.slice(-SNAPSHOT_EVENTS_CAP)
+      if (snap.console.length > SNAPSHOT_CONSOLE_CAP) snap.console = snap.console.slice(-SNAPSHOT_CONSOLE_CAP)
+      return snap
+    }
     const s = structuredClone(EMPTY_TEAM_SNAPSHOT)
     if (waitingForSession) s.waitingForSession = true
     return s
@@ -386,9 +406,23 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     pushNow()
   }
 
+  async function isLive(pick: AutoPick): Promise<boolean> {
+    return (await index.readRegistry(roots)).some((l) => l.accountId === pick.accountId && l.entry.sessionId === pick.sessionId)
+  }
+
   async function applyAuto(): Promise<void> {
     const { pick, waitingForSession: waiting } = await index.pickAuto(roots, deps.ptyHint())
     if (selection.mode !== 'auto' || disposed) return
+    // Stability: without a pty (the highest tier) keep the current pick while it is still live, so two busy
+    // sessions do not make the view flip (each flip re-backfills every sub-agent file).
+    if (selected && deps.ptyHint() === null && (await isLive(selected.pick))) {
+      if (selection.mode !== 'auto' || disposed) return
+      if (waitingForSession) {
+        waitingForSession = false
+        pushNow()
+      }
+      return
+    }
     const waitChanged = waiting !== waitingForSession
     waitingForSession = waiting
     if (pick && selected && samePick(pick, selected.pick)) return
@@ -427,6 +461,20 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       usageTimer = null
       if (!disposed) fire(usageCbs, counter.today())
     }, USAGE_DEBOUNCE_MS)
+  }
+  /** Arms a timer for the next local midnight (+1 s) that pushes today's (now empty) totals, then re-arms itself. */
+  function scheduleMidnight(): void {
+    if (disposed) return
+    clear(midnightTimer)
+    const d = new Date(deps.nowMs())
+    d.setHours(24, 0, 0, 0)
+    const delay = Math.max(MIDNIGHT_SLACK_MS, d.getTime() - deps.nowMs() + MIDNIGHT_SLACK_MS)
+    midnightTimer = deps.setTimer(() => {
+      midnightTimer = null
+      if (disposed) return
+      fire(usageCbs, counter.today())
+      scheduleMidnight()
+    }, delay)
   }
   function kickPump(): void {
     if (pumping || disposed) return
@@ -641,6 +689,7 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
         await syncRoots()
         if (selection.mode === 'auto') await applyAuto()
         schedulePoll()
+        scheduleMidnight()
       })
     },
     snapshot: () => currentSnapshot(),
@@ -691,8 +740,8 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
       disposed = true
       for (const rw of rootWatches.values()) for (const w of rw.watchers) w.w.close()
       rootWatches.clear()
-      for (const t of [pushTimer, sessionsTimer, usageTimer, pollTimer]) clear(t)
-      pushTimer = sessionsTimer = usageTimer = pollTimer = null
+      for (const t of [pushTimer, sessionsTimer, usageTimer, pollTimer, midnightTimer]) clear(t)
+      pushTimer = sessionsTimer = usageTimer = pollTimer = midnightTimer = null
       selected = null
       pendingTail.clear()
       teamCbs.clear()

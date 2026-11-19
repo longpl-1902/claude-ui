@@ -222,7 +222,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
     const reg = (await readRegistry(own)).find((l) => l.entry.pid === pty.pid)
     if (reg) {
       const f = await findSession(own, reg.accountId, reg.entry.sessionId)
-      if (f) return toPick(f)
+      return f ? toPick(f) : null // registry knows the pty's session: wait for its transcript
     }
     const wantDir = encodeProjectDir(pty.cwd)
     for (const f of await scanAll(own)) {
@@ -239,13 +239,17 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
       const pick = await pickFromPty(roots, pty)
       return { pick, waitingForSession: pick === null }
     }
-    const stamp = (e: RegistryEntry): number => e.statusUpdatedAt ?? e.updatedAt ?? e.startedAt ?? 0
-    const liveList = (await readRegistry(roots)).sort((a, b) => stamp(b.entry) - stamp(a.entry))
-    for (const l of liveList) {
-      const f = await findSession(roots, l.accountId, l.entry.sessionId)
-      if (f) return { pick: toPick(f), waitingForSession: false }
+    const stamp = (e: RegistryEntry): number => Math.max(e.statusUpdatedAt ?? 0, e.updatedAt ?? 0, e.startedAt ?? 0)
+    // Registry stamps change only on status changes; transcript mtime is the real activity signal.
+    const files = await scanAll(roots)
+    const ranked: { f: FileInfo; stamp: number }[] = []
+    for (const l of await readRegistry(roots)) {
+      const f = files.find((x) => x.accountId === l.accountId && x.sessionId === l.entry.sessionId)
+      if (f) ranked.push({ f, stamp: stamp(l.entry) })
     }
-    const newest = (await scanAll(roots))[0]
+    ranked.sort((a, b) => b.f.mtimeMs - a.f.mtimeMs || b.stamp - a.stamp)
+    if (ranked[0]) return { pick: toPick(ranked[0].f), waitingForSession: false }
+    const newest = files[0]
     if (newest && newest.mtimeMs >= deps.nowMs() - DAY_MS) return { pick: toPick(newest), waitingForSession: false }
     return { pick: null, waitingForSession: false }
   }
