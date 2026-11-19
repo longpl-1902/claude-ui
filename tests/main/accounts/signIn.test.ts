@@ -49,7 +49,7 @@ describe('R-10 sign-in controller', () => {
     const { ctl, pty } = setup()
     expect(await ctl.start(DIR)).toMatchObject({ ok: true })
     expect(pty.spawnClaude).toHaveBeenCalledTimes(1)
-    const arg = pty.spawnClaude.mock.calls[0][0] as Record<string, unknown>
+    const arg = pty.spawnClaude.mock.calls[0]![0] as Record<string, unknown>
     expect(arg).toMatchObject({ purpose: 'login', args: ['auth', 'login'], configDirDisplay: DIR })
     expect(fwd(arg.configDirAbs as string)).toBe(`${HOME}/.claude-new`)
     expect(fwd(arg.cwd as string)).toBe(HOME)
@@ -58,8 +58,8 @@ describe('R-10 sign-in controller', () => {
   it('R-10 the default dir ~/.claude leaves CLAUDE_CONFIG_DIR unset (configDirAbs null) and watches ~/.claude.json', async () => {
     const { ctl, pty, watchers } = setup()
     await ctl.start('~/.claude')
-    expect((pty.spawnClaude.mock.calls[0][0] as { configDirAbs: unknown }).configDirAbs).toBeNull()
-    expect(fwd(watchers[0].file)).toBe(`${HOME}/.claude.json`)
+    expect((pty.spawnClaude.mock.calls[0]![0] as { configDirAbs: unknown }).configDirAbs).toBeNull()
+    expect(fwd(watchers[0]!.file)).toBe(`${HOME}/.claude.json`)
   })
 
   it('R-10 status is waiting with the ptyId and the watcher targets <dir>/.claude.json', async () => {
@@ -67,7 +67,7 @@ describe('R-10 sign-in controller', () => {
     await ctl.start(DIR)
     expect(ctl.status(DIR)).toMatchObject({ configDir: DIR, step: 'waiting', ptyId: 'pty1' })
     expect(watchers).toHaveLength(1)
-    expect(fwd(watchers[0].file)).toBe(FILE)
+    expect(fwd(watchers[0]!.file)).toBe(FILE)
     expect(statuses.at(-1)).toMatchObject({ step: 'waiting' })
   })
 
@@ -75,34 +75,34 @@ describe('R-10 sign-in controller', () => {
     const { ctl, fs, watchers } = setup()
     await ctl.start(DIR)
     fs.setFile(FILE, noEmail)
-    watchers[0].trigger()
+    watchers[0]!.trigger()
     await flush()
     expect(ctl.status(DIR).step).toBe('waiting')
-    expect(watchers[0].closed).toBe(false)
+    expect(watchers[0]!.closed).toBe(false)
   })
 
   it('R-10 a change that has an email completes once, emits done once and closes the watcher', async () => {
     const { ctl, fs, watchers, statuses } = setup()
     await ctl.start(DIR)
     fs.setFile(FILE, withEmail())
-    watchers[0].trigger()
+    watchers[0]!.trigger()
     await flush()
-    watchers[0].trigger()
+    watchers[0]!.trigger()
     await flush()
     expect(ctl.status(DIR)).toMatchObject({ step: 'done', email: 'me@example.com', org: 'Example Org' })
     expect(statuses.filter((s) => s.step === 'done')).toHaveLength(1)
-    expect(watchers[0].closed).toBe(true)
+    expect(watchers[0]!.closed).toBe(true)
     expect(JSON.stringify(statuses)).not.toContain('FAKE')
   })
 
   it('R-10 a dir already signed in at baseline is done only after an mtime bump (or exit 0)', async () => {
     const { ctl, fs, watchers } = setup({ [FILE]: withEmail('old@example.com') })
     await ctl.start(DIR)
-    watchers[0].trigger()
+    watchers[0]!.trigger()
     await flush()
     expect(ctl.status(DIR).step).toBe('waiting')
     fs.setFile(FILE, withEmail('new@example.com'))
-    watchers[0].trigger()
+    watchers[0]!.trigger()
     await flush()
     expect(ctl.status(DIR)).toMatchObject({ step: 'done', email: 'new@example.com' })
   })
@@ -130,7 +130,7 @@ describe('R-10 sign-in controller', () => {
     exit(1)
     await flush()
     expect(ctl.status(DIR)).toMatchObject({ step: 'error', reason: 'login-exited' })
-    expect(watchers[0].closed).toBe(true)
+    expect(watchers[0]!.closed).toBe(true)
     expect(statuses.at(-1)?.step).toBe('error')
   })
 
@@ -185,7 +185,7 @@ describe('R-10 sign-in controller', () => {
     await ctl.start(DIR)
     expect(await ctl.cancel(DIR)).toMatchObject({ ok: true })
     expect(pty.kill).toHaveBeenCalledWith('pty1')
-    expect(watchers[0].closed).toBe(true)
+    expect(watchers[0]!.closed).toBe(true)
     expect(ctl.status(DIR).step).toBe('none')
   })
 
@@ -217,7 +217,7 @@ describe('R-10 sign-in controller', () => {
     const { ctl, pty, watchers } = setup()
     await ctl.start(DIR)
     ctl.disposeAll()
-    expect(watchers[0].closed).toBe(true)
+    expect(watchers[0]!.closed).toBe(true)
     expect(pty.kill).toHaveBeenCalledWith('pty1')
   })
 
@@ -225,7 +225,7 @@ describe('R-10 sign-in controller', () => {
     const { ctl, fs, watchers } = setup()
     await ctl.start(DIR)
     fs.setFile(FILE, withEmail())
-    watchers[0].trigger()
+    watchers[0]!.trigger()
     await flush()
     await ctl.cancel(DIR)
     expect(fs.writes).toEqual([])

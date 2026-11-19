@@ -85,8 +85,8 @@ describe('R-02/R-03 accountsService snapshot', () => {
     expect(s.accounts).toHaveLength(1)
     const a = s.accounts[0]
     expect(a).toMatchObject({ id: r.accountId, email: 'me@example.com', org: 'Example Org', signedIn: true, isDefaultDir: true })
-    expect(a.plan).toBeUndefined()
-    expect(a.tokensToday).toBeUndefined()
+    expect(a!.plan).toBeUndefined()
+    expect(a!.tokensToday).toBeUndefined()
     expect(s.detected.find((d) => d.configDir === '~/.claude')?.linkedAccountId).toBe(r.accountId)
   })
 })
@@ -98,7 +98,7 @@ describe('R-12 accountsService mutations', () => {
     svc.onChanged(changed)
     const r = await svc.linkDetected({ configDir: '~/.claude' })
     const s = await svc.snapshot()
-    expect(s.accounts[0].name).toBe('Example Org')
+    expect(s.accounts[0]!.name).toBe('Example Org')
     expect(s.defaultAccountId).toBe(r.accountId)
     expect(changed).toHaveBeenCalled()
     expect((changed.mock.calls.at(-1)![0] as AccountsSnapshot).accounts).toHaveLength(1)
@@ -267,14 +267,14 @@ describe('R-13 accountsService launchClaude', () => {
   it('R-09 spawn passes configDirAbs for a custom dir and null for the default dir', async () => {
     const t = await twoAccounts()
     await t.svc.launchClaude({ cwd: `${HOME}/work/x`, accountId: t.work, cols: 100, rows: 30 })
-    const a = t.pty.spawnClaude.mock.calls[0][0] as Record<string, unknown>
+    const a = t.pty.spawnClaude.mock.calls[0]![0] as Record<string, unknown>
     expect(a).toMatchObject({ purpose: 'claude', accountId: t.work, configDirDisplay: '~/.claude-work', cols: 100, rows: 30 })
     expect(fwd(a.configDirAbs as string)).toBe(`${HOME}/.claude-work`)
     expect(fwd(a.cwd as string)).toBe(`${HOME}/work/x`)
 
     await t.svc.setSafety({ warnPersonalInCompanyFolder: false, showAccountColorEdge: true, lockAccountOnTeamStart: true })
     await t.svc.launchClaude({ cwd: `${HOME}/work/x`, accountId: t.me, cols: 80, rows: 24 })
-    expect((t.pty.spawnClaude.mock.calls[1][0] as { configDirAbs: unknown }).configDirAbs).toBeNull()
+    expect((t.pty.spawnClaude.mock.calls[1]![0] as { configDirAbs: unknown }).configDirAbs).toBeNull()
   })
 
   it('R-09 a failed spawn maps the reason', async () => {
@@ -300,7 +300,7 @@ describe('R-13 accountsService launchClaude', () => {
     const s = await t.svc.snapshot()
     expect(s.sessions).toHaveLength(1)
     expect(s.sessions[0]).toMatchObject({ accountId: t.work, ptyId: 'p1', teamName: 'x', agentCount: 1 })
-    expect(s.sessions[0].path).toBe('~/work/x')
+    expect(s.sessions[0]!.path).toBe('~/work/x')
     expect(s.accounts.find((a) => a.id === t.work)?.locked).toBe(true)
     expect(s.accounts.find((a) => a.id === t.me)?.locked).toBeFalsy()
     expect(s.activeAccountId).toBe(t.work)
