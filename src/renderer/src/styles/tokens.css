@@ -1,0 +1,66 @@
+:root {
+  --ac-bg-app: #0E0F11;
+  --ac-bg-panel: #121417;
+  --ac-bg-card: #16181C;
+  --ac-bg-console: #0B0C0E;
+  --ac-bg-inset: #0E0F11;
+  --ac-bg-btn: #1A1D22;
+  --ac-bg-btn-hover: #242830;
+  --ac-bg-selected: #1A2030;
+
+  --ac-border: #23262C;
+  --ac-border-card: #262A31;
+  --ac-border-btn: #2E323A;
+  --ac-border-inset: #1F2227;
+  --ac-border-hover: #4A5160;
+  --ac-border-dashed: #3A3F48;
+
+  --ac-text: #E6E7EA;
+  --ac-text-muted: #A4AAB4;
+  --ac-text-subtle: #8E95A0;
+  --ac-text-soft: #C9CDD4;
+  --ac-text-code: #D5D8DE;
+  --ac-text-branch: #A9B4C6;
+  --ac-text-dim: #858C97;
+  --ac-text-faint: #7F8691;
+  --ac-text-sep: #6B727D;
+
+  --ac-accent: #7AA7FF;
+  --ac-accent-hover: #A9C6FF;
+  --ac-accent-2: #8FB4FF;
+
+  --ac-status-running: #F2A541;
+  --ac-status-running-bg: #2E2415;
+  --ac-status-waiting: #8FB4FF;
+  --ac-status-waiting-bg: #18213A;
+  --ac-status-needs-you: #FF8A8A;
+  --ac-status-needs-you-bg: #361A1C;
+  --ac-status-done: #5ED3A8;
+  --ac-status-done-bg: #14302A;
+
+  --ac-account-company: #6E9BF0;
+  --ac-account-personal: #F2A541;
+
+  --ac-warn-bg: #2A1F14;
+  --ac-warn-border: #5A3E1E;
+  --ac-warn-text: #F5C98A;
+  --ac-flow-bg: #1D1812;
+
+  --ac-danger-border: #5A2A2A;
+
+  --ac-seg-think: #3A4150;
+  --ac-seg-read: #5C6370;
+  --ac-seg-edit: #6E9BF0;
+  --ac-seg-bash: #A77FEF;
+  --ac-seg-wait: #252930;
+  --ac-seg-error: #FF8A8A;
+
+  --ac-radius-control: 8px;
+  --ac-radius-sm: 6px;
+  --ac-radius-card: 10px;
+  --ac-radius-panel: 12px;
+  --ac-radius-pill: 999px;
+
+  --ac-font-ui: Inter, system-ui, sans-serif;
+  --ac-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
