@@ -29,7 +29,7 @@ export function TeamHeader() {
       <button
         type="button"
         className="ac-header__chip"
-        aria-label={`Account: ${account ? account.name : 'none'}. Manage accounts`}
+        aria-label={`Account: ${account ? (account.email ? `${account.name} (${account.email})` : account.name) : 'none'}. Manage accounts`}
         title={account ? (account.email ? `${account.name} · ${account.email}` : account.name) : 'No account'}
         onClick={() => navigate('accounts')}
       >

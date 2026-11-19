@@ -66,7 +66,7 @@ describe('R-08 TeamHeader', () => {
     expect(screen.getByText(/hicas\/sheet-automation/)).toBeInTheDocument()
     expect(screen.getByText(/team: sheet-export/)).toBeInTheDocument()
     expect(screen.getByText('you@company.com')).toBeInTheDocument()
-    const chip = screen.getByRole('button', { name: 'Account: Company. Manage accounts' })
+    const chip = screen.getByRole('button', { name: 'Account: Company (you@company.com). Manage accounts' })
     expect(chip).toBeInTheDocument()
   })
 
