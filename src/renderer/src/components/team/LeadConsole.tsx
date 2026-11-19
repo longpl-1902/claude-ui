@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent } from 'react'
 import { routeConsoleInput } from '@shared/agentMessage'
 import { shortenPathsInText } from '@shared/displayPath'
 import type { ConsoleLine } from '@shared/types'
-import { useConsoleStore } from '../../store/useConsoleStore'
+import { useConsoleStore, useScrollMemory } from '../../store/useConsoleStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
 import { Button } from '../ui/Button'
 import { ASK_LEAD_TEXT, ControlBar } from './ControlBar'
@@ -81,10 +81,13 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
   const projectRoot = summary?.project?.root ?? team.cwd
   const projectName = summary?.project?.name ?? team.repo ?? 'lead'
 
-  const [innerFilter, setInnerFilter] = useState<ConsoleFilter>(defaultFilter)
-  const activeFilter = filter ?? innerFilter
+  // Without a controlled `filter` the chip is remembered per project in the console store (T18, UX M5).
+  const storedFilter = useConsoleStore((s) => s.consoleFilter)
+  const setStoredFilter = useConsoleStore((s) => s.setConsoleFilter)
+  const stored = FILTERS.find(([f]) => f === storedFilter)?.[0]
+  const activeFilter = filter ?? stored ?? defaultFilter
   const setFilter = (f: ConsoleFilter): void => {
-    if (filter === undefined) setInnerFilter(f)
+    if (filter === undefined) setStoredFilter(f)
     onFilterChange?.(f)
   }
   const [open, setOpen] = useState<Set<number>>(new Set())
@@ -95,6 +98,7 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
   const inputRef = useRef<HTMLInputElement>(null)
 
   const logRef = useRef<HTMLDivElement>(null)
+  useScrollMemory('console', logRef, !rawOpen)
   const atBottom = useRef(true)
   const onScroll = (): void => {
     const el = logRef.current

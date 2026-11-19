@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EMPTY_ACCOUNTS_SNAPSHOT } from '@shared/accountsDefaults'
-import type { Agent, AgentRuntime, SessionSummary, TeamSnapshot } from '@shared/types'
+import type { Agent, AgentRuntime, ControlSessionInfo, SessionSummary, TeamSnapshot } from '@shared/types'
 import { EMPTY_TEAM_SNAPSHOT, PLACEHOLDER_AGENT } from '@shared/teamDefaults'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import {
@@ -15,8 +15,10 @@ import {
   useAgentStatusInfo,
   useAgentStatuses,
   useConsoleStore,
+  useScrollMemory,
   useTeamCounters
 } from '@renderer/store/useConsoleStore'
+import { useControlStore } from '@renderer/store/useControlStore'
 import { seedMockAccounts } from './seedAccounts'
 import { seedDemoTeam } from './seedTeam'
 
@@ -136,21 +138,21 @@ describe('R-07 console submit', () => {
     expect(mockTeamSnapshot.console).toHaveLength(7)
   })
 
-  it('sends to the lead through window.api when there is no @mention', () => {
+  it('no longer sends through window.api (live sending moved to LeadConsole / useControlStore)', () => {
     const sendMessage = vi.fn().mockResolvedValue({ ok: true })
     ;(window as unknown as { api: unknown }).api = { agent: { sendMessage } }
     s().setConsoleDraft('hello')
     s().submitConsole()
-    expect(sendMessage).toHaveBeenCalledWith('lead', 'hello')
+    expect(sendMessage).not.toHaveBeenCalled()
   })
 
-  it('sends to the @mentioned agent id', () => {
+  it('does not send an @mention through window.api either', () => {
     const sendMessage = vi.fn().mockResolvedValue({ ok: true })
     ;(window as unknown as { api: unknown }).api = { agent: { sendMessage } }
     s().setConsoleDraft('@ui-builder please start')
     s().submitConsole()
-    expect(sendMessage).toHaveBeenCalledTimes(1)
-    expect(sendMessage.mock.calls[0]![0]).toBe('ui')
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(s().team.console.at(-1)).toMatchObject({ who: 'you', text: '@ui-builder please start' })
   })
 })
 
@@ -592,5 +594,161 @@ describe('P3-T11 project grouping in the store', () => {
     expect(() => s().setProject('d:/a')).not.toThrow()
     expect(s().projectKey).toBe('d:/a')
     spy.mockRestore()
+  })
+})
+
+describe('T18 per-project view state (UX M5)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetConsoleStore()
+    seedDemoTeam()
+    useControlStore.setState({ sessions: [], streams: {} })
+  })
+
+  it('setProject restores agent, inspector tab, draft and filter of the project it returns to', () => {
+    useConsoleStore.setState({ projectKey: 'a' })
+    s().selectAgent('ui')
+    s().setInspectorTab('files')
+    s().setConsoleDraft('half a thought')
+    s().setConsoleFilter('tools')
+    s().setProject('b')
+    expect(s().projectKey).toBe('b')
+    expect(s().selectedAgentId).toBe('lead')
+    expect(s().inspectorTab).toBe('activity')
+    expect(s().consoleDraft).toBe('')
+    expect(s().consoleFilter).toBe('')
+    s().setInspectorTab('messages')
+    s().setProject('a')
+    expect(s().selectedAgentId).toBe('ui')
+    expect(s().inspectorTab).toBe('files')
+    expect(s().consoleDraft).toBe('half a thought')
+    expect(s().consoleFilter).toBe('tools')
+    s().setProject('b')
+    expect(s().inspectorTab).toBe('messages')
+  })
+
+  it('persists to ac.viewState and keeps at most 50 projects', () => {
+    useConsoleStore.setState({ projectKey: 'a' })
+    s().setInspectorTab('files')
+    const stored = JSON.parse(window.localStorage.getItem('ac.viewState')!) as Record<string, { inspectorTab: string }>
+    expect(stored.a!.inspectorTab).toBe('files')
+    for (let i = 0; i < 55; i++) s().setProject('p' + i)
+    expect(Object.keys(s().perProject).length).toBeLessThanOrEqual(50)
+    const after = JSON.parse(window.localStorage.getItem('ac.viewState')!) as Record<string, unknown>
+    expect(Object.keys(after).length).toBeLessThanOrEqual(50)
+    expect(after.p54).toBeDefined()
+    expect(after.a).toBeUndefined()
+  })
+
+  it('useScrollMemory saves and restores scrollTop per project', () => {
+    vi.useFakeTimers()
+    try {
+      const el = document.createElement('div')
+      const ref = { current: el }
+      useConsoleStore.setState({ projectKey: 'a' })
+      renderHook(() => useScrollMemory('console', ref))
+      el.scrollTop = 40
+      el.dispatchEvent(new Event('scroll'))
+      act(() => {
+        vi.advanceTimersByTime(200)
+      })
+      expect(s().perProject.a!.scroll.console).toBe(40)
+      act(() => s().setProject('b'))
+      expect(el.scrollTop).toBe(0)
+      act(() => s().setProject('a'))
+      expect(el.scrollTop).toBe(40)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('T18 Auto never switches under the user', () => {
+  const live = () => {
+    useConsoleStore.setState({
+      teamMode: 'live',
+      team: { ...structuredClone(EMPTY_TEAM_SNAPSHOT), sessionId: 's1' },
+      sessions: [{ sessionId: 's1', accountId: 'acc' } as SessionSummary],
+      projectKey: 'p',
+      selection: { mode: 'auto', projectKey: 'p' }
+    })
+  }
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetConsoleStore()
+    useControlStore.setState({ sessions: [], streams: {} })
+    live()
+  })
+
+  it('a non-empty draft pins the current session; clearing it restores Auto', () => {
+    s().setConsoleDraft('typing')
+    expect(s().autoHeld).toBe(true)
+    expect(s().selection).toEqual({ mode: 'session', accountId: 'acc', sessionId: 's1' })
+    s().setConsoleDraft('typing more')
+    expect(s().selection.mode).toBe('session')
+    s().setConsoleDraft('')
+    expect(s().autoHeld).toBe(false)
+    expect(s().selection).toEqual({ mode: 'auto', projectKey: 'p' })
+  })
+
+  it('an open permission prompt or a focused card also holds Auto, and the hold waits for both', () => {
+    s().setApprovalFocused(true)
+    expect(s().autoHeld).toBe(true)
+    s().setConsoleDraft('x')
+    s().setApprovalFocused(false)
+    expect(s().autoHeld).toBe(true) // draft still open
+    s().setConsoleDraft('')
+    expect(s().autoHeld).toBe(false)
+    expect(s().selection.mode).toBe('auto')
+
+    useControlStore.setState({
+      sessions: [{ id: 'c1', sessionId: 's1', pendingPermissions: 1, state: 'idle' } as unknown as ControlSessionInfo]
+    })
+    expect(s().autoHeld).toBe(true)
+    expect(s().selection.mode).toBe('session')
+    useControlStore.setState({
+      sessions: [{ id: 'c1', sessionId: 's1', pendingPermissions: 0, state: 'idle' } as unknown as ControlSessionInfo]
+    })
+    expect(s().autoHeld).toBe(false)
+    expect(s().selection).toEqual({ mode: 'auto', projectKey: 'p' })
+  })
+
+  it('a demo submit that clears the draft releases the hold; a manual selection drops it', async () => {
+    s().setConsoleDraft('x')
+    expect(s().autoHeld).toBe(true)
+    await s().selectSession({ mode: 'session', accountId: 'acc', sessionId: 's2' })
+    expect(s().autoHeld).toBe(false)
+    s().setConsoleDraft('')
+    expect(s().selection).toEqual({ mode: 'session', accountId: 'acc', sessionId: 's2' })
+  })
+
+  it('selectAdjacentAgent walks the tree order and wraps', () => {
+    seedDemoTeam()
+    const ids = s().team.agents.map((a) => a.id)
+    useConsoleStore.setState({ selectedAgentId: ids[0]! })
+    s().selectAdjacentAgent(-1)
+    expect(s().selectedAgentId).toBe(ids.at(-1))
+    s().selectAdjacentAgent(1)
+    expect(s().selectedAgentId).toBe(ids[0])
+    s().selectAdjacentAgent(1)
+    expect(s().selectedAgentId).toBe(ids[1])
+  })
+})
+
+describe('T18 needs-you merge', () => {
+  it('adds the open permission prompts of the controlled session to the agent count', () => {
+    resetConsoleStore()
+    useConsoleStore.setState({ teamMode: 'live', team: { ...structuredClone(EMPTY_TEAM_SNAPSHOT), sessionId: 's1' } })
+    useControlStore.setState({ sessions: [], streams: {} })
+    const { result } = renderHook(() => useTeamCounters())
+    expect(result.current.needsYou).toBe(0)
+    act(() =>
+      useControlStore.setState({
+        sessions: [{ id: 'c1', sessionId: 's1', pendingPermissions: 2, state: 'idle' } as unknown as ControlSessionInfo]
+      })
+    )
+    expect(result.current.needsYou).toBe(2)
+    act(() => useControlStore.setState({ sessions: [] }))
+    expect(result.current.needsYou).toBe(0)
   })
 })

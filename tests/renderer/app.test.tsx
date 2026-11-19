@@ -4,8 +4,11 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
+import type { SessionSummary } from '@shared/types'
 import App from '@renderer/App'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { useControlStore } from '@renderer/store/useControlStore'
+import { useWorkspaceStore } from '@renderer/store/useWorkspaceStore'
 import { seedMockAccounts } from './seedAccounts'
 import { seedDemoTeam } from './seedTeam'
 
@@ -194,5 +197,86 @@ describe('P3 App live wiring', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('T18 App glue: store init, git watch, shortcuts help', () => {
+  const session = (git: boolean, over: Record<string, unknown> = {}) =>
+    ({
+      sessionId: 's1',
+      accountId: 'a',
+      project: { key: 'c:/users/u/acme', name: 'acme', root: 'C:/Users/u/acme', git },
+      cwd: 'C:/Users/u/acme/sub',
+      mtimeMs: 1,
+      live: true,
+      ...over
+    }) as unknown as SessionSummary
+
+  function mockApi() {
+    const offs = { control: vi.fn(), stream: vi.fn(), git: vi.fn(), hooks: vi.fn() }
+    const api = {
+      team: { getSnapshot: vi.fn().mockResolvedValue({ ...structuredClone(mockTeamSnapshot), source: 'live', sessionId: 's1', cwd: 'C:/Users/u/acme/sub' }) },
+      accounts: { getSnapshot: vi.fn().mockResolvedValue(structuredClone(mockAccountsSnapshot)) },
+      control: {
+        list: vi.fn().mockResolvedValue([]),
+        onChanged: vi.fn(() => offs.control),
+        onStream: vi.fn(() => offs.stream)
+      },
+      git: { watch: vi.fn().mockResolvedValue({ root: null, base: null, worktrees: [], overlaps: [], updatedAt: 't' }), onChanged: vi.fn(() => offs.git) },
+      hooks: { status: vi.fn().mockResolvedValue(null), onChanged: vi.fn(() => offs.hooks) }
+    }
+    ;(window as unknown as { api: unknown }).api = api
+    return { api, offs }
+  }
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({ watchedRoot: null, workspace: null })
+    useControlStore.setState({ sessions: [], streams: {} })
+  })
+
+  it('inits the control and workspace stores once and cleans up on unmount', async () => {
+    const { api, offs } = mockApi()
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(api.control.list).toHaveBeenCalledTimes(1))
+    expect(api.control.onChanged).toHaveBeenCalledTimes(1)
+    expect(api.git.onChanged).toHaveBeenCalledTimes(1)
+    unmount()
+    expect(offs.control).toHaveBeenCalledTimes(1)
+    expect(offs.stream).toHaveBeenCalledTimes(1)
+    expect(offs.git).toHaveBeenCalledTimes(1)
+    expect(offs.hooks).toHaveBeenCalledTimes(1)
+  })
+
+  it('watches the project root of a git session', async () => {
+    const { api } = mockApi()
+    useConsoleStore.setState({ teamMode: 'live', sessions: [session(true)], team: { ...structuredClone(mockTeamSnapshot), source: 'live', sessionId: 's1', cwd: 'C:/Users/u/acme/sub' } })
+    render(<App />)
+    await waitFor(() => expect(api.git.watch).toHaveBeenCalledWith('C:/Users/u/acme'))
+  })
+
+  it('watches the team cwd when the project is not a git root', async () => {
+    const { api } = mockApi()
+    useConsoleStore.setState({ teamMode: 'live', sessions: [session(false)], team: { ...structuredClone(mockTeamSnapshot), source: 'live', sessionId: 's1', cwd: 'C:/Users/u/acme/sub' } })
+    render(<App />)
+    await waitFor(() => expect(api.git.watch).toHaveBeenCalledWith('C:/Users/u/acme/sub'))
+  })
+
+  it('does not watch anything in demo mode', async () => {
+    const { api } = mockApi()
+    seedDemoTeam()
+    render(<App />)
+    await waitFor(() => expect(api.control.list).toHaveBeenCalled())
+    expect(api.git.watch).not.toHaveBeenCalledWith(expect.any(String))
+  })
+
+  it('? opens the shortcut help and Esc closes it (narrow 900 px window)', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 900 })
+    seedDemoTeam()
+    render(<App />)
+    await userEvent.keyboard('?')
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull()
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 })
   })
 })
