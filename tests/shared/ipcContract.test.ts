@@ -64,9 +64,12 @@ describe('R-01 IPC contract v2', () => {
     expect(INVOKE_CHANNELS).not.toContain(channel)
   })
 
-  it('R-01 PUSH_CHANNELS is exactly teamEvent plus the four new pushes', () => {
+  it('R-01 PUSH_CHANNELS is exactly teamEvent, the four v2 pushes and the three v3 pushes', () => {
     expect([...PUSH_CHANNELS].sort()).toEqual(
-      [IPC.teamEvent, 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit'].sort()
+      [
+        IPC.teamEvent, 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit',
+        'team:changed', 'transcripts:sessions-changed', 'usage:changed'
+      ].sort()
     )
   })
 

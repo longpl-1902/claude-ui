@@ -16,8 +16,11 @@ import type {
   PtySpawnRequest,
   PtySpawnResult,
   SafetySettings,
+  SessionSummary,
   SignInStatus,
-  TeamSnapshot
+  TeamSelection,
+  TeamSnapshot,
+  UsageToday
 } from './types'
 
 export const IPC = {
@@ -52,15 +55,31 @@ export const IPC = {
   ptyGetBuffer: 'pty:get-buffer',
   appPickFolder: 'app:pick-folder',
   appGetDefaultCwd: 'app:get-default-cwd',
+  transcriptsListSessions: 'transcripts:list-sessions',
+  transcriptsSelect: 'transcripts:select',
+  transcriptsGetSelection: 'transcripts:get-selection',
+  usageGetToday: 'usage:get-today',
   // main -> renderer pushes (not invokable)
   accountsChanged: 'accounts:changed',
   accountsSignInStatus: 'accounts:sign-in-status',
   ptyData: 'pty:data',
-  ptyExit: 'pty:exit'
+  ptyExit: 'pty:exit',
+  teamChanged: 'team:changed',
+  transcriptsSessionsChanged: 'transcripts:sessions-changed',
+  usageChanged: 'usage:changed'
 } as const
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]
 
-export const PUSH_CHANNELS = [IPC.teamEvent, IPC.accountsChanged, IPC.accountsSignInStatus, IPC.ptyData, IPC.ptyExit] as const
+export const PUSH_CHANNELS = [
+  IPC.teamEvent,
+  IPC.accountsChanged,
+  IPC.accountsSignInStatus,
+  IPC.ptyData,
+  IPC.ptyExit,
+  IPC.teamChanged,
+  IPC.transcriptsSessionsChanged,
+  IPC.usageChanged
+] as const
 
 export interface IpcInvokeMap {
   'team:get-snapshot': { args: []; result: TeamSnapshot }
@@ -93,6 +112,10 @@ export interface IpcInvokeMap {
   'pty:get-buffer': { args: [ptyId: string]; result: PtyBufferSnapshot }
   'app:pick-folder': { args: []; result: string | null }
   'app:get-default-cwd': { args: []; result: string }
+  'transcripts:list-sessions': { args: []; result: SessionSummary[] }
+  'transcripts:select': { args: [sel: TeamSelection]; result: TeamSnapshot }
+  'transcripts:get-selection': { args: []; result: TeamSelection }
+  'usage:get-today': { args: []; result: UsageToday }
 }
 export type InvokeChannel = keyof IpcInvokeMap
 
@@ -127,7 +150,11 @@ const invokeChannelList = [
   'pty:list',
   'pty:get-buffer',
   'app:pick-folder',
-  'app:get-default-cwd'
+  'app:get-default-cwd',
+  'transcripts:list-sessions',
+  'transcripts:select',
+  'transcripts:get-selection',
+  'usage:get-today'
 ] as const satisfies readonly InvokeChannel[]
 type MissingChannels = Exclude<InvokeChannel, (typeof invokeChannelList)[number]>
 const _exhaustive: [MissingChannels] extends [never] ? true : never = true
@@ -145,6 +172,7 @@ export interface ConsoleApi {
     getSnapshot(): Promise<TeamSnapshot>
     pauseAll(): Promise<OkResult>
     onEvent(cb: (e: AgentEvent) => void): () => void
+    onChanged(cb: (s: TeamSnapshot) => void): () => void
   }
   accounts: {
     getSnapshot(): Promise<AccountsSnapshot>
@@ -174,6 +202,16 @@ export interface ConsoleApi {
     getBuffer(id: string): Promise<PtyBufferSnapshot>
     onData(cb: (e: PtyDataEvent) => void): () => void
     onExit(cb: (e: PtyExitEvent) => void): () => void
+  }
+  transcripts: {
+    listSessions(): Promise<SessionSummary[]>
+    select(sel: TeamSelection): Promise<TeamSnapshot>
+    getSelection(): Promise<TeamSelection>
+    onSessionsChanged(cb: (s: SessionSummary[]) => void): () => void
+  }
+  usage: {
+    getToday(): Promise<UsageToday>
+    onChanged(cb: (u: UsageToday) => void): () => void
   }
   agent: {
     sendMessage(id: string, text: string): Promise<OkResult>

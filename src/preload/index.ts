@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
 import type { ConsoleApi, InvokeChannel, IpcInvokeMap } from '@shared/ipc'
-import type { AccountsSnapshot, AgentEvent, PtyDataEvent, PtyExitEvent, SignInStatus } from '@shared/types'
+import type {
+  AccountsSnapshot,
+  AgentEvent,
+  PtyDataEvent,
+  PtyExitEvent,
+  SessionSummary,
+  SignInStatus,
+  TeamSnapshot,
+  UsageToday
+} from '@shared/types'
 
 function invoke<C extends InvokeChannel>(
   c: C,
@@ -22,7 +31,8 @@ const api: ConsoleApi = {
   team: {
     getSnapshot: () => invoke(IPC.teamGetSnapshot),
     pauseAll: () => invoke(IPC.teamPauseAll),
-    onEvent: (cb) => on<AgentEvent>(IPC.teamEvent, cb)
+    onEvent: (cb) => on<AgentEvent>(IPC.teamEvent, cb),
+    onChanged: (cb) => on<TeamSnapshot>(IPC.teamChanged, cb)
   },
   accounts: {
     getSnapshot: () => invoke(IPC.accountsGetSnapshot),
@@ -52,6 +62,16 @@ const api: ConsoleApi = {
     getBuffer: (id) => invoke(IPC.ptyGetBuffer, id),
     onData: (cb) => on<PtyDataEvent>(IPC.ptyData, cb),
     onExit: (cb) => on<PtyExitEvent>(IPC.ptyExit, cb)
+  },
+  transcripts: {
+    listSessions: () => invoke(IPC.transcriptsListSessions),
+    select: (sel) => invoke(IPC.transcriptsSelect, sel),
+    getSelection: () => invoke(IPC.transcriptsGetSelection),
+    onSessionsChanged: (cb) => on<SessionSummary[]>(IPC.transcriptsSessionsChanged, cb)
+  },
+  usage: {
+    getToday: () => invoke(IPC.usageGetToday),
+    onChanged: (cb) => on<UsageToday>(IPC.usageChanged, cb)
   },
   agent: {
     sendMessage: (id, text) => invoke(IPC.agentSendMessage, id, text),
