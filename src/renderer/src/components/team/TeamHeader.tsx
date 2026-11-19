@@ -23,7 +23,7 @@ export function TeamHeader() {
       </div>
       <div className="ac-header__repo">
         <span>{team.repo}</span>
-        <span className="ac-header__sep">/</span>
+        <span className="ac-header__sep" aria-hidden="true">/</span>
         <span className="ac-header__team">team: {team.teamName}</span>
       </div>
       <button
@@ -32,7 +32,7 @@ export function TeamHeader() {
         aria-label={`Account: ${account.name}. Manage accounts`}
         onClick={() => navigate('accounts')}
       >
-        <Avatar initials={account.name.charAt(0).toUpperCase()} color={account.color} size={30} shape="circle" />
+        <Avatar initials={account.name.charAt(0).toUpperCase()} color={account.color} size={20} shape="circle" />
         <span>{account.name}</span>
         {account.email && <span className="ac-header__email">{account.email}</span>}
         <ChevronDownIcon size={12} color="var(--ac-text-muted)" />
