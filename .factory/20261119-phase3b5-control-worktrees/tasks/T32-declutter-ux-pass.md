@@ -25,3 +25,6 @@ Renderer components/CSS only (whatever the agreed list touches); no main/IPC cha
 
 ## Addendum: responsive
 Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.
+
+## Addendum: two monitors
+The user uses a 27" (~2560x1440) and a 24" (~1920x1080) monitor. Review both monitor sizes and the multi-window flow from T34 (main window on one screen, Chat/Project window on the other).

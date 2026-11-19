@@ -525,3 +525,6 @@ Window sizes to support: 900×600 (min) · 1100×700 · 1440×900 · 1920×1080 
 
 ## Chat view + copy (user request, 2026-11-19)
 - **Wave 8: T33** chat as a first-class "Chat" tab in the center column (markdown, collapsible tool calls, inline permission cards, auto-growing composer with extension slots for T28), maximize lead console (Ctrl+Shift+M), right-click context menu + hover copy buttons everywhere. Wave 8 = T19, T20, T33.
+
+## Two monitors (user request, 2026-11-19)
+User works on a 27" + 24" pair. **Wave 12b: T34** multi-window (Chat window per session, Project window per project, drag-out / Ctrl+Shift+N), shared live state across windows, per-display placement memory with rescue when a monitor disappears, mixed-DPI correctness, notification focus goes to the right window. Order: wave 12 T31 → wave 12b T34 → wave 13 T32 (T32 review must include a two-monitor check).
