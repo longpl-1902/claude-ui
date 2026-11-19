@@ -4,3 +4,4 @@ dist/
 release/
 .claude/*.local.md
 *.log
+.claude/worktrees/
