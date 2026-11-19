@@ -4,7 +4,9 @@ import { routeConsoleInput } from '@shared/agentMessage'
 import { shortenPathsInText } from '@shared/displayPath'
 import type { ConsoleLine } from '@shared/types'
 import { useConsoleStore, useScrollMemory } from '../../store/useConsoleStore'
+import { useCenterViewStore } from '../../store/useCenterViewStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
+import { CopyButton } from '../chat/CopyButton'
 import { Button } from '../ui/Button'
 import { ASK_LEAD_TEXT, ControlBar } from './ControlBar'
 import type { StartOption } from './ControlBar'
@@ -74,6 +76,8 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
   const send = useControlStore((s) => s.send)
   const answer = useControlStore((s) => s.answer)
   const openForm = useControlStore((s) => s.openStartForm)
+  const maximized = useCenterViewStore((s) => s.consoleMaximized)
+  const toggleMax = useCenterViewStore((s) => s.toggleMaximized)
 
   const controlled = control !== undefined && control.state !== 'exited'
   const external = !demo && !controlled && control === undefined && team.source === 'live' && !!team.sessionId
@@ -203,13 +207,22 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
 
   return (
     <section className="ac-tc-console">
-      <div className="ac-tc-console__bar">
+      <div className="ac-tc-console__bar" onDoubleClick={toggleMax}>
         <span className="ac-tc-dot" aria-hidden="true" />
         <h2>Lead console</h2>
         <span className="ac-tc-hint">all team events, newest last</span>
         <div className="ac-tc-spacer" />
         <Button size="sm" aria-pressed={rawOpen} onClick={toggleRaw}>
           Raw terminal
+        </Button>
+        <Button
+          size="sm"
+          aria-pressed={maximized}
+          aria-label={maximized ? 'Restore lead console' : 'Maximize lead console'}
+          title={maximized ? 'Restore (Esc)' : 'Maximize (Ctrl+Shift+M)'}
+          onClick={toggleMax}
+        >
+          {maximized ? 'Restore' : 'Maximize'}
         </Button>
       </div>
       {!demo && !rawOpen && (
@@ -269,6 +282,7 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
                   >
                     {display(l.text)}
                   </button>
+                  <CopyButton text={l.text} label="line" />
                 </div>
               )
             })}

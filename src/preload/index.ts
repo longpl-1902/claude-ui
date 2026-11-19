@@ -123,7 +123,8 @@ const api: ConsoleApi = {
   app: {
     getVersion: () => invoke(IPC.appGetVersion),
     pickFolder: () => invoke(IPC.appPickFolder),
-    getDefaultCwd: () => invoke(IPC.appGetDefaultCwd)
+    getDefaultCwd: () => invoke(IPC.appGetDefaultCwd),
+    openExternal: (url) => invoke(IPC.appOpenExternal, url)
   }
 }
 

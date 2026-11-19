@@ -1,5 +1,6 @@
 import type { IpcMain } from 'electron'
 import { INVOKE_CHANNELS, type InvokeChannel, type IpcInvokeMap } from '@shared/ipc'
+import { safeExternalUrl } from '@shared/externalUrl'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
 import type {
@@ -33,6 +34,8 @@ export interface HandlerDeps {
   pty?: PtyManagerApi
   pickFolder?: () => Promise<string | null>
   defaultCwd?: () => string
+  /** shell.openExternal; only called with a validated http/https URL */
+  openExternal?: (url: string) => Promise<void>
   transcripts?: TranscriptService
   /** called after a successful 'pty:spawn' */
   onPtySpawned?: (ptyId: string) => void
@@ -67,7 +70,7 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
   const { accounts, pty } = deps
   const hasReal =
     accounts || pty || deps.pickFolder || deps.defaultCwd || deps.transcripts || deps.control || deps.worktrees || deps.hooks ||
-    deps.externalKiller || deps.openInEditor || deps.attention
+    deps.externalKiller || deps.openInEditor || deps.attention || deps.openExternal
   if (!hasReal) return mock
   const real: Partial<Handlers> = {}
   if (accounts) {
@@ -190,6 +193,19 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
   }
   if (pickFolder) real['app:pick-folder'] = () => pickFolder()
   if (defaultCwd) real['app:get-default-cwd'] = () => defaultCwd()
+  if (deps.openExternal) {
+    const open = deps.openExternal
+    real['app:open-external'] = async (url) => {
+      const safe = safeExternalUrl(url)
+      if (!safe) return { ...INVALID_ARGS }
+      try {
+        await open(safe)
+        return { ok: true }
+      } catch {
+        return { ok: false, reason: 'failed' }
+      }
+    }
+  }
   return { ...mock, ...real }
 }
 
@@ -292,6 +308,7 @@ function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefa
     'pty:get-buffer': () => ({ data: '', end: 0 }),
     'app:pick-folder': () => null,
     'app:get-default-cwd': () => '',
+    'app:open-external': () => ({ ok: false, reason: 'unavailable' }),
     // Phase 3 stubs; the real transcript/usage wiring replaces these later.
     'transcripts:list-sessions': () => [],
     // Valid or invalid selection alike: the mock has no transcripts, so the answer is the empty snapshot.

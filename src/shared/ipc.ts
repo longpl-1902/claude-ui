@@ -69,6 +69,7 @@ export const IPC = {
   ptyGetBuffer: 'pty:get-buffer',
   appPickFolder: 'app:pick-folder',
   appGetDefaultCwd: 'app:get-default-cwd',
+  appOpenExternal: 'app:open-external',
   transcriptsListSessions: 'transcripts:list-sessions',
   transcriptsSelect: 'transcripts:select',
   transcriptsGetSelection: 'transcripts:get-selection',
@@ -156,6 +157,7 @@ export interface IpcInvokeMap {
   'pty:get-buffer': { args: [ptyId: string]; result: PtyBufferSnapshot }
   'app:pick-folder': { args: []; result: string | null }
   'app:get-default-cwd': { args: []; result: string }
+  'app:open-external': { args: [url: string]; result: OkResult }
   'transcripts:list-sessions': { args: []; result: SessionSummary[] }
   'transcripts:select': { args: [sel: TeamSelection]; result: TeamSnapshot }
   'transcripts:get-selection': { args: []; result: TeamSelection }
@@ -213,6 +215,7 @@ const invokeChannelList = [
   'pty:get-buffer',
   'app:pick-folder',
   'app:get-default-cwd',
+  'app:open-external',
   'transcripts:list-sessions',
   'transcripts:select',
   'transcripts:get-selection',
@@ -331,5 +334,5 @@ export interface ConsoleApi {
     onFocus(cb: (e: { itemId: string }) => void): () => void
   }
   worktree: { openInEditor(path: string): Promise<OkResult> }
-  app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string> }
+  app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string>; openExternal(url: string): Promise<OkResult> }
 }
