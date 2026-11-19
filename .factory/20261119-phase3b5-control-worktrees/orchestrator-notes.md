@@ -5,3 +5,4 @@
 - Scrollbars: thin dark themed scrollbars added to global.css (user feedback); T31 must extend for light theme.
 - After T22 merge: add setShortcutBridge(...) in App.tsx (see T18 report: goToPinned/focusNext/focusPrev/openSwitcher via getState() at call time); verify header needs-you doesn't double count controlled pending prompts (selectNeedsYouCount vs status model).
 - Possible flaky test: one npm test run reported 1974/1994 (85/86 files) with no FAIL lines; rerun was 1994/1994. Verifier: run the suite 3x and identify any flaky file (suspect the soft 20 MB tailer timing test).
+- Final review: verify README claims vs code (LIVE/DEMO badge, per-project memory contents, toast/notification defaults incl. notifyIdle) and update README after waves 9–13 (shortcuts, chat view, extensions, theme, multi-window).
