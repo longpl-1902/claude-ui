@@ -37,7 +37,9 @@ export function SignInPanel(): JSX.Element | null {
 
   const configDir = signIn.configDir ?? ''
   const det = accounts.detected.find((d) => d.configDir === configDir)
-  const account = accounts.accounts.find((a) => a.id === det?.linkedAccountId)
+  const account =
+    accounts.accounts.find((a) => a.configDir === configDir) ??
+    accounts.accounts.find((a) => a.id === det?.linkedAccountId)
   const done = signIn.step === 'done'
   const error = signIn.step === 'error'
   const cur = done ? 3 : 1
@@ -49,7 +51,7 @@ export function SignInPanel(): JSX.Element | null {
   const email = signIn.email ?? det?.email ?? ''
 
   return (
-    <div className="ac-acc-flow" aria-live="polite">
+    <div className="ac-acc-flow">
       <ol className="ac-acc-steps">
         {labels.map((label, i) => {
           const c = done || i < cur ? STEP_COLORS.done : i === cur ? STEP_COLORS.current : STEP_COLORS.todo
@@ -80,7 +82,7 @@ export function SignInPanel(): JSX.Element | null {
             <CheckIcon size={16} color="#5ED3A8" />
           </span>
           <div className="ac-acc-flow__donetext">
-            <span className="ac-acc-flow__title">{`Signed in as ${email}`}</span>
+            <span className="ac-acc-flow__title" aria-live="polite">{`Signed in as ${email}`}</span>
             {account ? <span className="ac-acc-sub">{`Saved as “${account.name}”.`}</span> : null}
           </div>
           {!account && (
@@ -108,7 +110,7 @@ export function SignInPanel(): JSX.Element | null {
         </div>
       ) : (
         <div className="ac-acc-flow__body">
-          <span className="ac-acc-flow__title">Finish signing in your browser</span>
+          <span className="ac-acc-flow__title" aria-live="polite">Finish signing in your browser</span>
           <span className="ac-acc-flow__text">
             Claude Code opened the sign-in page in your browser. This screen updates by itself when you are
             done.

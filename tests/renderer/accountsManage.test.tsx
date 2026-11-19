@@ -110,9 +110,43 @@ describe('Account cards', () => {
     expect(screen.getByText('No accounts yet. Use a detected login above, or add one.')).toBeInTheDocument()
   })
 
+  it('has one + Add account button; the header one opens the editor focused on Name', async () => {
+    setup()
+    const btns = screen.getAllByRole('button', { name: '+ Add account' })
+    expect(btns).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Add another/ })).toBeNull()
+    await userEvent.click(btns[0]!)
+    const form = screen.getByRole('form', { name: 'Add account' })
+    expect(within(form).getByLabelText('Name')).toHaveFocus()
+  })
+
+  it('empty state shows its own block with a single Add button area', () => {
+    patch((s) => {
+      s.accounts = []
+    })
+    setup()
+    expect(screen.getByText('No accounts yet. Use a detected login above, or add one.')).toBeInTheDocument()
+  })
+
+  it('shows the invalid-folder reason in plain words', async () => {
+    api.saveProfile.mockResolvedValue({ ok: false, reason: 'invalid-folder' })
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: '+ Add account' }))
+    const form = screen.getByRole('form', { name: 'Add account' })
+    await userEvent.type(within(form).getByLabelText('Name'), 'Rel')
+    await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
+    expect(await within(form).findByText('Config folder must be an absolute path')).toBeInTheDocument()
+  })
+
+  it('renders accountsError as an alert on the screen', () => {
+    setup()
+    act(() => useConsoleStore.setState({ accountsError: 'boom failure' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('boom failure')
+  })
+
   it('Add account saves with name, kind, color and the default folder', async () => {
     setup()
-    await userEvent.click(screen.getByRole('button', { name: '+ Add another account' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ Add account' }))
     const form = screen.getByRole('form', { name: 'Add account' })
     await userEvent.type(within(form).getByLabelText('Name'), 'Side Gig')
     expect(within(form).getByLabelText('Config folder')).toHaveValue('~/.claude-side-gig')
@@ -131,7 +165,7 @@ describe('Account cards', () => {
 
   it('validates name and hex color', async () => {
     setup()
-    await userEvent.click(screen.getByRole('button', { name: '+ Add another account' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ Add account' }))
     const form = screen.getByRole('form', { name: 'Add account' })
     await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
     expect(within(form).getByText('Name is required.')).toBeInTheDocument()
@@ -148,7 +182,7 @@ describe('Account cards', () => {
   it('shows the reason inline when saving fails', async () => {
     api.saveProfile.mockResolvedValue({ ok: false, reason: 'duplicate-config-dir' })
     setup()
-    await userEvent.click(screen.getByRole('button', { name: '+ Add another account' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ Add account' }))
     const form = screen.getByRole('form', { name: 'Add account' })
     await userEvent.type(within(form).getByLabelText('Name'), 'Dup')
     await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
@@ -276,5 +310,15 @@ describe('Running now', () => {
     })
     setup()
     expect(screen.getByText(/No sessions running\. Start one from the lead console/)).toBeInTheDocument()
+  })
+})
+
+describe('FolderRules keyboard focus', () => {
+  it('keeps focus on the moved row action after Move down', async () => {
+    setup()
+    const btn = screen.getByRole('button', { name: 'Move down ~/work/hicas/**' })
+    await userEvent.click(btn)
+    await new Promise((r) => requestAnimationFrame(() => r(null)))
+    expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Move (down|up) ~\/work\/hicas\/\*\*$/)
   })
 })
