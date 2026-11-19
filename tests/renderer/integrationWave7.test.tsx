@@ -55,3 +55,20 @@ describe('shortcut bridge wired to rail / inbox / switcher stores', () => {
     expect(goToPinned).toHaveBeenCalledWith(1)
   })
 })
+
+describe('Ctrl+L focuses the Chat view composer when present (T33 integration)', () => {
+  it('prefers the chat textarea over the console input', () => {
+    function H() {
+      useShortcuts()
+      return (
+        <div>
+          <input id="ac-prompt" aria-label="console" />
+          <textarea id="ac-chat-prompt" aria-label="chat" />
+        </div>
+      )
+    }
+    const { getByLabelText } = render(<H />)
+    fireEvent.keyDown(document.body, { key: 'l', ctrlKey: true })
+    expect(getByLabelText('chat')).toHaveFocus()
+  })
+})

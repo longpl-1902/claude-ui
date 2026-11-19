@@ -134,8 +134,9 @@ export function handleShortcut(e: KeyboardEvent): boolean {
       return done()
     case 'l': {
       if (st.screen !== 'team') st.navigate('team')
-      const el = document.getElementById('ac-prompt')
-      if (el instanceof HTMLInputElement && !el.disabled) {
+      // Chat view composer (textarea) first when visible, else the lead console prompt.
+      const el = document.getElementById('ac-chat-prompt') ?? document.getElementById('ac-prompt')
+      if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.disabled) {
         el.focus()
         return done()
       }
