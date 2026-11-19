@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { routeConsoleInput } from '@shared/agentMessage'
 import { shortenPathsInText } from '@shared/displayPath'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
 import { useMaxWidth } from '../../store/useLayoutStore'
 import { classifyLine } from '../team/LeadConsole'
 import { PermissionCard } from '../team/PermissionCard'
-import { Composer } from './Composer'
-import { reasonText } from '../ui/reasonText'
+import { ControlComposer } from '../team/Composer'
 import { CopyButton } from './CopyButton'
 import { Markdown } from './Markdown'
 import { ToolCallRow } from './ToolCallRow'
@@ -18,32 +16,22 @@ export const CHAT_NARROW = 900
 
 const platform = (): string => (typeof navigator !== 'undefined' && /win/i.test(navigator.platform) ? 'win32' : 'posix')
 
-const SEND_ERRORS: Record<string, string> = {
-  'unknown-agent': 'No teammate with that name in this team.',
-  'too-long': 'That message is too long (max 32000 characters).'
-}
-
 /** Full-height conversation view of the selected session. Nothing is sent except on an explicit Enter/Send (R-19). */
 export function ChatView(): JSX.Element {
   const narrow = useMaxWidth(CHAT_NARROW)
   const team = useConsoleStore((s) => s.team)
   const demo = useConsoleStore((s) => s.teamMode === 'demo')
-  const draft = useConsoleStore((s) => s.consoleDraft)
-  const setDraft = useConsoleStore((s) => s.setConsoleDraft)
-  const submit = useConsoleStore((s) => s.submitConsole)
   const summary = useConsoleStore((s) => s.sessions.find((x) => x.sessionId === team.sessionId))
 
   const bound = useControlStore(selectControlForSession(team.sessionId))
   const draftControl = useControlStore(selectDraftControl)
   const control = demo ? undefined : (bound ?? draftControl)
   const stream = useControlStore((s) => (control ? s.streams[control.id] : undefined))
-  const send = useControlStore((s) => s.send)
   const answer = useControlStore((s) => s.answer)
 
   const controlled = control !== undefined && control.state !== 'exited'
   const external = !demo && !controlled && control === undefined && team.source === 'live' && !!team.sessionId
   const projectRoot = summary?.project?.root ?? team.cwd
-  const [sendError, setSendError] = useState('')
 
   const logRef = useRef<HTMLDivElement>(null)
   const atBottom = useRef(true)
@@ -83,8 +71,6 @@ export function ChatView(): JSX.Element {
   const plat = platform()
   const display = (t: string): string => shortenPathsInText(t, { ...(projectRoot ? { root: projectRoot } : {}), platform: plat })
 
-  const route = routeConsoleInput(draft, team.agents)
-  const target = route.kind === 'send' && route.targetAgentId ? `to @${who(route.targetAgentId).name}` : 'to lead'
   const stateLabel = demo ? 'demo' : controlled ? (control.state === 'draft' ? 'new session' : control.state) : external ? (summary?.live ? 'running elsewhere' : 'not running') : 'no session'
   const disabled = !demo && !controlled
   const where = summary?.entrypoint?.toLowerCase().includes('vscode') ? 'VS Code' : 'a terminal'
@@ -93,24 +79,6 @@ export function ChatView(): JSX.Element {
       ? `This session runs in ${where}. Agent Console cannot type into it.`
       : 'This session is not running. Switch to Team view to resume or fork it.'
     : 'No session is running here. Switch to Team view to start one.'
-
-  const onSend = (): void => {
-    if (demo) {
-      submit()
-      return
-    }
-    if (!controlled) return
-    const r = routeConsoleInput(draft, team.agents)
-    if (r.kind === 'error') {
-      setSendError(SEND_ERRORS[r.reason] ?? '')
-      return
-    }
-    setSendError('')
-    void send(control.id, r.text).then((res) => {
-      if (res.ok) setDraft('')
-      else setSendError(reasonText(res.reason))
-    })
-  }
 
   let prevWho = ''
   const rows = team.console.map((l, i) => {
@@ -195,22 +163,16 @@ export function ChatView(): JSX.Element {
           {control && perms.length > 0 && (
             <div className="ac-tc-perms">
               {perms.map((p) => (
-                <PermissionCard key={p.requestId} prompt={p} onAnswer={(a) => void answer(control.id, p.requestId, a)} />
+                <PermissionCard key={p.requestId} prompt={p} controlId={control.id} onAnswer={(a) => void answer(control.id, p.requestId, a)} />
               ))}
             </div>
           )}
-          <Composer
-            value={draft}
-            onChange={(v) => {
-              setDraft(v)
-              setSendError('')
-            }}
-            onSend={onSend}
+          <ControlComposer
+            {...(control ? { control } : {})}
+            demo={demo}
             disabled={disabled}
             disabledReason={reason}
-            target={target}
             stateLabel={stateLabel}
-            error={sendError}
             placeholder={disabled ? '' : 'Message the lead, or @agent to talk to a teammate'}
           />
         </div>

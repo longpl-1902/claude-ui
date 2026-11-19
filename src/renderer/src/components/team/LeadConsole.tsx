@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
-import { routeConsoleInput } from '@shared/agentMessage'
+import { useEffect, useRef, useState } from 'react'
 import { shortenPathsInText } from '@shared/displayPath'
 import type { ConsoleLine } from '@shared/types'
 import { useConsoleStore, useScrollMemory } from '../../store/useConsoleStore'
@@ -8,15 +6,14 @@ import { useCenterViewStore } from '../../store/useCenterViewStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
 import { CopyButton } from '../chat/CopyButton'
 import { Button } from '../ui/Button'
-import { ErrorBanner } from '../ui/ErrorBanner'
-import { reasonText } from '../ui/reasonText'
 import { ASK_LEAD_TEXT, ControlBar } from './ControlBar'
 import type { StartOption } from './ControlBar'
+import { ControlComposer } from './Composer'
 import { PermissionCard } from './PermissionCard'
 import { RawTerminalPane } from './RawTerminalPane'
 import './teamCenter.css'
 
-const COMMANDS = ['/pause', '/stop', '/status']
+const DEMO_COMMANDS = ['/pause', '/stop', '/status']
 
 export type ConsoleFilter = 'messages' | 'tools' | 'errors' | 'all'
 export type LineKind = 'message' | 'tool' | 'error'
@@ -49,11 +46,6 @@ const shows = (f: ConsoleFilter, k: LineKind): boolean =>
 
 const platform = (): string => (typeof navigator !== 'undefined' && /win/i.test(navigator.platform) ? 'win32' : 'posix')
 
-const SEND_ERRORS: Record<string, string> = {
-  'unknown-agent': 'No teammate with that name in this team.',
-  'too-long': 'That message is too long (max 32000 characters).'
-}
-
 export interface LeadConsoleProps {
   /** Filter chip state; controlled when `filter` is given (T18 persists it per project). */
   filter?: ConsoleFilter
@@ -67,7 +59,6 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
   const toggleRaw = useConsoleStore((s) => s.toggleRawTerminal)
   const draft = useConsoleStore((s) => s.consoleDraft)
   const setDraft = useConsoleStore((s) => s.setConsoleDraft)
-  const submit = useConsoleStore((s) => s.submitConsole)
   const demo = useConsoleStore((s) => s.teamMode === 'demo')
   const summary = useConsoleStore((s) => s.sessions.find((x) => x.sessionId === team.sessionId))
 
@@ -75,7 +66,6 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
   const draftControl = useControlStore(selectDraftControl)
   const control = demo ? undefined : (bound ?? draftControl)
   const stream = useControlStore((s) => (control ? s.streams[control.id] : undefined))
-  const send = useControlStore((s) => s.send)
   const answer = useControlStore((s) => s.answer)
   const openForm = useControlStore((s) => s.openStartForm)
   const maximized = useCenterViewStore((s) => s.consoleMaximized)
@@ -97,11 +87,8 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
     onFilterChange?.(f)
   }
   const [open, setOpen] = useState<Set<number>>(new Set())
-  const [sendError, setSendError] = useState('')
   const [preset, setPreset] = useState<{ option: StartOption; n: number }>()
-  const [active, setActive] = useState(-1)
-  const [slashClosed, setSlashClosed] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const logRef = useRef<HTMLDivElement>(null)
   useScrollMemory('console', logRef, !rawOpen)
@@ -124,64 +111,6 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
   }
   const pathOpts = { ...(projectRoot ? { root: projectRoot } : {}), platform: platform() }
   const display = (t: string): string => shortenPathsInText(t, pathOpts)
-
-  const slashAll = useMemo(() => {
-    if (!controlled) return []
-    const list = isDraft || control.slashCommands.length === 0 ? COMMANDS : control.slashCommands
-    return list.map((c) => (c.startsWith('/') ? c : `/${c}`))
-  }, [controlled, isDraft, control?.slashCommands])
-  const slashOpen = controlled && !slashClosed && /^\/\S*$/.test(draft)
-  const slashItems = slashOpen ? slashAll.filter((c) => c.startsWith(draft)) : []
-
-  const onDraft = (v: string): void => {
-    setDraft(v)
-    setActive(-1)
-    setSlashClosed(false)
-    setSendError('')
-  }
-  const complete = (c: string): void => {
-    onDraft(c + ' ')
-    inputRef.current?.focus()
-  }
-
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (!slashOpen || slashItems.length === 0) return
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setActive((a) => (a + 1) % slashItems.length)
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setActive((a) => (a <= 0 ? slashItems.length - 1 : a - 1))
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
-      complete(slashItems[active >= 0 ? active : 0]!)
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      setSlashClosed(true)
-    } else if (e.key === 'Enter' && active >= 0) {
-      e.preventDefault()
-      complete(slashItems[active]!)
-    }
-  }
-
-  const onSubmit = (e: FormEvent): void => {
-    e.preventDefault()
-    if (demo) {
-      submit()
-      return
-    }
-    if (!controlled) return
-    const route = routeConsoleInput(draft, team.agents)
-    if (route.kind === 'error') {
-      setSendError(SEND_ERRORS[route.reason] ?? '')
-      return
-    }
-    setSendError('')
-    void send(control.id, route.text).then((r) => {
-      if (r.ok) setDraft('')
-      else setSendError(reasonText(r.reason))
-    })
-  }
 
   const askLead = (): void => {
     setDraft(ASK_LEAD_TEXT)
@@ -328,36 +257,22 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
       {control && perms.length > 0 && (
         <div className="ac-tc-perms">
           {perms.map((p) => (
-            <PermissionCard key={p.requestId} prompt={p} onAnswer={(a) => void answer(control.id, p.requestId, a)} />
+            <PermissionCard key={p.requestId} prompt={p} controlId={control.id} onAnswer={(a) => void answer(control.id, p.requestId, a)} />
           ))}
         </div>
       )}
-      <form className="ac-tc-prompt" onSubmit={onSubmit}>
-        <label htmlFor="ac-prompt">›</label>
-        <input
-          ref={inputRef}
-          id="ac-prompt"
-          type="text"
-          aria-label="Message the lead"
-          placeholder={placeholder}
-          value={draft}
+      <div className="ac-tc-composer">
+        <ControlComposer
+          {...(control ? { control } : {})}
+          demo={demo}
           disabled={promptDisabled}
-          onChange={(e) => onDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          autoComplete="off"
-          {...(slashOpen && slashItems.length > 0
-            ? {
-                'aria-autocomplete': 'list' as const,
-                'aria-controls': 'ac-slash-list',
-                ...(active >= 0 ? { 'aria-activedescendant': `ac-slash-${active}` } : {})
-              }
-            : {})}
+          id="ac-prompt"
+          ariaLabel="Message the lead"
+          stateLabel={demo ? 'demo' : controlled ? (isDraft ? 'new session' : control.state) : ''}
+          placeholder={placeholder}
+          textareaRef={inputRef}
         />
-        <span className="ac-tc-kbd">Enter</span>
-      </form>
-      {sendError && (
-        <ErrorBanner className="ac-tc-prompt-hint" message={sendError} onDismiss={() => setSendError('')} />
-      )}
+      </div>
       {promptDisabled && external && (
         <div className="ac-tc-external">
           <p>
@@ -387,31 +302,9 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
           </div>
         </div>
       )}
-      {controlled && slashItems.length > 0 && (
-        <>
-          <ul className="ac-tc-slash" id="ac-slash-list" role="listbox" aria-label="Slash commands">
-            {slashItems.map((c, i) => (
-              <li
-                key={c}
-                id={`ac-slash-${i}`}
-                role="option"
-                aria-selected={i === active}
-                className={i === active ? 'is-active' : ''}
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  complete(c)
-                }}
-              >
-                {c}
-              </li>
-            ))}
-          </ul>
-          {isDraft && <div className="ac-tc-hint ac-tc-prompt-hint">full list after the session starts</div>}
-        </>
-      )}
       {demo && draft.startsWith('/') && (
         <div className="ac-tc-cmds">
-          {COMMANDS.map((c) => (
+          {DEMO_COMMANDS.map((c) => (
             <span key={c}>{c}</span>
           ))}
         </div>
