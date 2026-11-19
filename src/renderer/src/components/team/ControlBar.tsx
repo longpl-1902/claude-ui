@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type {
   ControlPermissionMode,
+  Effort,
   ControlResume,
   ControlSessionInfo,
   ControlStartRequest,
@@ -8,7 +9,11 @@ import type {
 } from '@shared/types'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { useControlStore } from '../../store/useControlStore'
+import { useDetailsStore } from '../../store/useDetailsStore'
 import { Button } from '../ui/Button'
+import { ContextMeter } from './ContextMeter'
+import { McpChips } from './McpChips'
+import { RewindDialog } from './RewindDialog'
 import { isKnownReason, reasonText } from '../ui/reasonText'
 import './teamCenter.css'
 
@@ -18,6 +23,27 @@ const MODELS = ['opus', 'sonnet', 'haiku', 'fable']
 const MODEL_RE = /^[A-Za-z0-9._[\]-]{1,64}$/
 const CUSTOM = '__custom__'
 const DEFAULT_MODEL = ''
+const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
+const NARROW_QUERY = '(max-width: 899px)'
+const NEXT_START = 'Applies on next start: the running session could not change this live.'
+
+const usd = (n: number): string => `$${n.toFixed(n < 0.1 ? 4 : 2)}`
+const tok = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
+
+function useNarrow(): boolean {
+  const query = (): boolean =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW_QUERY).matches
+  const [narrow, setNarrow] = useState(query)
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia(NARROW_QUERY)
+    const on = (): void => setNarrow(mq.matches)
+    on()
+    mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  return narrow
+}
 
 export type StartOption = 'new' | 'continue' | 'resume' | 'fork'
 
@@ -78,14 +104,37 @@ export function ControlBar({
   const busy = control?.state === 'busy'
 
   // --- running-session controls
-  const known = control?.model !== undefined && MODELS.includes(control.model)
+  const details = useDetailsStore((s) => (control ? s.byControl[control.id] : undefined))
+  const detailsLoad = useDetailsStore((s) => s.load)
+  const refreshContext = useDetailsStore((s) => s.refreshContext)
+  const narrow = useNarrow()
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [rewindOpen, setRewindOpen] = useState(false)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [liveNote, setLiveNote] = useState('')
+  const controlId = control?.id
+  const isLive = control !== undefined && control.state !== 'exited'
+  useEffect(() => {
+    if (controlId && isLive) void detailsLoad(controlId)
+  }, [controlId, isLive, detailsLoad])
+  const modelList: { value: string; label: string; title?: string }[] =
+    details && details.models.length > 0
+      ? details.models.map((m) => ({
+          value: m.value,
+          label: m.displayName,
+          ...(m.description ? { title: m.description } : {})
+        }))
+      : MODELS.map((m) => ({ value: m, label: m }))
+  const known = control?.model !== undefined && modelList.some((m) => m.value === control.model)
   const [customLive, setCustomLive] = useState(false)
   const [customLiveText, setCustomLiveText] = useState('')
   const liveModelValue = customLive || (control?.model && !known) ? CUSTOM : (control?.model ?? DEFAULT_MODEL)
   const liveCustomValid = MODEL_RE.test(customLiveText) && !customLiveText.startsWith('-')
   const [liveError, setLiveError] = useState('')
-  const report = (r: { ok: boolean; reason?: string }): void =>
+  const report = (r: { ok: boolean; reason?: string }): void => {
     setLiveError(r.ok ? '' : (isKnownReason(r.reason) ? reasonText(r.reason) : `Could not change that (${r.reason ?? 'failed'}).`))
+    setLiveNote(r.ok && r.reason === 'applies-on-next-start' ? NEXT_START : '')
+  }
 
   // --- start form
   const [folder, setFolder] = useState('')
@@ -228,9 +277,9 @@ export function ControlBar({
                 }}
               >
                 <option value={DEFAULT_MODEL}>Account default</option>
-                {MODELS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                {modelList.map((m) => (
+                  <option key={m.value} value={m.value} {...(m.title ? { title: m.title } : {})}>
+                    {m.label}
                   </option>
                 ))}
                 <option value={CUSTOM}>Custom…</option>
@@ -268,6 +317,60 @@ export function ControlBar({
                 ))}
               </select>
             </label>
+            {(!narrow || moreOpen) && control && (
+              <>
+                <label className="ac-tc-ctl__field">
+                  <span>Effort</span>
+                  <select
+                    aria-label="Effort"
+                    value={details?.effort ?? ''}
+                    onChange={(e) =>
+                      void useDetailsStore
+                        .getState()
+                        .setEffort(control.id, e.target.value === '' ? null : (e.target.value as Effort))
+                        .then(report)
+                    }
+                  >
+                    <option value="">default</option>
+                    {EFFORTS.map((x) => (
+                      <option key={x} value={x}>
+                        {x}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ac-tc-ctl__field">
+                  <span>Style</span>
+                  <select
+                    aria-label="Output style"
+                    value={details?.outputStyle ?? ''}
+                    onChange={(e) =>
+                      void useDetailsStore
+                        .getState()
+                        .setOutputStyle(control.id, e.target.value === '' ? null : e.target.value)
+                        .then(report)
+                    }
+                  >
+                    <option value="">default</option>
+                    {(details?.availableOutputStyles ?? [])
+                      .filter((x) => x !== 'default')
+                      .map((x) => (
+                        <option key={x} value={x}>
+                          {x}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </>
+            )}
+            {narrow && (
+              <Button size="sm" variant="ghost" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
+                {moreOpen ? 'Fewer controls' : 'More controls'}
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setRewindOpen(true)}>
+              Checkpoints
+            </Button>
             {busy && (
               <Button size="sm" variant="warn" aria-keyshortcuts="Control+." onClick={() => void interrupt(control.id)}>
                 {`Interrupt lead (${projectName})`}
@@ -282,6 +385,104 @@ export function ControlBar({
           </>
         )}
       </div>
+      {live && control && (
+        <p className="ac-tc-hint" style={{ margin: 0 }}>
+          {control.state === 'draft'
+            ? 'Model, effort, mode and style are used when the session starts.'
+            : 'Changes apply from the next turn.'}
+        </p>
+      )}
+      {liveNote && (
+        <p className="ac-tc-hint" role="status" style={{ margin: 0 }}>
+          {liveNote}
+        </p>
+      )}
+      {live && control && (!narrow || moreOpen) && (
+        <div className="ac-tc-ctl__row" data-testid="session-details-strip" style={{ flexWrap: 'wrap', minWidth: 0 }}>
+          {renaming === null ? (
+            <>
+              <span
+                title={details?.title ?? ''}
+                style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}
+              >
+                {details?.title ?? 'Untitled session'}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setRenaming(details?.title ?? '')}>
+                Rename
+              </Button>
+            </>
+          ) : (
+            <form
+              style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                const t = renaming.trim()
+                if (!t) return
+                void useDetailsStore
+                  .getState()
+                  .rename(control.id, t)
+                  .then((r) => {
+                    report(r)
+                    if (r.ok) setRenaming(null)
+                  })
+              }}
+            >
+              <input
+                className="ac-tc-ctl__input"
+                aria-label="Session title"
+                value={renaming}
+                maxLength={200}
+                onChange={(e) => setRenaming(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation()
+                    setRenaming(null)
+                  }
+                }}
+              />
+              <Button size="sm" type="submit" variant="primary" disabled={renaming.trim() === ''}>
+                Save title
+              </Button>
+              <Button size="sm" onClick={() => setRenaming(null)}>
+                Cancel
+              </Button>
+            </form>
+          )}
+          <ContextMeter
+            {...(details?.context ? { context: details.context } : {})}
+            onRefresh={() => void refreshContext(control.id).then(report)}
+          />
+          {details && (
+            <span className="ac-tc-hint" title="API-equivalent cost: subscriptions are not billed per token">
+              {details.lastTurn
+                ? `Last turn: ${tok(details.lastTurn.input)} in / ${tok(details.lastTurn.output)} out / ${tok(
+                    details.lastTurn.cacheRead + details.lastTurn.cacheCreation
+                  )} cache${details.lastTurn.costUsd !== undefined ? ` · ${usd(details.lastTurn.costUsd)}` : ''} · `
+                : ''}
+              Session {usd(details.sessionCostUsd)} (API-equivalent cost)
+            </span>
+          )}
+          <McpChips
+            servers={details?.mcp ?? []}
+            onToggle={(name, on) => useDetailsStore.getState().mcpToggle(control.id, name, on)}
+            onReconnect={(name) => useDetailsStore.getState().mcpReconnect(control.id, name)}
+            onManage={() => useConsoleStore.getState().navigate('extensions')}
+            onResult={report}
+          />
+        </div>
+      )}
+      {control && (
+        <RewindDialog
+          open={rewindOpen}
+          onClose={() => setRewindOpen(false)}
+          busy={busy}
+          checkpointing={details?.checkpointing ?? false}
+          turns={details?.userTurns ?? []}
+          preview={(uuid) => useDetailsStore.getState().rewindPreview(control.id, uuid)}
+          rewind={(uuid) => useDetailsStore.getState().rewind(control.id, uuid)}
+          fork={(uuid) => useDetailsStore.getState().forkAt(control.id, uuid)}
+        />
+      )}
       {liveError && (
         <p className="ac-tc-ctl__error" role="alert">
           {liveError}
