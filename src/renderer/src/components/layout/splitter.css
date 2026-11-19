@@ -39,3 +39,22 @@
     transition: background-color 0.12s;
   }
 }
+
+/* Horizontal splitter (resizes panes stacked vertically); stays usable at every width. */
+.ac-splitter--h {
+  display: block;
+  flex: 0 0 6px;
+  align-self: stretch;
+  width: auto;
+  height: 6px;
+  cursor: row-resize;
+}
+
+.ac-splitter--h::after {
+  top: 2px;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+}

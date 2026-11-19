@@ -27,6 +27,8 @@ vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 beforeEach(() => {
   resetConsoleStore()
   seedDemoTeam()
+  // Wide window: below 1100px the inspector is an overlay drawer (see teamLayout.test.tsx).
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1600 })
 })
 
 describe('R-15 TeamView smoke', () => {
