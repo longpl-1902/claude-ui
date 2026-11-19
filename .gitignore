@@ -1,8 +1,7 @@
-node_modules/
-out/
-dist/
-release/
-coverage/
-*.log
-.claude/*.local.md
-.claude/worktrees/
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+.DS_Store
+/.claude/
