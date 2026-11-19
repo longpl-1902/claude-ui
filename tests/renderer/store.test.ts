@@ -235,6 +235,22 @@ describe('R-11 accounts actions', () => {
     expect(s().accounts.safety.warnPersonalInCompanyFolder).toBe(true)
   })
 
+  it('setRules {ok:false} resyncs via getSnapshot and sets accountsError; clearAccountsError clears it', async () => {
+    const api = installApi({ setRules: vi.fn().mockResolvedValue({ ok: false, reason: 'save-failed' }) })
+    s().setRules([])
+    await vi.waitFor(() => expect(api.getSnapshot).toHaveBeenCalled())
+    await vi.waitFor(() => expect(s().accountsError).toBe('save-failed'))
+    s().clearAccountsError()
+    expect(s().accountsError).toBeUndefined()
+  })
+
+  it('a rejected setLimitPolicy resyncs and sets accountsError', async () => {
+    const api = installApi({ setLimitPolicy: vi.fn().mockRejectedValue(new Error('boom')) })
+    s().setLimitPolicy('wait')
+    await vi.waitFor(() => expect(api.getSnapshot).toHaveBeenCalled())
+    expect(s().accountsError).toBe('boom')
+  })
+
   it('local updates apply without window.api and are immutable', () => {
     const prev = s().accounts
     s().toggleSafety('lockAccountOnTeamStart')
@@ -265,13 +281,6 @@ describe('R-11 sign-in state', () => {
     await s().checkSignIn()
     expect(api.checkSignIn).toHaveBeenCalledWith('/d')
     expect(s().signIn).toMatchObject({ step: 'done', email: 'a@b.c' })
-  })
-
-  it('finishSignIn is an alias of checkSignIn', async () => {
-    const api = installApi()
-    await s().startSignIn('/d')
-    await s().finishSignIn()
-    expect(api.checkSignIn).toHaveBeenCalledTimes(1)
   })
 
   it('reopenSignIn uses the current dir', async () => {

@@ -220,14 +220,17 @@ export function RawTerminalPane(): JSX.Element {
         </p>
       )}
       {resolution && resolution.accountId === 'ask' && (
-        <select className="ac-tc-raw__input" aria-label="Account" value={picked} onChange={(e) => setPicked(e.target.value)}>
-          <option value="">Ask me: pick an account</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+        <div className="ac-tc-raw__row">
+          <label htmlFor="ac-raw-account">Account</label>
+          <select className="ac-tc-raw__input" id="ac-raw-account" value={picked} onChange={(e) => setPicked(e.target.value)}>
+            <option value="">Ask me: pick an account</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
       {error && (
         <p className="ac-tc-raw__error" role="alert">

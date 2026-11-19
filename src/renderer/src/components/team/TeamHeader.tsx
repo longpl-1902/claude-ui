@@ -30,6 +30,7 @@ export function TeamHeader() {
         type="button"
         className="ac-header__chip"
         aria-label={`Account: ${account ? account.name : 'none'}. Manage accounts`}
+        title={account ? (account.email ? `${account.name} · ${account.email}` : account.name) : 'No account'}
         onClick={() => navigate('accounts')}
       >
         <Avatar
@@ -38,7 +39,7 @@ export function TeamHeader() {
           size={20}
           shape="circle"
         />
-        <span>{account ? account.name : 'No account'}</span>
+        <span className="ac-header__name">{account ? account.name : 'No account'}</span>
         {account?.email && <span className="ac-header__email">{account.email}</span>}
         {account?.locked && (
           <span title="Account locked while a session runs" className="ac-header__lock">
