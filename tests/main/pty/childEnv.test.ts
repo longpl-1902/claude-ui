@@ -57,14 +57,14 @@ describe('R-09 buildChildEnv', () => {
 
   it('R-09 an absolute dir sets CLAUDE_CONFIG_DIR, overriding the base value', () => {
     const env = buildChildEnv({ CLAUDE_CONFIG_DIR: 'C:/old' }, { configDirAbs: 'C:/Users/u/.claude-work', platform: 'win32' })
-    expect(env.CLAUDE_CONFIG_DIR.replace(/\\/g, '/')).toBe('C:/Users/u/.claude-work')
+    expect(env.CLAUDE_CONFIG_DIR!.replace(/\\/g, '/')).toBe('C:/Users/u/.claude-work')
   })
 
   it('R-09 win32 removes a differently-cased existing CLAUDE_CONFIG_DIR before setting', () => {
     const env = buildChildEnv({ claude_config_dir: 'C:/old' }, { configDirAbs: 'C:/new', platform: 'win32' })
     const keys = Object.keys(env).filter((k) => k.toLowerCase() === 'claude_config_dir')
     expect(keys).toHaveLength(1)
-    expect(env[keys[0]].replace(/\\/g, '/')).toBe('C:/new')
+    expect(env[keys[0]!]!.replace(/\\/g, '/')).toBe('C:/new')
   })
 
   it('R-09 a relative dir throws', () => {
