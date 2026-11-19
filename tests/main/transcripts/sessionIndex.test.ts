@@ -147,13 +147,33 @@ describe('R-08 pickAuto: live registry, then newest within 24 h', () => {
     })
   })
 
-  it('R-08 among several live sessions the newest statusUpdatedAt wins, across accounts', async () => {
+  it('O-3 live sessions are ordered by transcript mtime: a newer registry stamp with an older mtime loses', async () => {
     const { index } = setup({
       alive: [PID_LIVE, 5555],
-      mutate: (fs) => fs.set(`${DEFAULT_DIR}/sessions/5555.json`, JSON.stringify(registryEntry({ pid: 5555, sessionId: S4, status: 'busy', statusUpdatedAt: T0_MS + 99_000 })))
+      mutate: (fs, tree) => {
+        // A = S1: newer statusUpdatedAt, older transcript. B = S4: older stamp, newer transcript.
+        fs.set(tree.paths.registryLive, JSON.stringify(registryEntry({ sessionId: S1, status: 'busy', statusUpdatedAt: T0_MS + 99_000, updatedAt: T0_MS + 99_000 })))
+        fs.set(`${DEFAULT_DIR}/sessions/5555.json`, JSON.stringify(registryEntry({ pid: 5555, sessionId: S4, status: 'busy', statusUpdatedAt: T0_MS + 1000, updatedAt: T0_MS + 1000 })))
+        fs.setMtime(tree.paths.s1, NOW_MS - 100_000)
+        fs.setMtime(tree.paths.s4, NOW_MS - 1000)
+      }
     })
-    const r = await index.pickAuto(ROOTS, null)
-    expect(r.pick).toMatchObject({ accountId: '', sessionId: S4 })
+    expect((await index.pickAuto(ROOTS, null)).pick).toMatchObject({ accountId: '', sessionId: S4 })
+  })
+
+  it('O-3 registry stamps only break an mtime tie', async () => {
+    const mk = (stampS4: number) =>
+      setup({
+        alive: [PID_LIVE, 5555],
+        mutate: (fs, tree) => {
+          fs.set(tree.paths.registryLive, JSON.stringify(registryEntry({ sessionId: S1, statusUpdatedAt: T0_MS + 50_000, updatedAt: T0_MS + 50_000 })))
+          fs.set(`${DEFAULT_DIR}/sessions/5555.json`, JSON.stringify(registryEntry({ pid: 5555, sessionId: S4, statusUpdatedAt: stampS4, updatedAt: stampS4 })))
+          fs.setMtime(tree.paths.s1, NOW_MS - 5000)
+          fs.setMtime(tree.paths.s4, NOW_MS - 5000)
+        }
+      })
+    expect((await mk(T0_MS + 99_000).index.pickAuto(ROOTS, null)).pick).toMatchObject({ sessionId: S4 })
+    expect((await mk(T0_MS + 1000).index.pickAuto(ROOTS, null)).pick).toMatchObject({ sessionId: S1 })
   })
 
   it('R-08 a live registry entry whose session file does not exist is skipped', async () => {
@@ -215,6 +235,18 @@ describe('R-08 pickAuto: the app\'s own pty', () => {
     expect(await index.pickAuto(ROOTS, ptyOther({ cwd: 'D:\\nowhere\\new', startedAtMs: NOW_MS }))).toEqual({ pick: null, waitingForSession: true })
     // a live registry session exists, but a running pty takes priority
     expect((await index.pickAuto(ROOTS, ptyOther({ startedAtMs: NOW_MS }))).waitingForSession).toBe(true)
+  })
+
+  it('R-08 pty pid in the registry but its transcript not written yet waits, even if another fresh session shares the cwd', async () => {
+    const { index } = setup({
+      alive: [PID_LIVE, 5600],
+      mutate: (fs, tree) => {
+        fs.set(`${DEFAULT_DIR}/sessions/5600.json`, JSON.stringify(registryEntry({ pid: 5600, sessionId: 'not-written-yet', cwd: "C:/Users/u/other" })))
+        fs.setMtime(tree.paths.s4, NOW_MS - 1000) // a fresh session in the same cwd (e.g. VS Code)
+      }
+    })
+    const r = await index.pickAuto(ROOTS, ptyOther({ pid: 5600, startedAtMs: NOW_MS - 3_600_000 }))
+    expect(r).toEqual({ pick: null, waitingForSession: true })
   })
 
   it('R-08 a session in an oddly named folder still matches through the head cwd line', async () => {
