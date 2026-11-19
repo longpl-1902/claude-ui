@@ -8,3 +8,8 @@
 - Final review: verify README claims vs code (LIVE/DEMO badge, per-project memory contents, toast/notification defaults incl. notifyIdle) and update README after waves 9–13 (shortcuts, chat view, extensions, theme, multi-window).
 - T29 styled the ControlBar with inline styles (no CSS owned) — T31/T32: move to a stylesheet with theme tokens.
 - T32: header overflows at ~1440 DIP with all live items (Pause all + account chip cut off at right) — raise the overflow-menu breakpoint or measure-based overflow (ResizeObserver) so nothing is ever clipped; 'older history not loaded' text takes header space (move to a tooltip/inline note).
+
+## T32 extra (user screenshot 19:22, 1920px)
+- Composer shows both 'Ctrl+Enter to send' and 'Enter to send, Shift+Enter for a new line': keep one, true hint.
+- Session runs in VS Code (not controllable) but the textarea and Send still look active: disable them and show one clear line + 'Fork here'.
+- Timeline legend/'last 20 min' fine; check the header after T35 at 1920 with the window-controls overlay visible.
