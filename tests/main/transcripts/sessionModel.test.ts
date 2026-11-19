@@ -556,10 +556,11 @@ describe('R-06 events and console', () => {
       expect(lines.some((l) => l.text === 'spawned reviewer')).toBe(true)
       expect(lines.some((l) => l.who === SUB1 && l.text === 'done')).toBe(true)
     })
-    it('R-06 assistant text is shown (max 200 chars) under the agent id', () => {
+    it('R-06 assistant text is shown in full (up to 12000 chars) under the agent id', () => {
       expect(lines.find((l) => l.who === 'lead' && l.text === 'I will explore first.')).toBeDefined()
-      const long = mini(assistantBlocks([textBlock('w'.repeat(500))], { ts: at(1), messageId: 'm', stopReason: 'end_turn' })).snap().console
-      expect(long[0].text.length).toBeLessThanOrEqual(201)
+      const long = mini(assistantBlocks([textBlock('w'.repeat(500)), textBlock('v'.repeat(20000))], { ts: at(1), messageId: 'm', stopReason: 'end_turn' })).snap().console
+      expect(long[0].text.startsWith('w'.repeat(500))).toBe(true)
+      expect(long[0].text.length).toBeLessThanOrEqual(12001)
     })
     it('R-06 API errors read "API error: <kind>"', () => {
       const c = mini([userPrompt('hi', { ts: at(1) }), apiErrorLine('rate_limit', { ts: at(2) })]).snap().console

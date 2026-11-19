@@ -21,6 +21,11 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
+/** Full-message limits (user: long messages were cut at 300 chars in Chat). The snapshot keeps the last 100 lines. */
+export const TEXT_MAX = 12000
+export const PROMPT_MAX = 8000
+export const AGENT_RESULT_MAX = 4000
+
 /** Cut at `max` UTF-16 units (never inside a surrogate pair) and append an ellipsis. */
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s
@@ -270,7 +275,7 @@ function parseAssistant(o: Obj): TranscriptRecord | null {
     rec.usage = usage
   }
   const text = texts.join('\n')
-  if (text !== '') rec.text = truncate(text, 300)
+  if (text !== '') rec.text = truncate(text, TEXT_MAX)
   const ek = str(o.error)
   if (ek !== undefined) rec.errorKind = ek
   return rec
@@ -337,7 +342,7 @@ function parseToolResults(o: Obj, blocks: Obj[], env: Env): TranscriptRecord {
         const ar: NonNullable<ToolResultRec['agentResult']> = { agentId, status: str(turHere.status) ?? '' }
         if (typeof turHere.totalTokens === 'number') ar.totalTokens = turHere.totalTokens
         const text = textOf(Array.isArray(turHere.content) ? turHere.content.slice(0, 1) : [])
-        if (text !== '') ar.text = truncate(text, 500)
+        if (text !== '') ar.text = truncate(text, AGENT_RESULT_MAX)
         rec.agentResult = ar
       }
       if (typeof turHere.success === 'boolean') rec.sendOk = turHere.success
@@ -385,7 +390,7 @@ function parseUser(o: Obj): TranscriptRecord | null {
     if (trimmed.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim() === '') return null
     if (env.extra.agentId !== undefined && o.parentUuid === null) kind = 'first-task'
   }
-  return { t: 'prompt', ...head, text: truncate(out, 300), kind }
+  return { t: 'prompt', ...head, text: truncate(out, PROMPT_MAX), kind }
 }
 
 const SYSTEM_SUBTYPES = new Set(['api_error', 'compact_boundary', 'local_command', 'informational'])

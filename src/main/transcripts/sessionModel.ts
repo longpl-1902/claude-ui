@@ -16,6 +16,7 @@ import type {
 import { createSpanTracker } from './activitySpans'
 import { createTaskTracker } from './taskTracker'
 import type { TokenUsage, ToolResultRec, TranscriptRecord } from './records'
+import { PROMPT_MAX, TEXT_MAX } from './parseLine'
 
 export interface SubagentMeta {
   agentType?: string
@@ -270,7 +271,7 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
         }
         if (rec.text) {
           pushEvent(src, ms, withTokens(base('message')))
-          pushConsole(src, ms, a.id, clip(rec.text, 200))
+          pushConsole(src, ms, a.id, clip(rec.text, TEXT_MAX))
         }
         const accepted: { id: string; name: string }[] = []
         for (const tu of rec.toolUses) {
@@ -389,7 +390,7 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
           if (!a.firstTask) a.firstTask = { text: rec.text, ms }
         } else if (src === 'lead') {
           pushEvent(src, ms, base('message', { agentId: LEAD_ID, result: 'user' }))
-          pushConsole(src, ms, 'you', clip(rec.text, 200))
+          pushConsole(src, ms, 'you', clip(rec.text, PROMPT_MAX))
         }
         return
       }

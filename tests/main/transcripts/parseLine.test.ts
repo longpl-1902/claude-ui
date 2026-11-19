@@ -82,14 +82,15 @@ describe('R-04 parseLine: assistant', () => {
     expect(r.text ?? '').toBe('')
   })
 
-  it('R-04 joins text blocks and truncates to 300 chars with an ellipsis', () => {
-    const r = parse(assistantLine(textBlock('y'.repeat(1000)), { messageId: 'msg_long' }))
-    expect(r.text.length).toBeLessThanOrEqual(301)
+  it('R-04 keeps whole replies; truncates only past 12000 chars with an ellipsis', () => {
+    expect(parse(assistantLine(textBlock('x'.repeat(5000)), { messageId: 'msg_full' })).text).toBe('x'.repeat(5000))
+    const r = parse(assistantLine(textBlock('y'.repeat(20000)), { messageId: 'msg_long' }))
+    expect(r.text.length).toBeLessThanOrEqual(12001)
     expect(r.text.endsWith('…')).toBe(true)
   })
 
   it('R-04 truncation never splits a surrogate pair', () => {
-    const r = parse(assistantLine(textBlock('😀'.repeat(400)), { messageId: 'msg_emoji' }))
+    const r = parse(assistantLine(textBlock('😀'.repeat(7000)), { messageId: 'msg_emoji' }))
     expect(r.text.endsWith('…')).toBe(true)
     expect(r.text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
     expect(r.text).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
@@ -171,9 +172,10 @@ describe('R-04 parseLine: user and tool results', () => {
     expect(parse(userPromptArray('from array'))).toMatchObject({ t: 'prompt', kind: 'user', text: 'from array' })
   })
 
-  it('R-04 prompt text is truncated to 300 chars', () => {
-    const r = parse(userPrompt('p'.repeat(900)))
-    expect(r.text.length).toBeLessThanOrEqual(301)
+  it('R-04 keeps whole prompts; truncates only past 8000 chars', () => {
+    expect(parse(userPrompt('q'.repeat(3000))).text).toBe('q'.repeat(3000))
+    const r = parse(userPrompt('p'.repeat(9000)))
+    expect(r.text.length).toBeLessThanOrEqual(8001)
     expect(r.text.endsWith('…')).toBe(true)
   })
 
@@ -270,11 +272,11 @@ describe('R-04 parseLine: user and tool results', () => {
     expect(parse(bashResult('toolu_nb', 'out')).results[0].fileChange).toBeUndefined()
   })
 
-  it('R-04 Agent results expose agentId, status, totalTokens and text (max 500)', () => {
-    const r = parse(agentResult('toolu_ag', { agentId: 'a1b2c3d4e5f6a7b81', status: 'completed', text: 'T'.repeat(900), totalTokens: 321 }))
+  it('R-04 Agent results expose agentId, status, totalTokens and text (max 4000)', () => {
+    const r = parse(agentResult('toolu_ag', { agentId: 'a1b2c3d4e5f6a7b81', status: 'completed', text: 'T'.repeat(6000), totalTokens: 321 }))
     const ar = r.results[0].agentResult
     expect(ar).toMatchObject({ agentId: 'a1b2c3d4e5f6a7b81', status: 'completed', totalTokens: 321 })
-    expect(ar.text.length).toBeLessThanOrEqual(501)
+    expect(ar.text.length).toBeLessThanOrEqual(4001)
   })
 
   it('R-04 async_launched Agent results have no text', () => {
