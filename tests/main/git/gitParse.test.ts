@@ -144,7 +144,7 @@ describe('R-08 pickBase / parseSymbolicRef', () => {
 
 describe('R-08 mergeChanged', () => {
   const st = (path: string, status: 'M' | 'A' | 'D' | 'R' | '?' | 'U') => ({ path, x: ' ', y: status, status })
-  const by = (r: { files: { path: string }[] }) => [...r.files].sort((a, b) => a.path.localeCompare(b.path))
+  const by = <T extends { path: string }>(r: { files: T[] }) => [...r.files].sort((a, b) => a.path.localeCompare(b.path))
 
   it('R-08 a committed-only file is committed and not uncommitted, with its numstat', () => {
     const r = mergeChanged([{ path: 'a.ts', added: 4, removed: 1 }], [])
