@@ -1,15 +1,25 @@
+import { useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { formatElapsed, formatTokens } from "@shared/format";
+import { formatAgentMessage } from "@shared/agentMessage";
 import {
   selectSelectedAgentOrNull,
   useAgentStatusInfo,
   useConsoleStore,
   type InspectorTab,
 } from "../../store/useConsoleStore";
+import { selectControlForSession, useControlStore } from "../../store/useControlStore";
+import {
+  rendererPlatform,
+  selectWorktreeViews,
+  useWorkspaceStore,
+} from "../../store/useWorkspaceStore";
 import type { Agent } from "@shared/types";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
+import { Dialog } from "../ui/Dialog";
 import { StatusPill } from "../ui/StatusPill";
+import { useViewedAccount } from "../team/TeamHeader";
 import { ActivityTab } from "./ActivityTab";
 import { FilesTab } from "./FilesTab";
 import { MessagesTab } from "./MessagesTab";
@@ -31,6 +41,18 @@ export interface InspectorLayoutProps {
 }
 
 export const INSPECTOR_TOP_ID = "ac-insp-top";
+
+export const EXTERNAL_MESSAGE_TITLE =
+  "Runs in VS Code / another terminal - Claude Code has no API to send it messages from outside.";
+
+export function entrypointLabel(e?: string): string {
+  if (!e) return "Unknown";
+  const l = e.toLowerCase();
+  if (l.includes("vscode")) return "VS Code extension";
+  if (l === "cli") return "Terminal (claude CLI)";
+  if (l === "sdk-cli") return "Agent SDK";
+  return e;
+}
 
 export function Inspector({ topHeight, splitter }: InspectorLayoutProps = {}): JSX.Element {
   const agent = useConsoleStore(selectSelectedAgentOrNull);
@@ -54,13 +76,38 @@ function InspectorBody({
   splitter,
 }: { agent: Agent } & InspectorLayoutProps): JSX.Element {
   const info = useAgentStatusInfo(agent.id);
-  const source = useConsoleStore((s) => s.team.source);
-  const live = source !== "demo";
+  const team = useConsoleStore((s) => s.team);
+  const live = team.source !== "demo";
   const tab = useConsoleStore((s) => s.inspectorTab);
   const setInspectorTab = useConsoleStore((s) => s.setInspectorTab);
-  const worktrees = useConsoleStore((s) => s.team.worktrees);
-  const worktreePath = worktrees.find((w) => w.branch === agent.worktree)?.path;
   const setConsoleDraft = useConsoleStore((s) => s.setConsoleDraft);
+  const summary = useConsoleStore((s) => s.sessions.find((x) => x.sessionId === team.sessionId));
+  const account = useViewedAccount();
+  const workspace = useWorkspaceStore((s) => s.workspace);
+
+  const control = useControlStore(selectControlForSession(team.sessionId));
+  const send = useControlStore((s) => s.send);
+  const interrupt = useControlStore((s) => s.interrupt);
+  const stop = useControlStore((s) => s.stop);
+
+  const controlled = live && !!control && control.state !== "exited";
+  const busy = controlled && control.state === "busy";
+  const isLead = agent.runtime?.kind === "lead" || agent.id === "lead";
+  const registryPid = summary?.registryPid;
+  const externalLive = live && !controlled && summary?.live === true;
+
+  const views = selectWorktreeViews(workspace, team.agents, rendererPlatform());
+  const worktreePath =
+    views.worktrees.find((w) => w.agentIds.includes(agent.id))?.path ??
+    team.worktrees.find((w) => w.branch === agent.worktree)?.path ??
+    (agent.cwd || undefined);
+
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [confirm, setConfirm] = useState<"stop-session" | "stop-process" | null>(null);
+  const [confirmError, setConfirmError] = useState("");
+  const [working, setWorking] = useState(false);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -73,15 +120,110 @@ function InspectorBody({
   };
 
   const messageAgent = (): void => {
+    if (live) {
+      setComposerOpen((o) => !o);
+      return;
+    }
     setConsoleDraft(`@${agent.name} `);
     document.getElementById("ac-prompt")?.focus();
   };
+
+  const submitMessage = async (): Promise<void> => {
+    const body = text.trim();
+    if (!control || body === "") return;
+    setSendError("");
+    const r = await send(control.id, isLead ? body : formatAgentMessage(agent.name, body));
+    if (r.ok) {
+      setText("");
+      setComposerOpen(false);
+    } else setSendError(`Could not send (${r.reason ?? "failed"}).`);
+  };
+
+  const pause = (): void => {
+    if (!live) {
+      void window.api?.agent.pause(agent.id);
+      return;
+    }
+    if (control && busy) void interrupt(control.id);
+  };
+
+  const doStopSession = async (): Promise<void> => {
+    if (!control) return;
+    setWorking(true);
+    try {
+      const r = await stop(control.id);
+      if (r.ok) setConfirm(null);
+      else setConfirmError(`Could not stop the session (${r.reason ?? "failed"}).`);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const doKillExternal = async (): Promise<void> => {
+    if (!summary || registryPid === undefined) return;
+    setWorking(true);
+    try {
+      const r = await window.api?.session.killExternal({
+        accountId: summary.accountId,
+        sessionId: summary.sessionId,
+        pid: registryPid,
+      });
+      if (r?.ok) setConfirm(null);
+      else setConfirmError(`Could not stop the process (${r?.reason ?? "unavailable"}).`);
+    } catch (e) {
+      setConfirmError(`Could not stop the process (${e instanceof Error ? e.message : String(e)}).`);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const stopAction = (): void => {
+    if (!live) {
+      void window.api?.agent.stop(agent.id);
+      return;
+    }
+    setConfirmError("");
+    if (controlled) {
+      if (busy) setConfirm("stop-session");
+      else if (control) void stop(control.id);
+      return;
+    }
+    if (externalLive && registryPid !== undefined) setConfirm("stop-process");
+  };
+
+  // ---- action matrix
+  const messageDisabled = live && !controlled;
+  const messageTitle = !live ? undefined : controlled ? undefined : EXTERNAL_MESSAGE_TITLE;
+  const pauseDisabled = live && !busy;
+  const pauseTitle = !live
+    ? undefined
+    : busy
+      ? isLead
+        ? "Interrupts the current turn"
+        : "Interrupts the whole current turn"
+      : controlled
+        ? "Nothing is running right now (idle)"
+        : "Runs outside this app - it cannot be paused from here";
+  const stopLabel = live && !controlled ? "Stop process…" : "Stop";
+  const stopDisabled = live && !controlled && !(externalLive && registryPid !== undefined);
+  const stopTitle = !live
+    ? undefined
+    : controlled
+      ? "Ends the controlled session (the whole team, not only this agent)"
+      : externalLive
+        ? registryPid === undefined
+          ? "Process id unknown"
+          : "Ends this Claude Code process (asks first)"
+        : "This session is not running";
 
   const stats = [
     ["Elapsed", formatElapsed(agent.elapsedSec)],
     ["Tokens", formatTokens(agent.tokens)],
     ["Tool calls", String(agent.toolCalls)],
   ];
+
+  const projectName = summary?.project?.name ?? team.repo;
+  const sessionTitle = summary?.title ?? team.title ?? team.teamName;
 
   return (
     <aside className="insp" aria-label="Agent inspector">
@@ -127,8 +269,9 @@ function InspectorBody({
       <div className="insp__actions">
         <Button
           size="lg"
-          disabled={live}
-          title={live ? "Arrives in Phase 3b" : undefined}
+          disabled={messageDisabled}
+          title={messageTitle}
+          aria-expanded={live && controlled ? composerOpen : undefined}
           onClick={messageAgent}
         >
           Message agent
@@ -144,24 +287,43 @@ function InspectorBody({
         >
           Open worktree
         </Button>
-        <Button
-          size="lg"
-          disabled={live}
-          title={live ? "Arrives in Phase 4" : undefined}
-          onClick={() => void window.api?.agent.pause(agent.id)}
-        >
+        <Button size="lg" disabled={pauseDisabled} title={pauseTitle} onClick={pause}>
           Pause
         </Button>
         <Button
           size="lg"
           variant="danger"
-          disabled={live}
-          title={live ? "Arrives in Phase 4" : undefined}
-          onClick={() => void window.api?.agent.stop(agent.id)}
+          disabled={stopDisabled}
+          title={stopTitle}
+          onClick={stopAction}
         >
-          Stop
+          {stopLabel}
         </Button>
       </div>
+      {live && controlled && composerOpen && (
+        <div className="insp__composer">
+          <textarea
+            aria-label={`Message to ${agent.name}`}
+            rows={3}
+            value={text}
+            placeholder={isLead ? "Message the lead" : `Message ${agent.name} (sent through the lead)`}
+            onChange={(e) => setText(e.target.value)}
+          />
+          {sendError && (
+            <span className="insp__composer-error" role="alert">
+              {sendError}
+            </span>
+          )}
+          <div className="insp__composer-row">
+            <Button size="sm" onClick={() => setComposerOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="primary" disabled={text.trim() === ""} onClick={() => void submitMessage()}>
+              Send
+            </Button>
+          </div>
+        </div>
+      )}
       </div>
       {splitter}
       <div className="insp__bottom">
@@ -194,6 +356,71 @@ function InspectorBody({
         {tab === "messages" && <MessagesTab messages={agent.messages} />}
       </div>
       </div>
+
+      <Dialog
+        open={confirm === "stop-process"}
+        title="Stop this process?"
+        onClose={() => setConfirm(null)}
+        initialFocus={() => document.getElementById("insp-confirm-cancel")}
+        footer={
+          <>
+            <Button onClick={() => setConfirm(null)} id="insp-confirm-cancel">
+              Cancel
+            </Button>
+            <Button variant="danger" disabled={working} onClick={() => void doKillExternal()}>
+              Stop process
+            </Button>
+          </>
+        }
+      >
+        <dl className="insp-confirm">
+          <dt>Project</dt>
+          <dd>{projectName}</dd>
+          <dt>Session</dt>
+          <dd>{sessionTitle}</dd>
+          <dt>Account</dt>
+          <dd>{account?.name ?? "Default account"}</dd>
+          <dt>Started from</dt>
+          <dd>{entrypointLabel(summary?.entrypoint)}</dd>
+          <dt>Process id</dt>
+          <dd>{registryPid}</dd>
+          <dt>Folder</dt>
+          <dd title={summary?.cwd ?? team.cwd}>{summary?.cwd ?? team.cwd ?? "unknown"}</dd>
+        </dl>
+        <p>
+          Ends this Claude Code process and its tool processes. The transcript is kept; the turn in progress is lost.
+        </p>
+        {confirmError && (
+          <p className="insp__composer-error" role="alert">
+            {confirmError}
+          </p>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={confirm === "stop-session"}
+        title="Stop this session?"
+        onClose={() => setConfirm(null)}
+        initialFocus={() => document.getElementById("insp-confirm-cancel")}
+        footer={
+          <>
+            <Button id="insp-confirm-cancel" onClick={() => setConfirm(null)}>Cancel</Button>
+            <Button variant="danger" disabled={working} onClick={() => void doStopSession()}>
+              Stop session
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {projectName} / {sessionTitle} is working right now. Stopping ends the whole controlled session; the turn in
+          progress is lost and the transcript is kept.
+        </p>
+        {confirmError && (
+          <p className="insp__composer-error" role="alert">
+            {confirmError}
+          </p>
+        )}
+      </Dialog>
     </aside>
   );
 }

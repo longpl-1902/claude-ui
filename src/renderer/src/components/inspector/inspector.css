@@ -76,3 +76,28 @@
 .insp-msg__meta { font-size: 11px; color: var(--ac-text-subtle); }
 .insp-msg__peer { color: var(--ac-text-soft); }
 .insp-msg__text { font-size: 13px; line-height: 1.45; }
+
+/* ---- T17: inline composer, confirm dialogs */
+.insp__composer { display: flex; flex-direction: column; gap: 6px; }
+.insp__composer textarea { width: 100%; box-sizing: border-box; resize: vertical; background: var(--ac-bg-card); color: var(--ac-text); border: 1px solid var(--ac-border-btn); border-radius: 6px; padding: 8px; font: 13px var(--ac-font-ui); }
+.insp__composer-row { display: flex; justify-content: flex-end; gap: 8px; }
+.insp__composer-error { color: var(--ac-status-needs-you); font-size: 12px; margin: 0; }
+.insp-confirm { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0 0 12px; font-size: 13px; }
+.insp-confirm dt { color: var(--ac-text-subtle); }
+.insp-confirm dd { margin: 0; overflow-wrap: anywhere; }
+
+/* ---- T17: header overflow menu and Hooks dialog */
+.ac-header__more { position: relative; flex-shrink: 0; }
+.ac-header__menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 120; display: flex; flex-direction: column; gap: 6px; min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 8px; background: var(--ac-bg-panel); border: 1px solid var(--ac-border-btn); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.ac-header__menu .ac-btn { justify-content: flex-start; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.ac-header__menu-info { font-size: 12px; color: var(--ac-text-muted); padding: 2px 4px; }
+.ac-header__menu-info strong { color: var(--ac-text); }
+.hooks { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.hooks p { margin: 0; }
+.hooks code { font: 12px var(--ac-font-mono); overflow-wrap: anywhere; }
+.hooks__reason { color: var(--ac-text-muted); }
+.hooks__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hooks__error { color: var(--ac-status-needs-you); }
+.hooks__notes { margin: 0; padding-left: 18px; color: var(--ac-text-muted); }
+.hooks__label { font-size: 11px; color: var(--ac-text-subtle); }
+.hooks__json { margin: 0; max-height: 240px; overflow: auto; padding: 8px; background: var(--ac-bg-card); border: 1px solid var(--ac-border); border-radius: 6px; font: 12px var(--ac-font-mono); white-space: pre; }

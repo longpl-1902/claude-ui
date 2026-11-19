@@ -14,6 +14,8 @@ import { seedMockAccounts } from './seedAccounts'
 import { seedDemoTeam } from './seedTeam'
 
 beforeEach(() => {
+  // The header moves secondary items into the overflow menu below 1300 px (jsdom defaults to 1024).
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
   resetConsoleStore()
   seedDemoTeam()
   seedMockAccounts()
