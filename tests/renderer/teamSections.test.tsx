@@ -24,6 +24,14 @@ describe('R-08 TeamHeader', () => {
     expect(chip).toBeInTheDocument()
   })
 
+  it('uses a 20px chip avatar and a decorative separator', () => {
+    const { container } = render(<TeamHeader />)
+    const avatar = screen.getByRole('button', { name: /Manage accounts/ }).firstElementChild as HTMLElement
+    expect(avatar.style.width).toBe('20px')
+    expect(avatar.style.height).toBe('20px')
+    expect(container.querySelector('.ac-header__sep')).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('shows the counters: 6 agents, 3 running, 1 needs you, Tokens 1.12M', () => {
     const { container } = render(<TeamHeader />)
     expect(container).toHaveTextContent(/6\s*agents/)
