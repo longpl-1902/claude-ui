@@ -1,16 +1,7 @@
 import { matchFolder, normalizeFolder, type FolderResolution, type MatchOptions } from './folderRules'
-import type { FolderRule, SafetySettings } from './types'
+import type { FolderRule, LaunchBlock, LaunchCheck, LaunchWarning, SafetySettings } from './types'
 
-export type LaunchWarning = 'personal-in-company-folder'
-export type LaunchBlock = 'unknown-account' | 'account-locked'
-
-// Structurally identical to the T01 contract type in @shared/types.
-export interface LaunchCheck {
-  allowed: boolean
-  blockedReason?: LaunchBlock
-  warnings: LaunchWarning[]
-  matched: FolderResolution
-}
+export type { LaunchBlock, LaunchCheck, LaunchWarning }
 
 export interface SafetyProfile {
   id: string

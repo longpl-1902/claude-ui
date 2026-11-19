@@ -1,16 +1,11 @@
-import type { FolderRule } from './types'
+import type { FolderResolution, FolderRule } from './types'
 
 export interface MatchOptions {
   home: string
   caseInsensitive: boolean
 }
 
-// Structurally identical to the T01 contract types in @shared/types.
-export interface FolderResolution {
-  accountId: string | 'ask'
-  ruleIndex: number
-  pattern?: string
-}
+export type { FolderResolution }
 
 function cleanSeparators(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/{2,}/g, '/')
