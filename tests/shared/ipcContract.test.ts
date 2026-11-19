@@ -64,13 +64,11 @@ describe('R-01 IPC contract v2', () => {
     expect(INVOKE_CHANNELS).not.toContain(channel)
   })
 
-  it('R-01 PUSH_CHANNELS is exactly teamEvent, the four v2 pushes and the three v3 pushes', () => {
-    expect([...PUSH_CHANNELS].sort()).toEqual(
-      [
-        IPC.teamEvent, 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit',
-        'team:changed', 'transcripts:sessions-changed', 'usage:changed'
-      ].sort()
-    )
+  it('R-01 PUSH_CHANNELS contains teamEvent, the four v2 pushes and the three v3 pushes (v4 adds more, see below)', () => {
+    for (const c of [
+      IPC.teamEvent, 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit',
+      'team:changed', 'transcripts:sessions-changed', 'usage:changed'
+    ]) expect(PUSH_CHANNELS as readonly string[]).toContain(c)
   })
 
   it('R-01 INVOKE_CHANNELS = every channel minus PUSH_CHANNELS (no gaps, no duplicates)', () => {
@@ -152,7 +150,7 @@ describe('R-01 IPC contract v3', () => {
     for (const c of ['team:event', 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit', ...Object.values(V3_PUSH)]) {
       expect(PUSH_CHANNELS as readonly string[]).toContain(c)
     }
-    expect(PUSH_CHANNELS.length).toBe(8)
+    expect(PUSH_CHANNELS.length).toBeGreaterThanOrEqual(8)
   })
 
   it('R-01 the preload bridge references every new channel constant', () => {
@@ -163,6 +161,94 @@ describe('R-01 IPC contract v3', () => {
   it('R-01 the preload exposes the transcripts / usage / team.onChanged surface', () => {
     const src = preload()
     for (const name of ['transcripts', 'usage', 'listSessions', 'select', 'getSelection', 'onSessionsChanged', 'getToday', 'onChanged']) {
+      expect(src, `preload should define ${name}`).toMatch(new RegExp(String.raw`\b${name}\b`))
+    }
+  })
+})
+
+// ---- Phase 3b/4/5 (contract v4, T01) ----
+// Assumption: IPC keys are the camelCase of the channel (control:set-model -> controlSetModel).
+
+const V4_INVOKE = {
+  controlStart: 'control:start',
+  controlSend: 'control:send',
+  controlInterrupt: 'control:interrupt',
+  controlStop: 'control:stop',
+  controlAnswer: 'control:answer',
+  controlSetModel: 'control:set-model',
+  controlSetMode: 'control:set-mode',
+  controlList: 'control:list',
+  controlGetStream: 'control:get-stream',
+  sessionKillExternal: 'session:kill-external',
+  gitWatch: 'git:watch',
+  gitCompare: 'git:compare',
+  hooksStatus: 'hooks:status',
+  hooksPreview: 'hooks:preview',
+  hooksApply: 'hooks:apply',
+  attentionGet: 'attention:get',
+  attentionGetPrefs: 'attention:get-prefs',
+  attentionSetPrefs: 'attention:set-prefs'
+} as const
+
+const V4_PUSH = {
+  controlChanged: 'control:changed',
+  controlStream: 'control:stream',
+  gitChanged: 'git:changed',
+  hooksChanged: 'hooks:changed',
+  attentionChanged: 'attention:changed',
+  attentionFocus: 'attention:focus'
+} as const
+
+describe('R-01 IPC contract v4', () => {
+  const ipc = IPC as Record<string, string>
+  const preload = (): string => readFileSync(resolve(process.cwd(), 'src/preload/index.ts'), 'utf8')
+
+  it.each(Object.entries(V4_INVOKE))('R-01 IPC.%s = %s and is an invoke channel', (key, channel) => {
+    expect(ipc[key]).toBe(channel)
+    expect(INVOKE_CHANNELS as readonly string[]).toContain(channel)
+    expect(PUSH_CHANNELS as readonly string[]).not.toContain(channel)
+  })
+
+  it.each(Object.entries(V4_PUSH))('R-01 IPC.%s = %s is a push-only channel', (key, channel) => {
+    expect(ipc[key]).toBe(channel)
+    expect(PUSH_CHANNELS as readonly string[]).toContain(channel)
+    expect(INVOKE_CHANNELS as readonly string[]).not.toContain(channel)
+  })
+
+  it('R-01 PUSH_CHANNELS = v2 + v3 pushes + the six v4 pushes (14), no duplicates', () => {
+    expect([...PUSH_CHANNELS].sort()).toEqual(
+      [
+        'team:event', 'accounts:changed', 'accounts:sign-in-status', 'pty:data', 'pty:exit',
+        'team:changed', 'transcripts:sessions-changed', 'usage:changed',
+        ...Object.values(V4_PUSH)
+      ].sort()
+    )
+    expect(PUSH_CHANNELS.length).toBe(14)
+  })
+
+  it('R-01 INVOKE_CHANNELS = every channel minus pushes, still unique, v4 names match the pattern', () => {
+    const all = Object.values(IPC)
+    expect(new Set(all).size).toBe(all.length)
+    const expected = all.filter((c) => !(PUSH_CHANNELS as readonly string[]).includes(c))
+    expect([...INVOKE_CHANNELS].sort()).toEqual([...expected].sort())
+    for (const c of [...Object.values(V4_INVOKE), ...Object.values(V4_PUSH)]) expect(c).toMatch(/^[a-z]+:[a-z-]+$/)
+  })
+
+  it('R-01 the legacy agent:*, team:pause-all and worktree:open-in-editor channels are unchanged', () => {
+    for (const c of ['agent:pause', 'team:pause-all', 'worktree:open-in-editor']) expect(INVOKE_CHANNELS as readonly string[]).toContain(c)
+  })
+
+  it('R-01 the preload bridge references every v4 channel constant', () => {
+    const src = preload()
+    for (const key of [...Object.keys(V4_INVOKE), ...Object.keys(V4_PUSH)]) expect(src, `preload should use IPC.${key}`).toContain(`IPC.${key}`)
+  })
+
+  it('R-01 the preload exposes control / git / hooks / attention / session.killExternal', () => {
+    const src = preload()
+    for (const name of [
+      'control', 'git', 'hooks', 'attention', 'killExternal', 'start', 'send', 'interrupt', 'stop', 'answer', 'setModel',
+      'setMode', 'getStream', 'watch', 'compare', 'status', 'preview', 'apply', 'getPrefs', 'setPrefs', 'onStream', 'onFocus'
+    ]) {
       expect(src, `preload should define ${name}`).toMatch(new RegExp(String.raw`\b${name}\b`))
     }
   })
