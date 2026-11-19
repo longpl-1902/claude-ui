@@ -139,7 +139,7 @@ describe('R-02 parseOutputLine: control messages', () => {
     expect(m === null || m.t !== 'can-use-tool').toBe(true)
   })
   it('R-02 control_response success / error -> control-response', () => {
-    expect(parse({ type: 'control_response', response: { subtype: 'success', request_id: 'req_7', response: { still_queued: [] } } })).toEqual({ t: 'control-response', requestId: 'req_7', ok: true })
+    expect(parse({ type: 'control_response', response: { subtype: 'success', request_id: 'req_7', response: { still_queued: [] } } })).toEqual({ t: 'control-response', requestId: 'req_7', ok: true, body: { still_queued: [] } })
     expect(parse({ type: 'control_response', response: { subtype: 'error', request_id: 'req_8', error: 'nope' } })).toEqual({ t: 'control-response', requestId: 'req_8', ok: false, error: 'nope' })
   })
 })
