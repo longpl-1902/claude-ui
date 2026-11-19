@@ -1,208 +1,233 @@
 // @vitest-environment jsdom
 import './jestDom'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockAccountsSnapshot } from '@shared/mock'
+import type { AccountsSnapshot, DetectedLogin, SignInStatus } from '@shared/types'
 import { AccountsView } from '@renderer/screens/AccountsView'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { seedMockAccounts } from './seedAccounts'
 
+vi.mock('@renderer/components/terminal/TerminalView', () => ({
+  TerminalView: ({ ptyId, ariaLabel }: { ptyId: string; ariaLabel?: string }) => (
+    <div data-testid="term" aria-label={ariaLabel}>
+      {ptyId}
+    </div>
+  )
+}))
+
 const PRIVACY =
   'Agent Console reads only the email and organization name. Login tokens stay where Claude Code stored them.'
+const PERSONAL = '~/.claude-personal'
+
+const api = {
+  scan: vi.fn(),
+  linkDetected: vi.fn(),
+  startSignIn: vi.fn(),
+  checkSignIn: vi.fn(),
+  reopenSignIn: vi.fn(),
+  cancelSignIn: vi.fn()
+}
 
 function setup() {
   useConsoleStore.getState().navigate('accounts')
   return render(<AccountsView />)
 }
 
+function seedDetected(detected: DetectedLogin[]): void {
+  const snap: AccountsSnapshot = { ...structuredClone(mockAccountsSnapshot), detected }
+  useConsoleStore.getState().hydrateAccounts(snap)
+}
+
+const push = (s: SignInStatus) => act(() => useConsoleStore.getState().applySignInStatus(s))
+
 beforeEach(() => {
   resetConsoleStore()
   seedMockAccounts()
+  for (const f of Object.values(api)) f.mockReset()
+  api.scan.mockResolvedValue(structuredClone(mockAccountsSnapshot))
+  api.linkDetected.mockResolvedValue({ ok: true, id: 'company' })
+  api.startSignIn.mockResolvedValue({ ok: true })
+  api.checkSignIn.mockResolvedValue({ configDir: PERSONAL, step: 'waiting' })
+  api.reopenSignIn.mockResolvedValue({ ok: true })
+  api.cancelSignIn.mockResolvedValue({ ok: true })
+  ;(window as unknown as { api?: unknown }).api = { accounts: api }
+})
+afterEach(() => {
+  delete (window as unknown as { api?: unknown }).api
 })
 
-describe('R-12 / R-15 Accounts screen: static content', () => {
-  it('renders the key texts', () => {
+describe('Accounts screen: static content', () => {
+  it('renders headings, privacy line and Scan again', () => {
     const { container } = setup()
     expect(screen.getByRole('heading', { name: 'Claude accounts' })).toBeInTheDocument()
     expect(container).toHaveTextContent('Each account signs in once and keeps its own login in a separate config folder.')
     expect(screen.getByText('Detected logins')).toBeInTheDocument()
-    expect(screen.getAllByText('~/.claude').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('~/.claude-personal').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Use this' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.getByText(PRIVACY)).toBeInTheDocument()
-    expect(screen.getAllByText('Company').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Personal').length).toBeGreaterThan(0)
-    expect(screen.getByText('Default')).toBeInTheDocument()
-    expect(screen.getByText('Pick the account by folder')).toBeInTheDocument()
-    expect(screen.getByText('~/work/hicas/**')).toBeInTheDocument()
-    expect(screen.getByText('Ask me')).toBeInTheDocument()
-    expect(screen.getByText('Safety')).toBeInTheDocument()
-    expect(container).toHaveTextContent('Pause the team and ask me')
-    expect(screen.getByText('Running now')).toBeInTheDocument()
-    expect(screen.getByText('sheet-export')).toBeInTheDocument()
-    expect(container).toHaveTextContent(/Company\s*·\s*6 agents/)
-    expect(container).toHaveTextContent(/Personal\s*·\s*1 agent(?!s)/)
-  })
-
-  it('shows detected logins info: email, org, warning for the unsigned folder and sources', () => {
-    const { container } = setup()
-    expect(container).toHaveTextContent('you@company.com · [COMPANY ORG]')
-    expect(container).toHaveTextContent('Folder set in VS Code, not signed in yet')
-    expect(container).toHaveTextContent('Found in: VS Code extension, Claude Code CLI (default folder)')
-    expect(container).toHaveTextContent('Found in: .vscode/settings.json in ~/code/personal/revit-playground')
-  })
-
-  it('has the header buttons', () => {
-    setup()
-    expect(screen.getByRole('button', { name: /Team view/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '+ Add account' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Scan again/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '+ Add rule' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Rename & color' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: 'Sign in again' })).toHaveLength(2)
-  })
-
-  it('shows no fake usage percentages (SPEC GAP, spec says do not fake limits)', () => {
-    const { container } = setup()
-    expect(container.textContent).not.toMatch(/\d+\s*%/)
-    expect(container.querySelector('[role="progressbar"], progress, meter')).toBeNull()
-  })
-
-  it('hides Plan when unavailable and shows it when defined', () => {
-    const { unmount } = setup()
-    expect(screen.queryByText('Plan')).toBeNull()
-    expect(screen.getAllByText('Status').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Config folder').length).toBeGreaterThan(0)
-    unmount()
-
-    const snap = structuredClone(mockAccountsSnapshot)
-    snap.accounts[0]!.plan = 'Max 5x'
-    useConsoleStore.getState().hydrateAccounts(snap)
-    render(<AccountsView />)
-    expect(screen.getByText('Plan')).toBeInTheDocument()
-    expect(screen.getByText('Max 5x')).toBeInTheDocument()
-  })
-
-  it('usage area: sign-in hint when not signed in, tokens today once linked', async () => {
-    setup()
-    expect(screen.getAllByText('Sign in from Detected logins above to see usage.')).toHaveLength(2)
-    expect(screen.getAllByText('Not connected')).toHaveLength(2)
-    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
-    expect(screen.getByText('Signed in')).toBeInTheDocument()
-    expect(screen.getByText('Tokens used today')).toBeInTheDocument()
-    expect(screen.getByText('1.12M')).toBeInTheDocument()
-    expect(screen.getAllByText('Sign in from Detected logins above to see usage.')).toHaveLength(1)
-  })
-
-  it('folder rules are a real table with 3 rows', () => {
-    setup()
-    const table = screen.getByRole('table')
-    for (const h of ['Folder pattern', 'Account', 'Note'])
-      expect(within(table).getByRole('columnheader', { name: h })).toBeInTheDocument()
-    expect(within(table).getAllByRole('row')).toHaveLength(4)
-    expect(within(table).getByText('anything else')).toBeInTheDocument()
-    expect(within(table).getByText('Prompt when opening a new folder')).toBeInTheDocument()
   })
 })
 
-describe('R-12 / R-15 Accounts screen: interactions', () => {
-  it('Use this links the detected login', async () => {
+describe('Detected logins', () => {
+  it('shows email · org, sources and Use this / Sign in actions', () => {
+    const { container } = setup()
+    expect(container).toHaveTextContent('you@company.com · [COMPANY ORG]')
+    expect(container).toHaveTextContent('Found in: VS Code extension, Claude Code CLI (default folder)')
+    expect(container).toHaveTextContent('Found in: .vscode/settings.json in ~/code/personal/revit-playground')
+    expect(screen.getByRole('button', { name: 'Use this' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('shows just the email when there is no org', () => {
+    seedDetected([{ configDir: '~/.claude', email: 'a@b.com', sources: ['x'], signedIn: true }])
+    const { container } = setup()
+    expect(container).toHaveTextContent('a@b.com')
+    expect(container).not.toHaveTextContent('a@b.com ·')
+  })
+
+  it('distinguishes not-created from not-signed-in and shows warning notes', () => {
+    seedDetected([
+      {
+        configDir: '~/w1',
+        sources: ['workspace'],
+        signedIn: false,
+        exists: false,
+        warnings: ['VS Code ignores this machine-scoped setting in a workspace.']
+      },
+      { configDir: '~/w2', sources: ['CLI'], signedIn: false, exists: true }
+    ])
+    const { container } = setup()
+    expect(container).toHaveTextContent('Folder set but not created yet')
+    expect(container).toHaveTextContent('Not signed in yet')
+    expect(screen.getByRole('note')).toHaveTextContent('VS Code ignores this machine-scoped setting')
+  })
+
+  it('shows the linked pill when a profile is linked', () => {
+    const snap = structuredClone(mockAccountsSnapshot)
+    snap.detected[0]!.linkedAccountId = 'company'
+    useConsoleStore.getState().hydrateAccounts(snap)
     setup()
-    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
     expect(screen.getByText('Linked as Company')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Use this' })).toBeNull()
   })
 
-  it('sign-in flow: Sign in -> Check now -> Done', async () => {
+  it('shows the loading and empty states', () => {
+    resetConsoleStore()
+    const { unmount } = setup()
+    expect(screen.getByText('Looking for Claude config folders…')).toBeInTheDocument()
+    unmount()
+    seedDetected([])
+    setup()
+    expect(screen.getByText(/No Claude config folders found/)).toBeInTheDocument()
+  })
+
+  it('Scan again calls the api and is busy until it resolves', async () => {
+    let resolve!: (v: AccountsSnapshot) => void
+    api.scan.mockReturnValue(new Promise<AccountsSnapshot>((r) => (resolve = r)))
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /Scan again/ }))
+    expect(api.scan).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /Scanning/ })).toBeDisabled()
+    await act(async () => resolve(structuredClone(mockAccountsSnapshot)))
+    expect(screen.getByRole('button', { name: /Scan again/ })).toBeEnabled()
+  })
+
+  it('Use this calls linkDetected with the dir', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+    expect(api.linkDetected).toHaveBeenCalledWith({ configDir: '~/.claude' })
+  })
+})
+
+describe('Sign-in panel', () => {
+  async function openPanel() {
+    const view = setup()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    return view
+  }
+
+  it('Sign in opens the waiting panel with 3 steps and the command', async () => {
+    const { container } = await openPanel()
+    expect(api.startSignIn).toHaveBeenCalledWith(PERSONAL)
+    expect(screen.getByText('Finish signing in your browser')).toBeInTheDocument()
+    expect(container).toHaveTextContent(`CLAUDE_CONFIG_DIR=${PERSONAL} claude auth login`)
+    expect(container.querySelectorAll('ol li')).toHaveLength(3)
+    expect(container.querySelectorAll('ol li[aria-current="step"]')).toHaveLength(1)
+    expect(container.querySelector('[aria-live="polite"]')).not.toBeNull()
+  })
+
+  it('uses the bare command for the default dir', async () => {
+    seedDetected([{ configDir: '~/.claude', sources: ['CLI'], signedIn: false, isDefaultDir: true }])
     const { container } = setup()
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(screen.getByText('Finish signing in your browser')).toBeInTheDocument()
-    expect(container).toHaveTextContent('CLAUDE_CONFIG_DIR=~/.claude-personal claude')
-    expect(container).toHaveTextContent('/login')
-    const live = container.querySelector('[aria-live="polite"]')
-    expect(live).not.toBeNull()
-    const steps = container.querySelectorAll('ol [aria-current="step"], ol[aria-current="step"], ol li[aria-current="step"]')
-    expect(steps).toHaveLength(1)
-    expect(container.querySelectorAll('ol li')).toHaveLength(3)
-    expect(screen.getByRole('button', { name: 'Open browser again' })).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Check now' }))
-    expect(screen.getByText('Signed in as you@gmail.com')).toBeInTheDocument()
-    expect(container).toHaveTextContent('Saved as “Personal”.')
-    expect(container).toHaveTextContent('~/code/personal/')
-    expect(screen.getByText('Linked as Personal')).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
-    expect(screen.queryByText('Signed in as you@gmail.com')).toBeNull()
-    expect(screen.queryByText('Finish signing in your browser')).toBeNull()
+    expect(container.querySelector('.ac-acc-cmd')?.textContent).toBe('claude auth login')
   })
 
-  it('sign-in flow: Cancel closes the panel and resets the step', async () => {
-    setup()
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+  it('Check now, Open browser again and Cancel call the api', async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Check now' }))
+    expect(api.checkSignIn).toHaveBeenCalledWith(PERSONAL)
+    await userEvent.click(screen.getByRole('button', { name: 'Open browser again' }))
+    expect(api.reopenSignIn).toHaveBeenCalledWith(PERSONAL)
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(api.cancelSignIn).toHaveBeenCalledWith(PERSONAL)
     expect(screen.queryByText('Finish signing in your browser')).toBeNull()
     expect(useConsoleStore.getState().signIn.step).toBe('none')
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
-  it('limit policy radiogroup selects Wait for the reset', async () => {
-    setup()
-    expect(screen.getByRole('radiogroup')).toBeInTheDocument()
-    expect(screen.getAllByRole('radio')).toHaveLength(3)
-    const pause = screen.getByRole('radio', { name: /Pause the team and ask me/ })
-    const wait = screen.getByRole('radio', { name: /Wait for the reset, then resume/ })
-    expect(pause).toBeChecked()
-    expect(wait).not.toBeChecked()
-    await userEvent.click(wait)
-    expect(wait).toBeChecked()
-    expect(pause).not.toBeChecked()
-    expect(useConsoleStore.getState().accounts.limitPolicy).toBe('wait')
+  it('a done push shows the signed-in view, Use this and Done', async () => {
+    const { container } = await openPanel()
+    push({ configDir: PERSONAL, step: 'done', email: 'you@gmail.com' })
+    expect(screen.getByText('Signed in as you@gmail.com')).toBeInTheDocument()
+    expect(screen.queryByText('Finish signing in your browser')).toBeNull()
+    expect(container.querySelectorAll('ol li')).toHaveLength(3)
+    const useBtns = screen.getAllByRole('button', { name: 'Use this' })
+    await userEvent.click(useBtns[useBtns.length - 1]!)
+    expect(api.linkDetected).toHaveBeenCalledWith({ configDir: PERSONAL })
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByText('Signed in as you@gmail.com')).toBeNull()
   })
 
-  it('limit policy radios: one Tab stop and arrow keys move the selection', async () => {
-    setup()
-    const pause = screen.getByRole('radio', { name: /Pause the team and ask me/ })
-    const wait = screen.getByRole('radio', { name: /Wait for the reset, then resume/ })
-    pause.focus()
-    await userEvent.keyboard('{ArrowDown}')
-    expect(wait).toBeChecked()
-    expect(wait).toHaveFocus()
-    expect(useConsoleStore.getState().accounts.limitPolicy).toBe('wait')
-    await userEvent.keyboard('{ArrowUp}')
-    expect(pause).toBeChecked()
-    // only the checked radio is in the tab order
-    const radios = screen.getAllByRole('radio')
-    expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1)
-    expect(new Set(radios.map((r) => (r as HTMLInputElement).name)).size).toBe(1)
+  it('a done push for a linked dir shows Saved as the profile name', async () => {
+    await openPanel()
+    const snap = structuredClone(mockAccountsSnapshot)
+    snap.detected[1]!.linkedAccountId = 'personal'
+    snap.detected[1]!.signedIn = true
+    snap.detected[1]!.email = 'you@gmail.com'
+    act(() => useConsoleStore.getState().hydrateAccounts(snap))
+    push({ configDir: PERSONAL, step: 'done', email: 'you@gmail.com' })
+    expect(screen.getByText('Saved as “Personal”.')).toBeInTheDocument()
   })
 
-  it('Safety checkboxes are real and toggle the store', async () => {
-    setup()
-    const boxes = screen.getAllByRole('checkbox')
-    expect(boxes).toHaveLength(3)
-    for (const b of boxes) expect(b).toBeChecked()
-    expect(useConsoleStore.getState().accounts.safety.warnPersonalInCompanyFolder).toBe(true)
-    await userEvent.click(boxes[0]!)
-    expect(useConsoleStore.getState().accounts.safety.warnPersonalInCompanyFolder).toBe(false)
-    expect(screen.getAllByRole('checkbox')[0]).not.toBeChecked()
+  it.each([
+    ['login-exited', 'The sign-in process ended before finishing.'],
+    ['pty-unavailable', 'Terminal support (node-pty) is not available.'],
+    ['claude-not-found', 'Could not find the claude CLI.'],
+    ['boom', 'Sign-in failed (boom).']
+  ])('error reason %s shows its message', async (reason, text) => {
+    await openPanel()
+    push({ configDir: PERSONAL, step: 'error', reason })
+    expect(screen.getByText(text)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(api.reopenSignIn).toHaveBeenCalledWith(PERSONAL)
   })
 
-  it('Set as default is disabled for the default account and works for the other', async () => {
-    setup()
-    const buttons = screen.getAllByRole('button', { name: 'Set as default' })
-    expect(buttons).toHaveLength(2)
-    expect(buttons[0]).toBeDisabled()
-    expect(buttons[1]).toBeEnabled()
-    await userEvent.click(buttons[1]!)
-    expect(useConsoleStore.getState().accounts.defaultAccountId).toBe('personal')
+  it('an error returned by startSignIn shows in the panel', async () => {
+    api.startSignIn.mockResolvedValue({ ok: false, reason: 'claude-not-found' })
+    await openPanel()
+    expect(await screen.findByText('Could not find the claude CLI.')).toBeInTheDocument()
   })
 
-  it('the Team view back link navigates to the team screen (R-13)', async () => {
-    setup()
-    await userEvent.click(screen.getByRole('button', { name: /Team view/ }))
-    expect(useConsoleStore.getState().screen).toBe('team')
+  it('the terminal toggle is disabled without a ptyId and embeds TerminalView with one', async () => {
+    await openPanel()
+    expect(screen.getByRole('button', { name: 'Show terminal' })).toBeDisabled()
+    push({ configDir: PERSONAL, step: 'waiting', ptyId: 'pty-7' })
+    expect(screen.getByRole('button', { name: 'Show terminal' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Show terminal' }))
+    expect(screen.getByTestId('term')).toHaveTextContent('pty-7')
+    expect(screen.getByLabelText('Sign-in terminal')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Hide terminal' }))
+    expect(screen.queryByTestId('term')).toBeNull()
   })
 })
