@@ -6,7 +6,10 @@ export const LIVE_THRESHOLDS = {
   leadDoneMs: 30 * 60_000 // the lead after end_turn, quiet this long and no live registry -> done 'ended'
 } as const
 
+export const HOOK_STALE_MS = 30 * 60_000 // a hook permission / notification older than this is ignored
+
 export type LiveReason =
+  | 'hook-permission' | 'hook-notification'
   | 'finished' | 'ended' | 'waiting-for-you' | 'question' | 'api-error' | 'tool' | 'thinking'
   | 'busy' | 'idle' | 'interrupted' | 'stale' | 'no-activity'
 
@@ -19,6 +22,10 @@ export function deriveLiveStatus(rt: AgentRuntime, nowMs: number, th: { [K in ke
   const reg = rt.registry
 
   if (rt.finished) return { status: 'done', reason: 'finished' }
+  const hp = rt.hook?.pendingPermission
+  if (hp && nowMs - hp.sinceMs <= HOOK_STALE_MS) return { status: 'needs-you', reason: 'hook-permission', detail: hp.toolName }
+  const hn = rt.hook?.notification
+  if (hn && nowMs - hn.sinceMs <= HOOK_STALE_MS) return { status: 'needs-you', reason: 'hook-notification', detail: hn.type }
   if (reg?.status === 'waiting') return { status: 'needs-you', reason: 'waiting-for-you', detail: reg.waitingFor }
 
   const ask = rt.openTools.find((t) => (NEEDS_YOU_TOOLS as readonly string[]).includes(t.name))
@@ -54,6 +61,8 @@ export function deriveLiveStatus(rt: AgentRuntime, nowMs: number, th: { [K in ke
 export function reasonLabel(reason: LiveReason, detail?: string): string {
   const d = detail ? `: ${detail}` : ''
   switch (reason) {
+    case 'hook-permission': return `Waiting for permission${d}`
+    case 'hook-notification': return 'Needs your input'
     case 'finished': return 'finished'
     case 'ended': return 'session ended'
     case 'waiting-for-you': return `waiting for you${d}`

@@ -2,15 +2,19 @@ import { LEAD_ID, tokenHeadline } from '../../shared/teamDefaults'
 import type {
   ActivityItem,
   Agent,
+  AgentRuntime,
   AgentEvent,
   ChangedFile,
   ConsoleLine,
+  HookEvent,
   LastTurn,
   MailboxMessage,
   OpenTool,
   RegistryStatus,
   TeamSnapshot
 } from '../../shared/types'
+import { createSpanTracker } from './activitySpans'
+import { createTaskTracker } from './taskTracker'
 import type { TokenUsage, ToolResultRec, TranscriptRecord } from './records'
 
 export interface SubagentMeta {
@@ -57,6 +61,7 @@ export interface SessionModel {
   setRegistry(entry: { status?: RegistryStatus; waitingFor?: string; updatedMs: number } | null): void
   reset(source: 'lead' | string): void
   markHistoryTruncated(): void
+  applyHook(e: HookEvent): boolean
   isDirty(): boolean
   snapshot(nowMs: number): TeamSnapshot
 }
@@ -120,7 +125,14 @@ interface AgentState {
   firstTask?: { text: string; ms: number }
   sends: { ms: number; to: string; text: string }[]
   titles: { custom?: string; ai?: string; agent?: string }
+  hook?: NonNullable<AgentRuntime['hook']>
+  hookActivityMs?: number
+  hookFinished?: boolean
 }
+
+const HOOK_ACTIVE_MS = 10 * 60_000
+const NEEDS_YOU_NOTIFICATIONS = new Set(['permission_prompt', 'agent_needs_input', 'elicitation_dialog'])
+const CLEAR_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionDenied', 'UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd'])
 
 const newAgent = (id: string, order: number): AgentState => ({
   id,
@@ -157,6 +169,17 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
   let registry: { status?: RegistryStatus; waitingFor?: string; updatedMs: number } | null = null
   let truncated = false
   let dirty = true
+  let lastHookMs: number | undefined
+  let taskTracker = createTaskTracker()
+  let spanTracker = createSpanTracker()
+  // Tracker calls per source, so reset(source) can rebuild the trackers from the remaining sources.
+  const trackerOps = new Map<string, ((t: { tasks: typeof taskTracker; spans: typeof spanTracker }) => void)[]>()
+  const track = (src: string, op: (t: { tasks: typeof taskTracker; spans: typeof spanTracker }) => void): void => {
+    let l = trackerOps.get(src)
+    if (!l) trackerOps.set(src, (l = []))
+    l.push(op)
+    op({ tasks: taskTracker, spans: spanTracker })
+  }
 
   const get = (id: string): AgentState => {
     let a = agents.get(id)
@@ -249,12 +272,15 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
           pushEvent(src, ms, withTokens(base('message')))
           pushConsole(src, ms, a.id, clip(rec.text, 200))
         }
+        const accepted: { id: string; name: string }[] = []
         for (const tu of rec.toolUses) {
           if (a.toolIds.has(tu.id)) continue
           // A fork file repeats its spawning Agent call: it belongs to the spawner, not to this agent.
           const owner = toolOwner.get(tu.id)
           if ((owner !== undefined && owner !== a.id) || (a.meta?.toolUseId === tu.id && tu.name === 'Agent')) continue
           a.toolIds.add(tu.id)
+          accepted.push({ id: tu.id, name: tu.name })
+          track(src, (t) => t.tasks.onToolUse(a.id, tu, ms))
           toolOwner.set(tu.id, a.id)
           const item: ActivityItem = { time: hms(ms), tool: tu.name, target: tu.target, result: '…', failed: false }
           a.activity.push(item)
@@ -277,6 +303,7 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
           }
           if (tu.send) a.sends.push({ ms, to: tu.send.to, text: tu.send.text })
         }
+        if (accepted.length > 0) track(src, (t) => t.spans.onAssistant(a.id, ms, accepted))
         if (a.sends.length > 1000) a.sends.splice(0, a.sends.length - 500)
         if (rec.stopReason === 'end_turn' || rec.stopReason === 'stop_sequence') a.lastTurn = 'assistant_end'
         else if (rec.toolUses.length > 0 || rec.stopReason === 'tool_use') a.lastTurn = 'assistant_tool_use'
@@ -286,6 +313,12 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       case 'tool_results': {
         for (const r of rec.results) {
           const info = a.toolInfo.get(r.toolUseId)
+          if (info) {
+            track(src, (t) => {
+              t.tasks.onToolResult(a.id, r, ms)
+              t.spans.onToolResult(a.id, r.toolUseId, ms, r.isError)
+            })
+          }
           // Sub-agent results carry no toolUseResult: take the +/- counts from the tool_use input.
           const inputEdit = !r.fileChange && !r.isError && !r.interrupted && info?.edit && info.filePath ? info : undefined
           const text = inputEdit ? `+${inputEdit.edit!.added} −${inputEdit.edit!.removed}` : resultText(r)
@@ -351,6 +384,7 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
         if (rec.kind === 'task-notification' || rec.kind === 'compact-summary') return
         a.lastTurn = 'user'
         a.errorKind = undefined
+        track(src, (t) => t.spans.onPrompt(a.id, ms))
         if (rec.kind === 'first-task') {
           if (!a.firstTask) a.firstTask = { text: rec.text, ms }
         } else if (src === 'lead') {
@@ -361,6 +395,7 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       }
       case 'interrupted': {
         a.openTools = []
+        track(src, (t) => t.spans.onInterrupted(a.id, ms))
         a.lastTurn = 'interrupted'
         a.errorKind = undefined
         pushEvent(src, ms, base('status', { result: 'interrupted' }))
@@ -388,6 +423,13 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
     consoleLines = consoleLines.filter((e) => e.src !== id)
     const fresh = newAgent(id, a.order)
     if (a.meta) fresh.meta = a.meta
+    if (a.hook) fresh.hook = a.hook
+    if (a.hookActivityMs !== undefined) fresh.hookActivityMs = a.hookActivityMs
+    if (a.hookFinished) fresh.hookFinished = true
+    trackerOps.delete(id)
+    taskTracker = createTaskTracker()
+    spanTracker = createSpanTracker()
+    for (const ops of trackerOps.values()) for (const op of ops) op({ tasks: taskTracker, spans: spanTracker })
     agents.set(id, fresh)
   }
 
@@ -544,7 +586,7 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       const name = nameOf(a)
       const words = name.split(/[\s\-_.]+/).filter(Boolean)
       const initials = (words.slice(0, 2).map((w) => w[0]!).join('') || name[0] || '?').toUpperCase()
-      const fin = finishedMs.has(a.id)
+      const fin = finishedMs.has(a.id) || a.hookFinished === true
       const running = !fin && (a.openTools.length > 0 || a.lastTurn === 'user' || a.lastTurn === 'tool_result')
       const startedMs = a.startedMs ?? 0
       const elapsedSec = a.startedMs === undefined ? 0 : Math.max(0, Math.round(((running ? nowMs : (a.lastMs ?? startedMs)) - startedMs) / 1000))
@@ -564,12 +606,17 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       const runtime: Agent['runtime'] = {
         kind,
         startedMs,
-        lastActivityMs: a.lastMs ?? 0,
+        lastActivityMs: Math.max(a.lastMs ?? 0, a.hookActivityMs ?? 0),
         openTools: a.openTools.map((t) => ({ ...t })),
         lastTurn: a.lastTurn
       }
       if (a.lastTurn === 'api_error' && a.errorKind !== undefined) runtime.errorKind = a.errorKind
       if (fin) runtime.finished = true
+      if (a.hook) {
+        runtime.hook = { lastEventMs: a.hook.lastEventMs }
+        if (a.hook.pendingPermission) runtime.hook.pendingPermission = { ...a.hook.pendingPermission }
+        if (a.hook.notification) runtime.hook.notification = { ...a.hook.notification }
+      }
       if (background.has(a.id)) runtime.background = true
       if (isLead && registry) {
         runtime.registry = {
@@ -599,7 +646,8 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
         files,
         messages: m,
         depth: depth.get(a.id) ?? 0,
-        runtime
+        runtime,
+        spans: spanTracker.spans(a.id, nowMs)
       }
       if (!isLead) out.parentId = parent.get(a.id)!
       if (a.cwd !== undefined) out.cwd = a.cwd
@@ -618,11 +666,12 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       events: outEvents,
       console: outConsole,
       worktrees: [],
-      tasks: [],
+      tasks: taskTracker.tasks(),
       overlaps: [],
       timelineTicks: [],
       historyTruncated: truncated
     }
+    if (lastHookMs !== undefined && nowMs - lastHookMs <= HOOK_ACTIVE_MS) snap.hooksActive = true
     if (cwd !== undefined) snap.cwd = cwd
     if (title !== undefined) snap.title = title
     return snap
@@ -658,6 +707,31 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
     markHistoryTruncated() {
       truncated = true
       dirty = true
+    },
+    applyHook(e) {
+      if (e.sessionId !== opts.sessionId) return false
+      const target = e.agentId !== undefined && e.agentId !== LEAD_ID && agents.has(e.agentId) ? agents.get(e.agentId)! : agents.get(LEAD_ID)!
+      const touch = (a: AgentState): NonNullable<AgentState['hook']> => {
+        a.hook = { ...(a.hook ?? { lastEventMs: 0 }), lastEventMs: e.receivedMs }
+        if (a.hookActivityMs === undefined || e.receivedMs > a.hookActivityMs) a.hookActivityMs = e.receivedMs
+        return a.hook
+      }
+      const clear = (a: AgentState): void => {
+        const h = touch(a)
+        delete h.pendingPermission
+        delete h.notification
+      }
+      lastHookMs = Math.max(lastHookMs ?? 0, e.receivedMs)
+      const h = touch(target)
+      if (e.event === 'PermissionRequest') h.pendingPermission = { toolName: e.toolName ?? '', sinceMs: e.receivedMs }
+      else if (e.event === 'Notification' && e.notificationType !== undefined && NEEDS_YOU_NOTIFICATIONS.has(e.notificationType)) {
+        h.notification = { type: e.notificationType, sinceMs: e.receivedMs }
+      } else if (e.event === 'Stop' || e.event === 'SessionEnd') {
+        for (const a of agents.values()) if (a === target || a.hook) clear(a)
+      } else if (CLEAR_EVENTS.has(e.event)) clear(target)
+      else if (e.event === 'SubagentStop' && target.id !== LEAD_ID) target.hookFinished = true
+      dirty = true
+      return true
     },
     isDirty: () => dirty,
     snapshot(nowMs) {
