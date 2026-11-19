@@ -151,3 +151,27 @@ describe('R-17 hooks service: apply and onChanged', () => {
     expect(seen).toHaveLength(0)
   })
 })
+
+describe('R-17 hooks service: event fan-out', () => {
+  it('R-17 handleEvent forwards each event to onHook and notifies onChanged at most once per 2 s', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const seen: unknown[] = []
+      s.svc.onChanged((st) => seen.push(st))
+      await s.svc.status(ROOT)
+      const ev = { event: 'Stop', sessionId: 'sid', receivedMs: 1 } as never
+      s.svc.handleEvent(ev)
+      s.svc.handleEvent(ev)
+      s.svc.handleEvent(ev)
+      expect(s.onHook).toHaveBeenCalledTimes(3)
+      expect(seen).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(2100)
+      expect(seen).toHaveLength(1)
+      expect(seen[0]).toMatchObject({ projectRoot: ROOT, eventsReceived: 7 })
+      await s.svc.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
