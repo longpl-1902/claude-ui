@@ -11,9 +11,7 @@ import './AccountsView.css'
 export function AccountsView() {
   const [adding, setAdding] = useState(false)
   const accountsError = useConsoleStore((s) => s.accountsError)
-  const clearAccountsError = useConsoleStore(
-    (s) => (s as { clearAccountsError?: () => void }).clearAccountsError
-  )
+  const clearAccountsError = useConsoleStore((s) => s.clearAccountsError)
   return (
     <div className="ac-accounts">
       <AccountsHeader onAdd={() => setAdding(true)} />
@@ -28,11 +26,9 @@ export function AccountsView() {
         {accountsError && (
           <div className="ac-acc-error ac-acc-error--banner" role="alert">
             <span>{accountsError}</span>
-            {clearAccountsError && (
-              <button type="button" className="ac-acc-back" onClick={() => clearAccountsError()}>
-                Dismiss
-              </button>
-            )}
+            <button type="button" className="ac-acc-back" onClick={() => clearAccountsError()}>
+              Dismiss
+            </button>
           </div>
         )}
         <DetectedLogins />
