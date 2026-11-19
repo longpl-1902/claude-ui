@@ -16,6 +16,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: 'Ctrl+L', action: 'Focus the lead prompt' },
   { keys: 'Ctrl+Shift+T', action: 'Team view' },
   { keys: 'Ctrl+Shift+A', action: 'Accounts' },
+  { keys: 'Ctrl+Shift+E', action: 'Extensions (MCP servers, plugins, skills)' },
   { keys: 'Ctrl+Shift+C', action: 'Switch between Team and Chat view' },
   { keys: 'Ctrl+Shift+M', action: 'Maximize / restore the lead console' },
   { keys: 'Ctrl+B', action: 'Collapse / expand the left column' },
@@ -107,6 +108,9 @@ export function handleShortcut(e: KeyboardEvent): boolean {
         return done()
       case 'a':
         st.navigate('accounts')
+        return done()
+      case 'e':
+        st.navigate('extensions')
         return done()
       case 'j':
         if (!bridge.focusPrev) return false
