@@ -37,7 +37,9 @@ describe('R-07 external kill: the happy path', () => {
 })
 
 describe('R-07 external kill: every refusal kills nothing', () => {
-  const refused = async (over: Record<string, unknown>, req: unknown = REQ) => {
+  const refused = async (over: Record<string, unknown>, ...rest: unknown[]) => {
+    // rest-arg (not a default param) so an explicit `undefined` request is passed through, not replaced by REQ
+    const req = rest.length > 0 ? rest[0] : REQ
     const { deps, killer } = setup(over)
     const r = await killer.kill(req as never)
     expect(r.ok).toBe(false)
