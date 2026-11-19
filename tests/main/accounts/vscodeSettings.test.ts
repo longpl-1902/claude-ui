@@ -84,7 +84,7 @@ describe('R-02 scanVscode', () => {
     const r = await scanVscode(fs, host)
     expect(r.findings).toHaveLength(1)
     expect(r.findings[0]).toMatchObject({ value: '~/.claude-work', scope: 'user', ignoredByVsCode: false })
-    expect(fwd(r.findings[0].file)).toBe(`${USER_DIR}/settings.json`)
+    expect(fwd(r.findings[0]!.file)).toBe(`${USER_DIR}/settings.json`)
   })
 
   it('R-02 profile settings yield a user-profile finding', async () => {
@@ -117,7 +117,7 @@ describe('R-02 scanVscode', () => {
     const r = await scanVscode(fs, host)
     expect(r.findings).toHaveLength(1)
     expect(r.findings[0]).toMatchObject({ value: 'C:/Users/u/.claude-ws', scope: 'workspace', ignoredByVsCode: true })
-    expect(fwd(r.findings[0].file).toLowerCase()).toBe('d:/work/proj/.vscode/settings.json')
+    expect(fwd(r.findings[0]!.file).toLowerCase()).toBe('d:/work/proj/.vscode/settings.json')
   })
 
   it('R-02 backupWorkspaces folders and .code-workspace files are scanned (workspace-file scope)', async () => {
