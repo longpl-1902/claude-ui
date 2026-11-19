@@ -49,6 +49,21 @@ afterEach(() => {
 describe('Account cards', () => {
   it('shows formatted tokens when set and a dash when undefined', () => {
     setup()
+    act(() =>
+      useConsoleStore.setState({
+        usageToday: {
+          day: 'd',
+          byAccount: {
+            [useConsoleStore.getState().accounts.accounts[0]!.id]: {
+              input: 1_000_000,
+              output: 100_000,
+              cacheCreation: 20_000,
+              cacheRead: 0
+            }
+          }
+        }
+      })
+    )
     expect(within(card('Company')).getByText('1.12M')).toBeInTheDocument()
     expect(within(card('Personal')).getByText('Tokens used today')).toBeInTheDocument()
     expect(within(card('Personal')).getByText('—')).toBeInTheDocument()

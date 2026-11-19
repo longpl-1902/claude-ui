@@ -86,7 +86,7 @@ describe('R-11 Inspector tabs', () => {
     useConsoleStore.getState().selectAgent('rev')
     render(<Inspector />)
     await userEvent.click(tab('Files'))
-    expect(screen.getByText('No files changed yet.')).toBeInTheDocument()
+    expect(screen.getByText('No file changes from Edit/Write yet')).toBeInTheDocument()
   })
 
   it('a failed activity result is rendered with a failed class', async () => {

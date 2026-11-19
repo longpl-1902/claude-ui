@@ -1,11 +1,12 @@
 import type { KeyboardEvent } from "react";
 import { formatElapsed, formatTokens } from "@shared/format";
 import {
-  selectSelectedAgent,
-  useAgentStatuses,
+  selectSelectedAgentOrNull,
+  useAgentStatusInfo,
   useConsoleStore,
   type InspectorTab,
 } from "../../store/useConsoleStore";
+import type { Agent } from "@shared/types";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
 import { StatusPill } from "../ui/StatusPill";
@@ -23,14 +24,30 @@ const tabId = (t: InspectorTab): string => `insp-tab-${t}`;
 const PANEL_ID = "insp-panel";
 
 export function Inspector(): JSX.Element {
-  const agent = useConsoleStore(selectSelectedAgent);
-  const statuses = useAgentStatuses();
+  const agent = useConsoleStore(selectSelectedAgentOrNull);
+  const agentCount = useConsoleStore((s) => s.team.agents.length);
+  if (!agent) {
+    return (
+      <aside className="insp" aria-label="Agent inspector">
+        <h2 className="insp__name">Inspector</h2>
+        <span className="insp-empty">
+          {agentCount === 0 ? "No agents yet" : "Select an agent"}
+        </span>
+      </aside>
+    );
+  }
+  return <InspectorBody agent={agent} />;
+}
+
+function InspectorBody({ agent }: { agent: Agent }): JSX.Element {
+  const info = useAgentStatusInfo(agent.id);
+  const source = useConsoleStore((s) => s.team.source);
+  const live = source !== "demo";
   const tab = useConsoleStore((s) => s.inspectorTab);
   const setInspectorTab = useConsoleStore((s) => s.setInspectorTab);
   const worktrees = useConsoleStore((s) => s.team.worktrees);
   const worktreePath = worktrees.find((w) => w.branch === agent.worktree)?.path;
   const setConsoleDraft = useConsoleStore((s) => s.setConsoleDraft);
-  const status = statuses[agent.id] ?? "waiting";
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -63,8 +80,15 @@ export function Inspector(): JSX.Element {
             {agent.role} · {agent.model}
           </span>
         </div>
-        <StatusPill status={status} />
+        <span title={info.reason}>
+          <StatusPill status={info.status} />
+        </span>
       </div>
+      {live && agent.cwd && (
+        <div className="insp__sub" style={{ fontFamily: "var(--ac-font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={agent.cwd}>
+          {agent.cwd}
+        </div>
+      )}
 
       <div className="insp__stats">
         {stats.map(([label, value]) => (
@@ -78,7 +102,7 @@ export function Inspector(): JSX.Element {
       <div className="insp__task">
         <span className="insp__task-label">Assigned task</span>
         <span className="insp__task-title">{agent.taskTitle}</span>
-        <span className="insp__task-wt">⎇ {agent.worktree}</span>
+        <span className="insp__task-wt">⎇ {live ? agent.worktree || "—" : agent.worktree}</span>
       </div>
 
       <div
