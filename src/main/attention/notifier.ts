@@ -22,7 +22,7 @@ const phrase = (i: AttentionItem): string => {
     case 'question': return `has a question: ${d}`
     case 'plan': return `waits for plan approval: ${d}`
     case 'api-error': return `hit an API error: ${d}`
-    default: return `needs input: ${d}`
+    default: return i.severity === 'idle' ? `is ready: ${d}` : `needs input: ${d}`
   }
 }
 
@@ -54,7 +54,7 @@ export function createNotifier(deps: NotifierDeps): { update(s: AttentionSnapsho
       const fresh = s.items.filter((i) => !seen.has(i.id))
       if (fresh.length === 0) return
       const eligible = fresh.filter((i) => {
-        if (i.severity !== 'blocked') return false
+        if (i.severity !== 'blocked' && !(i.severity === 'idle' && prefs.notifyIdle === true)) return false
         if (i.kind === 'api-error' && !prefs.notifyErrors) return false
         if (muted.has(i.projectKey) || prefs.dnd) return false
         if (focused && prefs.viewedProjectKey === i.projectKey) return false

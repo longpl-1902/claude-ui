@@ -38,7 +38,7 @@ interface Ctx {
   timers: Map<number, { at: number; fn: () => void }>
   advance(ms: number): void
 }
-function setup(sessions: any[], transcripts: Record<string, unknown[]> = {}, o: { controls?: any[]; usage?: Record<string, any> } = {}): Ctx {
+function setup(sessions: any[], transcripts: Record<string, unknown[]> = {}, o: { controls?: any[]; usage?: Record<string, any>; hooksInstalled?: (root: string) => Promise<boolean> } = {}): Ctx {
   const files: Record<string, string> = {}
   for (const s of sessions) files[fileOf(s)] = jsonl(transcripts[s.sessionId] ?? [userPrompt('hi', { ts: sec(-100), sessionId: s.sessionId, parentUuid: null })])
   const fs = createMemoryByteFs(files)
@@ -58,6 +58,7 @@ function setup(sessions: any[], transcripts: Record<string, unknown[]> = {}, o: 
   ctx.hub = createStatusHub({
     fs, nowMs: () => ctx.now, listSessions: async () => ctx.sessions, controls: () => ctx.controls, sessionFile: fileOf,
     usageByProject: () => ctx.usage,
+    ...(o.hooksInstalled ? { hooksInstalled: o.hooksInstalled } : {}),
     setTimer: (fn: () => void, ms: number) => { const id = ++seq; ctx.timers.set(id, { at: ctx.now + ms, fn }); return id },
     clearTimer: (t: unknown) => void ctx.timers.delete(t as number)
   } as never)
@@ -346,6 +347,21 @@ describe('R-22 per-project status', () => {
     await c.hub.refresh()
     expect(proj(c).hooksActive).toBe(true)
     expect(proj(c, PROJ2.key).hooksActive).toBe(false)
+  })
+  it('F3 hooksActive is true when the hooks are installed for the project root, even without events', async () => {
+    const asked: string[] = []
+    const c = setup([sess(S1), sess(S3, { project: PROJ2, projectDir: 'C--Users-u-beta', cwd: 'C:/Users/u/beta' })], {}, {
+      hooksInstalled: async (root) => { asked.push(root); return root === PROJ.root }
+    })
+    await c.hub.refresh()
+    expect(proj(c).hooksActive).toBe(true)
+    expect(proj(c, PROJ2.key).hooksActive).toBe(false)
+    expect(asked.sort()).toEqual([PROJ.root, PROJ2.root].sort())
+  })
+  it('F3 a failing installed-state lookup counts as not installed and never breaks the hub', async () => {
+    const c = setup([sess(S1)], {}, { hooksInstalled: async () => { throw new Error('boom') } })
+    await c.hub.refresh()
+    expect(proj(c).hooksActive).toBe(false)
   })
   it('F3 hooksActive expires after 24 h without events', async () => {
     const c = setup([sess(S1)])

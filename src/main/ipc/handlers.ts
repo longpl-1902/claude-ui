@@ -2,8 +2,13 @@ import type { IpcMain } from 'electron'
 import { INVOKE_CHANNELS, type InvokeChannel, type IpcInvokeMap } from '@shared/ipc'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
-import type { ControlPermissionMode, OkResult, PtySpawnRequest, TeamSelection } from '@shared/types'
+import type {
+  AttentionPrefs, AttentionSnapshot, ControlPermissionMode, KillExternalRequest, OkResult, PtySpawnRequest, TeamSelection
+} from '@shared/types'
 import type { AccountsService } from '../accounts/accountsService'
+import type { ControlManager } from '../control/controlManager'
+import type { WorktreeService } from '../git/worktreeService'
+import type { createHooksService } from '../hooks/hooksService'
 import type { PtyManagerApi } from '../pty/types'
 import type { TranscriptService } from '../transcripts/transcriptService'
 
@@ -31,6 +36,17 @@ export interface HandlerDeps {
   transcripts?: TranscriptService
   /** called after a successful 'pty:spawn' */
   onPtySpawned?: (ptyId: string) => void
+  control?: ControlManager
+  worktrees?: WorktreeService
+  hooks?: ReturnType<typeof createHooksService>
+  externalKiller?: { kill(req: KillExternalRequest): Promise<OkResult> }
+  openInEditor?: { open(p: string): Promise<OkResult> }
+  isSessionLive?: (accountId: string, sessionId: string) => Promise<boolean>
+  attention?: {
+    snapshot(): AttentionSnapshot
+    getPrefs(): AttentionPrefs
+    setPrefs(p: AttentionPrefs): Promise<OkResult>
+  }
 }
 
 /** Validate and clean a spawn request. The renderer never chooses a command or arguments. */
@@ -49,7 +65,10 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
   let defaultAccountId = mockAccountsSnapshot.defaultAccountId
   const mock = createMockHandlers(deps, () => defaultAccountId, (id) => void (defaultAccountId = id))
   const { accounts, pty } = deps
-  if (!accounts && !pty && !deps.pickFolder && !deps.defaultCwd && !deps.transcripts) return mock
+  const hasReal =
+    accounts || pty || deps.pickFolder || deps.defaultCwd || deps.transcripts || deps.control || deps.worktrees || deps.hooks ||
+    deps.externalKiller || deps.openInEditor || deps.attention
+  if (!hasReal) return mock
   const real: Partial<Handlers> = {}
   if (accounts) {
     Object.assign(real, {
@@ -78,6 +97,67 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
         if (result.ok) deps.onPtySpawned?.(result.ptyId ?? '')
         return result
       }
+    } satisfies Partial<Handlers>)
+    if (deps.control) {
+      real['control:start'] = async (req) => {
+        if (!isControlStartRequest(req)) return { ok: false, reason: 'invalid-args' }
+        const r = req.resume
+        if (r?.kind === 'resume' && !r.fork && deps.isSessionLive && (await deps.isSessionLive(req.accountId, r.sessionId))) {
+          return { ok: false, reason: 'session-live-elsewhere' }
+        }
+        return accounts.launchControlled(req)
+      }
+    }
+  }
+  const { control } = deps
+  if (control) {
+    Object.assign(real, {
+      'control:send': (id, text) => (allStrings(id, text) && text.length <= MAX_SEND ? control.send(id, text) : { ...INVALID_ARGS }),
+      'control:interrupt': (id) => (allStrings(id) ? control.interrupt(id) : { ...INVALID_ARGS }),
+      'control:stop': (id) => (allStrings(id) ? control.stop(id) : { ...INVALID_ARGS }),
+      'control:answer': (id, requestId, answer) =>
+        allStrings(id, requestId) && isPermissionAnswer(answer) ? control.answer(id, requestId, answer) : { ...INVALID_ARGS },
+      'control:set-model': (id, model) =>
+        allStrings(id) && (model === null || (typeof model === 'string' && MODEL_RE.test(model))) ? control.setModel(id, model) : { ...INVALID_ARGS },
+      'control:set-mode': (id, mode) => (allStrings(id) && PERMISSION_MODES.includes(mode) ? control.setMode(id, mode) : { ...INVALID_ARGS }),
+      'control:list': () => control.list(),
+      'control:get-stream': (id) => (allStrings(id) ? control.streamState(id) : null),
+      'team:pause-all': () => {
+        const n = control.interruptAll()
+        return n > 0 ? { ok: true, reason: String(n) } : { ok: false, reason: 'nothing-running' }
+      }
+    } satisfies Partial<Handlers>)
+  }
+  if (deps.externalKiller) {
+    const killer = deps.externalKiller
+    real['session:kill-external'] = (req) => (isKillExternalRequest(req) ? killer.kill(req) : { ...INVALID_ARGS })
+  }
+  if (deps.openInEditor) {
+    const editor = deps.openInEditor
+    real['worktree:open-in-editor'] = (p) => (str(p) && p !== '' ? editor.open(p) : { ...INVALID_ARGS })
+  }
+  if (deps.worktrees) {
+    const wt = deps.worktrees
+    Object.assign(real, {
+      'git:watch': (root) => wt.watch(root === null || str(root) ? (root as string | null) : null),
+      'git:compare': (root, path) => (str(root) && str(path, 4096) && root !== '' && path !== '' ? wt.compare(root, path) : []),
+    } satisfies Partial<Handlers>)
+  }
+  if (deps.hooks) {
+    const hooks = deps.hooks
+    Object.assign(real, {
+      'hooks:status': (root) => hooks.status(root === null || str(root) ? (root as string | null) : null),
+      'hooks:preview': (root, action) =>
+        str(root) && root !== '' && (action === 'install' || action === 'uninstall') ? hooks.preview(root, action) : { ...INVALID_ARGS },
+      'hooks:apply': (previewId) => (str(previewId) && previewId !== '' ? hooks.apply(previewId) : { ...INVALID_ARGS })
+    } satisfies Partial<Handlers>)
+  }
+  if (deps.attention) {
+    const att = deps.attention
+    Object.assign(real, {
+      'attention:get': () => att.snapshot(),
+      'attention:get-prefs': () => att.getPrefs(),
+      'attention:set-prefs': (p) => (isAttentionPrefs(p) ? att.setPrefs(p) : { ...INVALID_ARGS })
     } satisfies Partial<Handlers>)
   }
   if (pty) {
@@ -121,6 +201,7 @@ export function isTeamSelection(v: unknown): v is TeamSelection {
 }
 
 const MAX_STR = 1024
+const MAX_SEND = 32_000
 const str = (v: unknown, max = MAX_STR): v is string => typeof v === 'string' && v.length <= max
 const PERMISSION_MODES: readonly unknown[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] satisfies ControlPermissionMode[]
 const MODEL_RE = /^[A-Za-z0-9._[\]-]{1,64}$/
@@ -162,6 +243,7 @@ export function isAttentionPrefs(v: unknown): boolean {
   const o = v as Record<string, unknown>
   if (!Array.isArray(o.mutedProjects) || o.mutedProjects.length > 200 || !o.mutedProjects.every((p) => str(p))) return false
   if (typeof o.dnd !== 'boolean' || typeof o.notifyErrors !== 'boolean') return false
+  if (o.notifyIdle !== undefined && typeof o.notifyIdle !== 'boolean') return false
   return o.viewedProjectKey === undefined || str(o.viewedProjectKey)
 }
 

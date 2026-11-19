@@ -350,4 +350,4 @@ export type AttentionSeverity = 'blocked' | 'idle'
 export interface AttentionItem { id: string; kind: AttentionKind; severity: AttentionSeverity; projectKey: string; projectName: string; accountId: string; sessionId: string; agentId: string; agentName: string; detail: string; sinceMs: number; external: boolean; cwd?: string; controlId?: string; requestId?: string; canAllowSession?: boolean; toolName?: string; input?: string }
 export interface ProjectStatus { key: string; name: string; root: string; git: boolean; accountIds: string[]; mixedAccounts: boolean; liveSessions: number; running: number; waiting: number; needsYou: number; tokensToday: number; lastActivityMs: number; hooksActive: boolean }
 export interface AttentionSnapshot { items: AttentionItem[]; projects: ProjectStatus[]; updatedAt: string }
-export interface AttentionPrefs { mutedProjects: string[]; dnd: boolean; notifyErrors: boolean; viewedProjectKey?: string }
+export interface AttentionPrefs { mutedProjects: string[]; dnd: boolean; notifyErrors: boolean; notifyIdle?: boolean; viewedProjectKey?: string }
