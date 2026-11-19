@@ -142,6 +142,21 @@ describe('R-11 Inspector actions', () => {
     expect(api.worktree.openInEditor).toHaveBeenCalledWith('.worktrees/backend')
   })
 
+  it('Open worktree is disabled and does not call the api when no worktree matches', async () => {
+    const api = { worktree: { openInEditor: vi.fn() } }
+    ;(window as unknown as { api: unknown }).api = api
+    act(() => {
+      const t = useConsoleStore.getState().team
+      useConsoleStore.getState().hydrateTeam({ ...t, worktrees: [] })
+    })
+    render(<Inspector />)
+    const btn = screen.getByRole('button', { name: 'Open worktree' })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', 'No worktree path for this agent')
+    await userEvent.click(btn)
+    expect(api.worktree.openInEditor).not.toHaveBeenCalled()
+  })
+
   it('actions do not throw without window.api', async () => {
     render(<Inspector />)
     await userEvent.click(screen.getByRole('button', { name: 'Pause' }))
