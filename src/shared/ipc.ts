@@ -1,6 +1,20 @@
 import type {
   AccountsSnapshot,
   AgentEvent,
+  AttentionPrefs,
+  AttentionSnapshot,
+  ControlPermissionMode,
+  ControlSessionInfo,
+  ControlStartRequest,
+  ControlStartResult,
+  ControlStreamEvent,
+  ControlStreamState,
+  FileDiff,
+  HooksPreview,
+  HooksStatus,
+  KillExternalRequest,
+  PermissionAnswer,
+  WorkspaceSnapshot,
   FolderResolution,
   FolderRule,
   LaunchCheck,
@@ -59,6 +73,24 @@ export const IPC = {
   transcriptsSelect: 'transcripts:select',
   transcriptsGetSelection: 'transcripts:get-selection',
   usageGetToday: 'usage:get-today',
+  controlStart: 'control:start',
+  controlSend: 'control:send',
+  controlInterrupt: 'control:interrupt',
+  controlStop: 'control:stop',
+  controlAnswer: 'control:answer',
+  controlSetModel: 'control:set-model',
+  controlSetMode: 'control:set-mode',
+  controlList: 'control:list',
+  controlGetStream: 'control:get-stream',
+  sessionKillExternal: 'session:kill-external',
+  gitWatch: 'git:watch',
+  gitCompare: 'git:compare',
+  hooksStatus: 'hooks:status',
+  hooksPreview: 'hooks:preview',
+  hooksApply: 'hooks:apply',
+  attentionGet: 'attention:get',
+  attentionGetPrefs: 'attention:get-prefs',
+  attentionSetPrefs: 'attention:set-prefs',
   // main -> renderer pushes (not invokable)
   accountsChanged: 'accounts:changed',
   accountsSignInStatus: 'accounts:sign-in-status',
@@ -66,7 +98,13 @@ export const IPC = {
   ptyExit: 'pty:exit',
   teamChanged: 'team:changed',
   transcriptsSessionsChanged: 'transcripts:sessions-changed',
-  usageChanged: 'usage:changed'
+  usageChanged: 'usage:changed',
+  controlChanged: 'control:changed',
+  controlStream: 'control:stream',
+  gitChanged: 'git:changed',
+  hooksChanged: 'hooks:changed',
+  attentionChanged: 'attention:changed',
+  attentionFocus: 'attention:focus'
 } as const
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]
 
@@ -78,7 +116,13 @@ export const PUSH_CHANNELS = [
   IPC.ptyExit,
   IPC.teamChanged,
   IPC.transcriptsSessionsChanged,
-  IPC.usageChanged
+  IPC.usageChanged,
+  IPC.controlChanged,
+  IPC.controlStream,
+  IPC.gitChanged,
+  IPC.hooksChanged,
+  IPC.attentionChanged,
+  IPC.attentionFocus
 ] as const
 
 export interface IpcInvokeMap {
@@ -116,6 +160,24 @@ export interface IpcInvokeMap {
   'transcripts:select': { args: [sel: TeamSelection]; result: TeamSnapshot }
   'transcripts:get-selection': { args: []; result: TeamSelection }
   'usage:get-today': { args: []; result: UsageToday }
+  'control:start': { args: [req: ControlStartRequest]; result: ControlStartResult }
+  'control:send': { args: [controlId: string, text: string]; result: OkResult }
+  'control:interrupt': { args: [controlId: string]; result: OkResult }
+  'control:stop': { args: [controlId: string]; result: OkResult }
+  'control:answer': { args: [controlId: string, requestId: string, answer: PermissionAnswer]; result: OkResult }
+  'control:set-model': { args: [controlId: string, model: string | null]; result: OkResult }
+  'control:set-mode': { args: [controlId: string, mode: ControlPermissionMode]; result: OkResult }
+  'control:list': { args: []; result: ControlSessionInfo[] }
+  'control:get-stream': { args: [controlId: string]; result: ControlStreamState | null }
+  'session:kill-external': { args: [req: KillExternalRequest]; result: OkResult }
+  'git:watch': { args: [root: string | null]; result: WorkspaceSnapshot }
+  'git:compare': { args: [root: string, path: string]; result: FileDiff[] }
+  'hooks:status': { args: [projectRoot: string | null]; result: HooksStatus }
+  'hooks:preview': { args: [projectRoot: string, action: 'install' | 'uninstall']; result: HooksPreview | OkResult }
+  'hooks:apply': { args: [previewId: string]; result: OkResult }
+  'attention:get': { args: []; result: AttentionSnapshot }
+  'attention:get-prefs': { args: []; result: AttentionPrefs }
+  'attention:set-prefs': { args: [p: AttentionPrefs]; result: OkResult }
 }
 export type InvokeChannel = keyof IpcInvokeMap
 
@@ -154,7 +216,25 @@ const invokeChannelList = [
   'transcripts:list-sessions',
   'transcripts:select',
   'transcripts:get-selection',
-  'usage:get-today'
+  'usage:get-today',
+  'control:start',
+  'control:send',
+  'control:interrupt',
+  'control:stop',
+  'control:answer',
+  'control:set-model',
+  'control:set-mode',
+  'control:list',
+  'control:get-stream',
+  'session:kill-external',
+  'git:watch',
+  'git:compare',
+  'hooks:status',
+  'hooks:preview',
+  'hooks:apply',
+  'attention:get',
+  'attention:get-prefs',
+  'attention:set-prefs'
 ] as const satisfies readonly InvokeChannel[]
 type MissingChannels = Exclude<InvokeChannel, (typeof invokeChannelList)[number]>
 const _exhaustive: [MissingChannels] extends [never] ? true : never = true
@@ -217,6 +297,38 @@ export interface ConsoleApi {
     sendMessage(id: string, text: string): Promise<OkResult>
     pause(id: string): Promise<OkResult>
     stop(id: string): Promise<OkResult>
+  }
+  control: {
+    start(req: ControlStartRequest): Promise<ControlStartResult>
+    send(controlId: string, text: string): Promise<OkResult>
+    interrupt(controlId: string): Promise<OkResult>
+    stop(controlId: string): Promise<OkResult>
+    answer(controlId: string, requestId: string, answer: PermissionAnswer): Promise<OkResult>
+    setModel(controlId: string, model: string | null): Promise<OkResult>
+    setMode(controlId: string, mode: ControlPermissionMode): Promise<OkResult>
+    list(): Promise<ControlSessionInfo[]>
+    getStream(controlId: string): Promise<ControlStreamState | null>
+    onChanged(cb: (s: ControlSessionInfo[]) => void): () => void
+    onStream(cb: (e: ControlStreamEvent[]) => void): () => void
+  }
+  session: { killExternal(req: KillExternalRequest): Promise<OkResult> }
+  git: {
+    watch(root: string | null): Promise<WorkspaceSnapshot>
+    compare(root: string, path: string): Promise<FileDiff[]>
+    onChanged(cb: (s: WorkspaceSnapshot) => void): () => void
+  }
+  hooks: {
+    status(projectRoot: string | null): Promise<HooksStatus>
+    preview(projectRoot: string, action: 'install' | 'uninstall'): Promise<HooksPreview | OkResult>
+    apply(previewId: string): Promise<OkResult>
+    onChanged(cb: (s: HooksStatus) => void): () => void
+  }
+  attention: {
+    get(): Promise<AttentionSnapshot>
+    getPrefs(): Promise<AttentionPrefs>
+    setPrefs(p: AttentionPrefs): Promise<OkResult>
+    onChanged(cb: (s: AttentionSnapshot) => void): () => void
+    onFocus(cb: (e: { itemId: string }) => void): () => void
   }
   worktree: { openInEditor(path: string): Promise<OkResult> }
   app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string> }

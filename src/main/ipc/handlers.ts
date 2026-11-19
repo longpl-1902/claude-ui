@@ -2,7 +2,7 @@ import type { IpcMain } from 'electron'
 import { INVOKE_CHANNELS, type InvokeChannel, type IpcInvokeMap } from '@shared/ipc'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
-import type { OkResult, PtySpawnRequest, TeamSelection } from '@shared/types'
+import type { ControlPermissionMode, OkResult, PtySpawnRequest, TeamSelection } from '@shared/types'
 import type { AccountsService } from '../accounts/accountsService'
 import type { PtyManagerApi } from '../pty/types'
 import type { TranscriptService } from '../transcripts/transcriptService'
@@ -120,6 +120,51 @@ export function isTeamSelection(v: unknown): v is TeamSelection {
   return o.mode === 'session' && typeof o.accountId === 'string' && typeof o.sessionId === 'string'
 }
 
+const MAX_STR = 1024
+const str = (v: unknown, max = MAX_STR): v is string => typeof v === 'string' && v.length <= max
+const PERMISSION_MODES: readonly unknown[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] satisfies ControlPermissionMode[]
+const MODEL_RE = /^[A-Za-z0-9._[\]-]{1,64}$/
+
+export function isControlStartRequest(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  if (!str(o.cwd) || !str(o.accountId) || o.cwd === '' || o.accountId === '') return false
+  if (o.confirmed !== undefined && typeof o.confirmed !== 'boolean') return false
+  if (o.model !== undefined && !(typeof o.model === 'string' && MODEL_RE.test(o.model))) return false
+  if (o.permissionMode !== undefined && !PERMISSION_MODES.includes(o.permissionMode)) return false
+  if (o.resume !== undefined) {
+    const r = o.resume
+    if (typeof r !== 'object' || r === null) return false
+    const rr = r as Record<string, unknown>
+    if (rr.kind === 'continue') return true
+    if (rr.kind !== 'resume' || !str(rr.sessionId) || rr.sessionId === '') return false
+    if (rr.fork !== undefined && typeof rr.fork !== 'boolean') return false
+  }
+  return true
+}
+
+export function isPermissionAnswer(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  if (o.behavior !== 'allow' && o.behavior !== 'deny') return false
+  if (o.message !== undefined && !str(o.message, 4000)) return false
+  return o.scope === undefined || o.scope === 'once' || o.scope === 'session'
+}
+
+export function isKillExternalRequest(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  return str(o.accountId) && str(o.sessionId) && typeof o.pid === 'number' && Number.isInteger(o.pid) && o.pid > 0
+}
+
+export function isAttentionPrefs(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  if (!Array.isArray(o.mutedProjects) || o.mutedProjects.length > 200 || !o.mutedProjects.every((p) => str(p))) return false
+  if (typeof o.dnd !== 'boolean' || typeof o.notifyErrors !== 'boolean') return false
+  return o.viewedProjectKey === undefined || str(o.viewedProjectKey)
+}
+
 function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefault: (id: string) => void): Handlers {
   return {
     'team:get-snapshot': () => structuredClone(mockTeamSnapshot),
@@ -170,7 +215,40 @@ function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefa
     // Valid or invalid selection alike: the mock has no transcripts, so the answer is the empty snapshot.
     'transcripts:select': () => structuredClone(EMPTY_TEAM_SNAPSHOT),
     'transcripts:get-selection': () => ({ mode: 'auto' }),
-    'usage:get-today': () => ({ day: '', byAccount: {} })
+    'usage:get-today': () => ({ day: '', byAccount: {} }),
+    // Contract v4 stubs (T13 replaces them). They never start anything (R-19).
+    'control:start': (req) => (isControlStartRequest(req) ? { ok: false } : { ok: false, reason: 'invalid-args' }),
+    'control:send': (id, text) => (allStrings(id, text) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:interrupt': (id) => (allStrings(id) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:stop': (id) => (allStrings(id) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:answer': (id, requestId, answer) =>
+      allStrings(id, requestId) && isPermissionAnswer(answer) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS },
+    'control:set-model': (id, model) => (allStrings(id) && (model === null || allStrings(model)) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:set-mode': (id, mode) => (allStrings(id) && PERMISSION_MODES.includes(mode) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'control:list': () => [],
+    'control:get-stream': () => null,
+    'session:kill-external': (req) => (isKillExternalRequest(req) ? { ...NOT_IMPLEMENTED } : { ...INVALID_ARGS }),
+    'git:watch': (root) => ({
+      root: typeof root === 'string' ? root : null,
+      base: null,
+      worktrees: [],
+      overlaps: [],
+      updatedAt: new Date(0).toISOString()
+    }),
+    'git:compare': () => [],
+    'hooks:status': (projectRoot) => ({
+      projectRoot: typeof projectRoot === 'string' ? projectRoot : null,
+      settingsPath: null,
+      state: 'unavailable',
+      reason: 'not-implemented',
+      server: { listening: false },
+      eventsReceived: 0
+    }),
+    'hooks:preview': () => ({ ...NOT_IMPLEMENTED }),
+    'hooks:apply': () => ({ ...NOT_IMPLEMENTED }),
+    'attention:get': () => ({ items: [], projects: [], updatedAt: new Date(0).toISOString() }),
+    'attention:get-prefs': () => ({ mutedProjects: [], dnd: false, notifyErrors: false }),
+    'attention:set-prefs': () => ({ ...NOT_IMPLEMENTED })
   }
 }
 

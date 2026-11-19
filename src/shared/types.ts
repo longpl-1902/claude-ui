@@ -55,6 +55,7 @@ export interface AgentRuntime {
   finished?: boolean // sub-agent finished (meta.finished | parent got 'completed' | end_turn w/o open tool)
   background?: boolean // meta.requestShape === 'background' or Agent result status 'async_launched'
   registry?: { status: RegistryStatus; waitingFor?: string; updatedMs: number } // lead only, live pid
+  hook?: { pendingPermission?: { toolName: string; sinceMs: number }; notification?: { type: string; sinceMs: number }; lastEventMs: number }
 }
 export interface Agent {
   id: string
@@ -77,6 +78,7 @@ export interface Agent {
   depth?: number
   runtime?: AgentRuntime
   cwd?: string
+  spans?: ActivitySpan[]
 }
 export interface Worktree {
   branch: string
@@ -85,8 +87,12 @@ export interface Worktree {
   changedFiles: number
   ahead: number
   overlapsWith?: string[]
+  behind?: number
+  files?: string[]
+  isMain?: boolean
+  error?: string
 }
-export type SharedTaskState = 'done' | 'in_progress' | 'blocked' | 'failing'
+export type SharedTaskState = 'done' | 'in_progress' | 'blocked' | 'failing' | 'pending'
 export interface SharedTask {
   id: number
   title: string
@@ -94,6 +100,9 @@ export interface SharedTask {
   ownerAgentId: string
   blockedBy?: number
   failingCount?: number
+  blockers?: number[]
+  source?: 'task' | 'todo'
+  description?: string
 }
 export interface FileOverlap {
   path: string
@@ -123,6 +132,7 @@ export interface TeamSnapshot {
   title?: string
   historyTruncated?: boolean
   waitingForSession?: boolean
+  hooksActive?: boolean
 }
 export interface FolderRule {
   pattern: string
@@ -293,6 +303,10 @@ export interface SessionSummary {
   live?: boolean // registry entry with a live pid
   registryStatus?: RegistryStatus
   project?: SessionProject // git project (linked worktrees map to the main repo); provisional until git answers
+  controlled?: boolean
+  controlId?: string
+  entrypoint?: string
+  registryPid?: number
 }
 export type TeamSelection = { mode: 'auto'; projectKey?: string } | { mode: 'session'; accountId: string; sessionId: string }
 export interface TokenTotals { input: number; output: number; cacheCreation: number; cacheRead: number }
@@ -300,3 +314,40 @@ export interface UsageToday {
   day: string // local YYYY-MM-DD
   byAccount: Record<string, TokenTotals> // key '' = unlinked default dir
 }
+
+// ---- Contract v4 (control sessions, worktrees, hooks, attention) ----
+export type ControlPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk'
+export type ControlState = 'draft' | 'starting' | 'idle' | 'busy' | 'stopping' | 'exited'
+export type ControlResume = { kind: 'resume'; sessionId: string; fork?: boolean } | { kind: 'continue' }
+export interface ControlStartRequest { cwd: string; accountId: string; confirmed?: boolean; resume?: ControlResume; model?: string; permissionMode?: ControlPermissionMode }
+export interface ControlStartResult { ok: boolean; controlId?: string; reason?: LaunchBlock | 'needs-confirmation' | 'invalid-args' | 'session-live-elsewhere'; warnings?: LaunchWarning[] }
+export interface PermissionPrompt { requestId: string; toolName: string; displayName: string; toolUseId?: string; description?: string; inputPreview: string; decisionReason?: string; blockedPath?: string; receivedAt: string; canAllowSession?: boolean }
+export interface PermissionAnswer { behavior: 'allow' | 'deny'; message?: string; scope?: 'once' | 'session' }
+export interface ControlSessionInfo { id: string; accountId: string; cwd: string; state: ControlState; permissionMode: ControlPermissionMode; model?: string; resume?: ControlResume; pid?: number; sessionId?: string; startedAt?: string; exitCode?: number; error?: string; slashCommands: string[]; pendingPermissions: number; lastResult?: 'success' | 'interrupted' | 'error'; queuedTurns: number }
+export type ControlStreamEvent =
+  | { controlId: string; kind: 'typing'; messageId: string; text: string }
+  | { controlId: string; kind: 'typing-clear' }
+  | { controlId: string; kind: 'thinking'; active: boolean }
+  | { controlId: string; kind: 'permission'; prompt: PermissionPrompt }
+  | { controlId: string; kind: 'permission-resolved'; requestId: string }
+  | { controlId: string; kind: 'turn-end'; result: 'success' | 'interrupted' | 'error'; text?: string; costUsd?: number; denials?: number }
+  | { controlId: string; kind: 'notice'; level: 'info' | 'error'; text: string }
+export interface ControlStreamState { controlId: string; typing?: { messageId: string; text: string }; thinking: boolean; permissions: PermissionPrompt[]; notices: { level: 'info' | 'error'; text: string; time: string }[] }
+export interface KillExternalRequest { accountId: string; sessionId: string; pid: number }
+export interface ChangedFileEntry { path: string; status: 'M' | 'A' | 'D' | 'R' | '?' | 'U'; added?: number; removed?: number; committed: boolean; uncommitted: boolean }
+export interface WorktreeInfo { path: string; branch?: string; head: string; detached: boolean; isMain: boolean; locked?: boolean; prunable?: boolean; ahead: number | null; behind: number | null; files: ChangedFileEntry[]; changedFiles: number; error?: string }
+export interface WorktreeOverlap { path: string; worktrees: string[] } // worktree paths
+export interface WorkspaceSnapshot { root: string | null; base: string | null; worktrees: WorktreeInfo[]; overlaps: WorktreeOverlap[]; updatedAt: string; error?: string }
+export interface FileDiff { worktreePath: string; branch?: string; diff: string; truncated: boolean }
+export type HookEventName = 'SessionStart' | 'SessionEnd' | 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'PermissionRequest' | 'PermissionDenied' | 'Notification' | 'Stop' | 'StopFailure' | 'SubagentStart' | 'SubagentStop' | 'TeammateIdle' | 'TaskCreated' | 'TaskCompleted'
+export interface HookEvent { event: HookEventName; sessionId: string; receivedMs: number; cwd?: string; agentId?: string; agentType?: string; permissionMode?: string; toolName?: string; toolUseId?: string; notificationType?: string; message?: string; error?: string; isInterrupt?: boolean; taskId?: string; taskSubject?: string; teammateName?: string; source?: string; reason?: string }
+export type HooksState = 'not-installed' | 'installed' | 'partial' | 'outdated' | 'unavailable'
+export interface HooksStatus { projectRoot: string | null; settingsPath: string | null; state: HooksState; nodePath?: string; reason?: string; server: { listening: boolean; port?: number }; eventsReceived: number; lastEventAt?: string }
+export interface HooksPreview { previewId: string; action: 'install' | 'uninstall'; settingsPath: string; before: string | null; after: string | null; backupPath?: string; scriptPath: string; notes: string[] }
+export interface ActivitySpan { kind: ActivityKind; startMs: number; endMs: number | null } // null = still open
+export type AttentionKind = 'permission' | 'question' | 'plan' | 'api-error' | 'input'
+export type AttentionSeverity = 'blocked' | 'idle'
+export interface AttentionItem { id: string; kind: AttentionKind; severity: AttentionSeverity; projectKey: string; projectName: string; accountId: string; sessionId: string; agentId: string; agentName: string; detail: string; sinceMs: number; external: boolean; cwd?: string; controlId?: string; requestId?: string; canAllowSession?: boolean; toolName?: string; input?: string }
+export interface ProjectStatus { key: string; name: string; root: string; git: boolean; accountIds: string[]; mixedAccounts: boolean; liveSessions: number; running: number; waiting: number; needsYou: number; tokensToday: number; lastActivityMs: number; hooksActive: boolean }
+export interface AttentionSnapshot { items: AttentionItem[]; projects: ProjectStatus[]; updatedAt: string }
+export interface AttentionPrefs { mutedProjects: string[]; dnd: boolean; notifyErrors: boolean; viewedProjectKey?: string }
