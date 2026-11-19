@@ -33,8 +33,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
-  font: 600 12px var(--ac-font-ui);
+  padding: 3px 8px;
+  font: 500 11px var(--ac-font-ui);
   border-radius: var(--ac-radius-pill);
   white-space: nowrap;
 }
