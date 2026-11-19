@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import './jestDom'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
 import App from '@renderer/App'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { seedMockAccounts } from './seedAccounts'
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
@@ -28,6 +29,11 @@ afterEach(() => {
 })
 
 describe('R-13 / R-15 App navigation (no window.api)', () => {
+  it('shows No account at first paint (no fake data)', () => {
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Account: none. Manage accounts' })).toBeInTheDocument()
+  })
+
   it('renders the Team view first, without errors, and sets the document title', () => {
     render(<App />)
     expect(screen.getByText('Lead console')).toBeInTheDocument()
@@ -36,6 +42,7 @@ describe('R-13 / R-15 App navigation (no window.api)', () => {
   })
 
   it('account chip -> Accounts, Team view link -> back', async () => {
+    seedMockAccounts()
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: /Account: Company/ }))
     expect(screen.getByRole('heading', { name: 'Claude accounts' })).toBeInTheDocument()
@@ -70,5 +77,55 @@ describe('R-03 / R-13 App hydrates from window.api', () => {
     render(<App />)
     await waitFor(() => expect(api.team.getSnapshot).toHaveBeenCalled())
     expect(screen.getByText(/team: sheet-export/)).toBeInTheDocument()
+  })
+})
+
+describe('R-11 App subscriptions', () => {
+  it('subscribes to pushes, updates the store, and unsubscribes on unmount', async () => {
+    const offChanged = vi.fn()
+    const offStatus = vi.fn()
+    let onChanged: (s: unknown) => void = () => {}
+    let onStatus: (s: unknown) => void = () => {}
+    const api = {
+      team: { getSnapshot: vi.fn().mockResolvedValue(structuredClone(mockTeamSnapshot)) },
+      accounts: {
+        getSnapshot: vi.fn().mockResolvedValue(structuredClone(mockAccountsSnapshot)),
+        onChanged: vi.fn((cb) => {
+          onChanged = cb
+          return offChanged
+        }),
+        onSignInStatus: vi.fn((cb) => {
+          onStatus = cb
+          return offStatus
+        })
+      }
+    }
+    ;(window as unknown as { api: unknown }).api = api
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(useConsoleStore.getState().accountsLoaded).toBe(true))
+    expect(screen.getByRole('button', { name: /Account: Company/ })).toBeInTheDocument()
+
+    act(() => onChanged({ ...structuredClone(mockAccountsSnapshot), activeAccountId: 'personal' }))
+    expect(useConsoleStore.getState().accounts.activeAccountId).toBe('personal')
+    expect(await screen.findByRole('button', { name: /Account: Personal/ })).toBeInTheDocument()
+
+    await act(() => useConsoleStore.getState().startSignIn('/d'))
+    act(() => onStatus({ configDir: '/d', step: 'done', email: 'a@b.c' }))
+    expect(useConsoleStore.getState().signIn.step).toBe('done')
+
+    unmount()
+    expect(offChanged).toHaveBeenCalledTimes(1)
+    expect(offStatus).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not crash when the api mock has no subscribe functions', async () => {
+    const api = {
+      team: { getSnapshot: vi.fn().mockResolvedValue(structuredClone(mockTeamSnapshot)) },
+      accounts: { getSnapshot: vi.fn().mockResolvedValue(structuredClone(mockAccountsSnapshot)) }
+    }
+    ;(window as unknown as { api: unknown }).api = api
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(useConsoleStore.getState().accountsLoaded).toBe(true))
+    unmount()
   })
 })

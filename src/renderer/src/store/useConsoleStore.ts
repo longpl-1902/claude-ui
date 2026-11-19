@@ -1,18 +1,27 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import type { StoreApi, UseBoundStore } from 'zustand'
-import { MOCK_SIGNED_IN_EMAIL, mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
+import { EMPTY_ACCOUNTS_SNAPSHOT } from '@shared/accountsDefaults'
+import type { ConsoleApi } from '@shared/ipc'
+import { mockTeamSnapshot } from '@shared/mock'
 import { deriveAllStatuses } from '@shared/status'
 import type {
   AccountView,
   AccountsSnapshot,
   Agent,
   AgentStatus,
+  FolderRule,
   LimitPolicy,
+  OkResult,
+  OkWithId,
+  ProfileInput,
   SafetySettings,
+  SignInStatus,
   SignInStep,
   TeamSnapshot
 } from '@shared/types'
+
+type AccountsApi = ConsoleApi['accounts']
 
 export type Screen = 'team' | 'accounts'
 export type InspectorTab = 'activity' | 'files' | 'messages'
@@ -20,17 +29,29 @@ export interface SignInState {
   step: SignInStep
   configDir?: string
   panelOpen: boolean
+  email?: string
+  org?: string
+  ptyId?: string
+  reason?: string
+}
+export interface LeadPtyState {
+  ptyId?: string
+  folder?: string
+  accountId?: string
 }
 
 export interface ConsoleState {
   screen: Screen
   team: TeamSnapshot
   accounts: AccountsSnapshot
+  accountsLoaded: boolean
+  accountsError?: string
   selectedAgentId: string
   inspectorTab: InspectorTab
   rawTerminalOpen: boolean
   consoleDraft: string
   signIn: SignInState
+  leadPty: LeadPtyState
   navigate(screen: Screen): void
   selectAgent(id: string): void
   setInspectorTab(tab: InspectorTab): void
@@ -39,49 +60,57 @@ export interface ConsoleState {
   submitConsole(): void
   hydrateTeam(s: TeamSnapshot): void
   hydrateAccounts(s: AccountsSnapshot): void
+  refreshAccounts(): Promise<void>
+  scanAccounts(): Promise<void>
   setDefaultAccount(id: string): void
-  linkDetected(configDir: string): void
-  startSignIn(configDir: string): void
-  finishSignIn(): void
-  cancelSignIn(): void
-  closeSignInPanel(): void
+  linkDetected(configDir: string): Promise<OkWithId>
+  saveProfile(p: ProfileInput): Promise<OkWithId>
+  removeProfile(id: string): Promise<OkResult>
+  setRules(rules: FolderRule[]): void
   setLimitPolicy(p: LimitPolicy): void
   toggleSafety(key: keyof SafetySettings): void
+  startSignIn(configDir: string): Promise<void>
+  checkSignIn(): Promise<void>
+  reopenSignIn(): Promise<void>
+  cancelSignIn(): Promise<void>
+  closeSignInPanel(): void
+  applySignInStatus(s: SignInStatus): void
+  setLeadPty(p: LeadPtyState): void
+  /** @deprecated alias of checkSignIn (DetectedLogins still calls it until T09 removes that) */
+  finishSignIn(): Promise<void>
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const localTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 function initialData() {
   return {
     screen: 'team' as Screen,
     team: structuredClone(mockTeamSnapshot),
-    accounts: structuredClone(mockAccountsSnapshot),
+    accounts: structuredClone(EMPTY_ACCOUNTS_SNAPSHOT),
+    accountsLoaded: false,
+    accountsError: undefined as string | undefined,
     selectedAgentId: 'be',
     inspectorTab: 'activity' as InspectorTab,
     rawTerminalOpen: false,
     consoleDraft: '',
-    signIn: { step: 'none', panelOpen: false } as SignInState
+    signIn: { step: 'none', panelOpen: false } as SignInState,
+    leadPty: {} as LeadPtyState
   }
 }
 
-/** Marks the suggested account signed in and links the detected entry (used by linkDetected and finishSignIn). */
-function linkDetectedIn(
-  accounts: AccountsSnapshot,
-  configDir: string,
-  extra: { email?: string }
-): AccountsSnapshot {
-  const det = accounts.detected.find((d) => d.configDir === configDir)
-  if (!det) return accounts
-  const linkId = det.suggestedAccountId
-  return {
-    ...accounts,
-    detected: accounts.detected.map((d) =>
-      d.configDir === configDir ? { ...d, ...extra, signedIn: true, linkedAccountId: linkId } : d
-    ),
-    accounts: linkId
-      ? accounts.accounts.map((a) => (a.id === linkId ? { ...a, signedIn: true } : a))
-      : accounts.accounts
+const NO_API: OkResult = { ok: false, reason: 'api-unavailable' }
+
+/** Guarded api call: a missing api is a no-op, a rejection lands in accountsError and never throws. */
+async function callApi<T>(fn: (a: AccountsApi) => Promise<T>, fallback: T): Promise<T> {
+  const a = window.api?.accounts
+  if (!a) return fallback
+  try {
+    return await fn(a)
+  } catch (e) {
+    useConsoleStore.setState({ accountsError: errMsg(e) })
+    return fallback
   }
 }
 
@@ -117,25 +146,72 @@ export const useConsoleStore: UseBoundStore<StoreApi<ConsoleState>> = create<Con
       }
     },
     hydrateTeam: (team) => set({ team }),
-    hydrateAccounts: (accounts) => set({ accounts }),
-    setDefaultAccount: (id) => set((s) => ({ accounts: { ...s.accounts, defaultAccountId: id } })),
-    linkDetected: (configDir) => set((s) => ({ accounts: linkDetectedIn(s.accounts, configDir, {}) })),
-    startSignIn: (configDir) => set({ signIn: { step: 'waiting', configDir, panelOpen: true } }),
-    finishSignIn: () =>
-      set((s) => {
-        const dir = s.signIn.configDir
-        return {
-          signIn: { ...s.signIn, step: 'done' },
-          accounts: dir ? linkDetectedIn(s.accounts, dir, { email: MOCK_SIGNED_IN_EMAIL }) : s.accounts
-        }
-      }),
-    cancelSignIn: () => set({ signIn: { step: 'none', panelOpen: false } }),
+    hydrateAccounts: (accounts) => set({ accounts, accountsLoaded: true, accountsError: undefined }),
+    refreshAccounts: async () => {
+      const snap = await callApi((a) => a.getSnapshot(), undefined)
+      if (snap) get().hydrateAccounts(snap)
+    },
+    scanAccounts: async () => {
+      const snap = await callApi((a) => a.scan(), undefined)
+      if (snap) get().hydrateAccounts(snap)
+    },
+    setDefaultAccount: (id) => {
+      set((s) => ({ accounts: { ...s.accounts, defaultAccountId: id } }))
+      void callApi((a) => a.setDefault(id), NO_API)
+    },
+    linkDetected: (configDir) => callApi((a) => a.linkDetected({ configDir }), NO_API as OkWithId),
+    saveProfile: (p) => callApi((a) => a.saveProfile(p), NO_API as OkWithId),
+    removeProfile: (id) => callApi((a) => a.removeProfile(id), NO_API),
+    setRules: (rules) => {
+      set((s) => ({ accounts: { ...s.accounts, rules } }))
+      void callApi((a) => a.setRules(rules), NO_API)
+    },
+    setLimitPolicy: (limitPolicy) => {
+      set((s) => ({ accounts: { ...s.accounts, limitPolicy } }))
+      void callApi((a) => a.setLimitPolicy(limitPolicy), NO_API)
+    },
+    toggleSafety: (key) => {
+      const safety = { ...get().accounts.safety, [key]: !get().accounts.safety[key] }
+      set((s) => ({ accounts: { ...s.accounts, safety } }))
+      void callApi((a) => a.setSafety(safety), NO_API)
+    },
+    startSignIn: async (configDir) => {
+      set({ signIn: { step: 'waiting', configDir, panelOpen: true } })
+      const r = await callApi((a) => a.startSignIn(configDir), { ok: true } as OkResult)
+      if (!r.ok) set((s) => ({ signIn: { ...s.signIn, step: 'error', reason: r.reason } }))
+    },
+    checkSignIn: async () => {
+      const dir = get().signIn.configDir
+      if (!dir) return
+      const st = await callApi((a) => a.checkSignIn(dir), undefined)
+      if (st) get().applySignInStatus(st)
+    },
+    reopenSignIn: async () => {
+      const dir = get().signIn.configDir
+      if (!dir) return
+      await callApi((a) => a.reopenSignIn(dir), NO_API)
+    },
+    cancelSignIn: async () => {
+      const dir = get().signIn.configDir
+      if (dir) await callApi((a) => a.cancelSignIn(dir), NO_API)
+      set({ signIn: { step: 'none', panelOpen: false } })
+    },
     closeSignInPanel: () => set((s) => ({ signIn: { ...s.signIn, panelOpen: false } })),
-    setLimitPolicy: (limitPolicy) => set((s) => ({ accounts: { ...s.accounts, limitPolicy } })),
-    toggleSafety: (key) =>
+    applySignInStatus: (st) => {
+      if (st.configDir !== get().signIn.configDir) return
       set((s) => ({
-        accounts: { ...s.accounts, safety: { ...s.accounts.safety, [key]: !s.accounts.safety[key] } }
+        signIn: {
+          ...s.signIn,
+          step: st.step,
+          email: st.email,
+          org: st.org,
+          ptyId: st.ptyId,
+          reason: st.reason
+        }
       }))
+    },
+    setLeadPty: (leadPty) => set({ leadPty }),
+    finishSignIn: () => get().checkSignIn()
   })
 )
 
@@ -146,8 +222,9 @@ export function resetConsoleStore(): void {
 export const selectSelectedAgent = (s: ConsoleState): Agent =>
   s.team.agents.find((a) => a.id === s.selectedAgentId) ?? s.team.agents[0]!
 
-export const selectActiveAccount = (s: ConsoleState): AccountView =>
-  s.accounts.accounts.find((a) => a.id === s.accounts.activeAccountId) ?? s.accounts.accounts[0]!
+export const selectActiveAccount = (s: ConsoleState): AccountView | undefined =>
+  s.accounts.accounts.find((a) => a.id === s.accounts.activeAccountId) ??
+  s.accounts.accounts.find((a) => a.id === s.accounts.defaultAccountId)
 
 export function useAgentStatuses(): Record<string, AgentStatus> {
   const team = useConsoleStore((s) => s.team)

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mockAccountsSnapshot } from '@shared/mock'
 import { AccountsView } from '@renderer/screens/AccountsView'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
+import { seedMockAccounts } from './seedAccounts'
 
 const PRIVACY =
   'Agent Console reads only the email and organization name. Login tokens stay where Claude Code stored them.'
@@ -15,7 +16,10 @@ function setup() {
   return render(<AccountsView />)
 }
 
-beforeEach(() => resetConsoleStore())
+beforeEach(() => {
+  resetConsoleStore()
+  seedMockAccounts()
+})
 
 describe('R-12 / R-15 Accounts screen: static content', () => {
   it('renders the key texts', () => {

@@ -1,6 +1,6 @@
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
-import { ChevronDownIcon, TerminalIcon } from '../ui/Icons'
+import { ChevronDownIcon, LockIcon, TerminalIcon } from '../ui/Icons'
 import { formatTokens } from '@shared/format'
 import { selectActiveAccount, useConsoleStore, useTeamCounters } from '../../store/useConsoleStore'
 import './teamLeft.css'
@@ -15,7 +15,7 @@ export function TeamHeader() {
   return (
     <header
       className="ac-header"
-      style={{ borderTop: `3px solid ${edge ? account.color : 'var(--ac-border)'}` }}
+      style={{ borderTop: `3px solid ${edge && account ? account.color : 'var(--ac-border)'}` }}
     >
       <div className="ac-header__brand">
         <TerminalIcon size={22} color="var(--ac-accent)" />
@@ -29,12 +29,22 @@ export function TeamHeader() {
       <button
         type="button"
         className="ac-header__chip"
-        aria-label={`Account: ${account.name}. Manage accounts`}
+        aria-label={`Account: ${account ? account.name : 'none'}. Manage accounts`}
         onClick={() => navigate('accounts')}
       >
-        <Avatar initials={account.name.charAt(0).toUpperCase()} color={account.color} size={20} shape="circle" />
-        <span>{account.name}</span>
-        {account.email && <span className="ac-header__email">{account.email}</span>}
+        <Avatar
+          initials={account ? account.name.charAt(0).toUpperCase() : '?'}
+          color={account ? account.color : 'var(--ac-text-muted)'}
+          size={20}
+          shape="circle"
+        />
+        <span>{account ? account.name : 'No account'}</span>
+        {account?.email && <span className="ac-header__email">{account.email}</span>}
+        {account?.locked && (
+          <span title="Account locked while a session runs" className="ac-header__lock">
+            <LockIcon size={12} color="var(--ac-text-muted)" />
+          </span>
+        )}
         <ChevronDownIcon size={12} color="var(--ac-text-muted)" />
       </button>
       <div className="ac-header__spacer" />
