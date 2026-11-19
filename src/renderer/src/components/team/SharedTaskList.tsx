@@ -14,6 +14,8 @@ export function SharedTaskList() {
     switch (t.state) {
       case 'done':
         return { color: 'var(--ac-status-done)', fill: 'var(--ac-status-done)', meta: `Done · ${owner}`, metaColor: SUBTLE }
+      case 'pending':
+        return { color: SUBTLE, fill: 'transparent', meta: `to do · ${owner}`, metaColor: SUBTLE }
       case 'in_progress':
         return { color: 'var(--ac-status-running)', fill: 'transparent', meta: `In progress · ${owner}`, metaColor: SUBTLE }
       case 'blocked':
