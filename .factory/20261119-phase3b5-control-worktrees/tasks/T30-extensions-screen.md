@@ -47,3 +47,6 @@ in clear, plugin toggle preview, catalog tabs and open, route + shortcut.
 ## Done when
 - All acceptance commands pass
 - Only owned files changed
+
+## Addendum: responsive
+Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.

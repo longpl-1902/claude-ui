@@ -501,3 +501,24 @@ rewind, images) only if the user agrees.
 - **Wave 12: T31** Windows theme (System/Light/Dark, live accent, title bar overlay + Mica, contrast-checked light
   theme, colour-literal sweep, xterm theme) + thin themed scrollbars.
 - **Wave 13: T32** declutter/ease-of-use pass: UX lead reviews the built app in both themes → agreed list → implement → re-check.
+
+## Responsive (user request, 2026-11-19) — cross-cutting rule for every UI task (T14–T22, T28–T32)
+Window sizes to support: 900×600 (min) · 1100×700 · 1440×900 · 1920×1080 · 2560×1440, at Windows display scaling
+100 / 125 / 150 % and app zoom (Ctrl+= / Ctrl+- / Ctrl+0, persisted).
+- **≥1440 px:** full layout — rail + left column + center + inspector, all splitters.
+- **1100–1439 px:** rail collapses to an icon strip (project initials + badges, tooltip/expand on hover or Ctrl+B);
+  left column narrower; inspector keeps its splitter.
+- **<1100 px:** inspector becomes an overlay drawer from the right (opens on agent select / Ctrl+I, Esc closes, focus
+  trapped and returned); left column + rail merge into one collapsible drawer; center gets the full width; splitters
+  hidden where a drawer replaces a column.
+- **Header never wraps into a mess:** below ~1300 px secondary items (tokens, counters detail, Pause all, + New) move
+  into an overflow "…" menu; the needs-you button, project/session and account chip always stay visible.
+- **Center column:** agent grid uses auto-fill with a sensible min card width and switches to compact rows when narrow;
+  timeline/console keep a minimum usable height and the horizontal splitters clamp to it; no horizontal page scroll at
+  any supported size.
+- **Dialogs / drawers / Extensions & Accounts screens:** max-width containers, single column below ~900 px, scroll
+  inside the dialog body only.
+- **Text:** no fixed px heights on text containers; long names/paths ellipsize with title tooltips; works at 150 %
+  scaling without clipped buttons.
+- Every UI task's tests include at least one narrow-width case (jsdom + matchMedia mock / container width) and T32's
+  review screenshots cover all five sizes in both themes.

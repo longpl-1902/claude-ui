@@ -22,3 +22,6 @@ Renderer components/CSS only (whatever the agreed list touches); no main/IPC cha
 - ux-final.md items each marked done / rejected (with reason).
 - Before/after screenshots kept in the scratchpad (not committed — they show private data).
 - `npm test`, `npm run typecheck`, `npm run build` green.
+
+## Addendum: responsive
+Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.

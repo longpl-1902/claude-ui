@@ -51,3 +51,6 @@ Make the Windows installer build produce what `.github/workflows/release.yml` up
 ## Done when
 - All acceptance commands pass
 - Only owned files changed
+
+## Addendum: responsive
+Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.

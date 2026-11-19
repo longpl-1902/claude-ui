@@ -65,3 +65,6 @@ for external), Allow calls answer without switching project, focusItem flow, Ctr
 
 ## Addendum (final UX decisions)
 See plan.md "Final decisions after the UX rebuttal" F1–F4 — items assigned to T22 are part of this task's scope and acceptance.
+
+## Addendum: responsive
+Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.

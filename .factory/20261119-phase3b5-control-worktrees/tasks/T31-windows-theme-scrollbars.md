@@ -46,3 +46,6 @@ cycles System/Light/Dark), tests: tests/renderer/theme.test.tsx (new), tests/mai
 - Built app checked on real Windows in light and dark (toggle Windows setting or the in-app override): screenshots,
   no white flash, title bar matches, scrollbars thin and readable.
 - `npm test`, `npm run typecheck`, `npm run build` green. No new dependencies.
+
+## Addendum: responsive
+Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.

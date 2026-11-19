@@ -51,3 +51,6 @@ role alert and dismiss; each surface shows the mapped message for a mocked failu
 ## Done when
 - All acceptance commands pass
 - Only owned files changed
+
+## Addendum: responsive
+Follow plan.md "Responsive (user request)" for every screen/component this task touches; include at least one narrow-width test case.
