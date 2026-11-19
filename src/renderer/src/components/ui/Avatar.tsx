@@ -3,7 +3,7 @@ import './ui.css'
 export interface AvatarProps {
   initials: string
   color: string
-  size?: 30 | 40
+  size?: 20 | 30 | 40
   shape?: 'rounded' | 'circle'
   label?: string
 }
@@ -19,7 +19,7 @@ export function Avatar({ initials, color, size = 30, shape = 'rounded', label }:
         height: size,
         borderRadius: radius,
         background: color,
-        fontSize: size === 40 ? 14 : 12
+        fontSize: size === 40 ? 14 : size === 20 ? 10 : 12
       }}
       {...a11y}
     >

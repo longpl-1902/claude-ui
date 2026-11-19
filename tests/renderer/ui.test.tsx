@@ -90,6 +90,14 @@ describe('Avatar primitive', () => {
     render(<Avatar initials="AD" color="#8FB4FF" label="api-designer" />)
     expect(screen.getByLabelText('api-designer')).toBeInTheDocument()
   })
+
+  it('supports a 20px circle with 10px text', () => {
+    render(<Avatar initials="AD" color="#8FB4FF" size={20} shape="circle" />)
+    const el = screen.getByText('AD')
+    expect(el.style.width).toBe('20px')
+    expect(el.style.fontSize).toBe('10px')
+    expect(el.style.borderRadius).toBe('50%')
+  })
 })
 
 describe('Icons', () => {
