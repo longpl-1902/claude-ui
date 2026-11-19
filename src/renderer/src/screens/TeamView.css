@@ -38,6 +38,14 @@
   overflow-x: hidden;
 }
 
+.ac-team__panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .ac-team__right {
   flex: 1 1 360px;
   border-left: 1px solid var(--ac-border);
@@ -259,7 +267,7 @@
     min-height: 0;
     overflow: hidden;
   }
-  .ac-team__center > .ac-tc-banner {
+  .ac-team__center .ac-tc-banner {
     flex-shrink: 0;
     margin-bottom: 12px;
   }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
+import { ChatView } from '@renderer/components/chat/ChatView'
 import { AgentGrid } from '@renderer/components/team/AgentGrid'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
 import { OverlapBanner } from '@renderer/components/team/OverlapBanner'
@@ -21,6 +22,7 @@ import {
   usePanelHeights
 } from '@renderer/hooks/usePanelHeights'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
+import { useCenterView, useCenterViewShortcuts, useCenterViewStore } from '@renderer/store/useCenterViewStore'
 import { useLayoutStore, useMaxWidth } from '@renderer/store/useLayoutStore'
 import './TeamView.css'
 
@@ -40,6 +42,25 @@ export function TeamView() {
   const toggleLeft = useLayoutStore((s) => s.toggleLeft)
   const toggleRight = useLayoutStore((s) => s.toggleRight)
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
+  const view = useCenterView()
+  const setView = useCenterViewStore((s) => s.setView)
+  const maximized = useCenterViewStore((s) => s.consoleMaximized)
+  const setMaximized = useCenterViewStore((s) => s.setMaximized)
+  useCenterViewShortcuts()
+  const showMax = view === 'team' && maximized
+  const onCenterKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Escape' && showMax && !e.defaultPrevented) {
+      e.preventDefault()
+      setMaximized(false)
+    }
+  }
+  const onTabKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const next = view === 'team' ? 'chat' : 'team'
+    setView(next)
+    document.getElementById(`ac-tab-${next}`)?.focus()
+  }
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
@@ -226,38 +247,76 @@ export function TeamView() {
             />
           </>
         )}
-        <main className="ac-team__center" ref={hh.bind('center')}>
-          <OverlapBanner />
-          <div id="ac-pane-grid" className="ac-pane ac-pane--fixed" style={{ height: hv.grid }}>
-            <div id="ac-agents">
-              <AgentGrid />
-            </div>
+        <main
+          className={`ac-team__center${view === 'chat' ? ' ac-team__center--chat' : ''}`}
+          ref={hh.bind('center')}
+          onKeyDown={onCenterKey}
+        >
+          <div className="ac-team__tabs" role="tablist" aria-label="Center view" onKeyDown={onTabKey}>
+            {(['team', 'chat'] as const).map((v) => (
+              <button
+                key={v}
+                id={`ac-tab-${v}`}
+                type="button"
+                role="tab"
+                className="ac-team__tab"
+                aria-selected={view === v}
+                aria-controls="ac-center-panel"
+                tabIndex={view === v ? 0 : -1}
+                onClick={() => setView(v)}
+              >
+                {v === 'team' ? 'Team' : 'Chat'}
+              </button>
+            ))}
           </div>
-          <Splitter
-            label="Resize agent grid"
-            controls="ac-pane-grid"
-            side="top"
-            value={hv.grid}
-            min={GRID_MIN}
-            max={hh.max('grid')}
-            defaultValue={hh.def('grid')}
-            onChange={(v) => hh.set('grid', v)}
-          />
-          <div className="ac-pane ac-pane--fill ac-pane--timeline">
-            <Timeline />
-          </div>
-          <Splitter
-            label="Resize lead console"
-            controls="ac-pane-console"
-            side="bottom"
-            value={hv.console}
-            min={CONSOLE_MIN}
-            max={hh.max('console')}
-            defaultValue={hh.def('console')}
-            onChange={(v) => hh.set('console', v)}
-          />
-          <div id="ac-pane-console" className="ac-pane ac-pane--fixed" style={{ height: hv.console }}>
-            <LeadConsole />
+          <div
+            id="ac-center-panel"
+            role="tabpanel"
+            aria-labelledby={`ac-tab-${view}`}
+            className="ac-team__panel"
+          >
+            {view === 'chat' ? (
+              <ChatView />
+            ) : showMax ? (
+              <div className="ac-team__maxed">
+                <LeadConsole />
+              </div>
+            ) : (
+              <>
+                <OverlapBanner />
+                <div id="ac-pane-grid" className="ac-pane ac-pane--fixed" style={{ height: hv.grid }}>
+                  <div id="ac-agents">
+                    <AgentGrid />
+                  </div>
+                </div>
+                <Splitter
+                  label="Resize agent grid"
+                  controls="ac-pane-grid"
+                  side="top"
+                  value={hv.grid}
+                  min={GRID_MIN}
+                  max={hh.max('grid')}
+                  defaultValue={hh.def('grid')}
+                  onChange={(v) => hh.set('grid', v)}
+                />
+                <div className="ac-pane ac-pane--fill ac-pane--timeline">
+                  <Timeline />
+                </div>
+                <Splitter
+                  label="Resize lead console"
+                  controls="ac-pane-console"
+                  side="bottom"
+                  value={hv.console}
+                  min={CONSOLE_MIN}
+                  max={hh.max('console')}
+                  defaultValue={hh.def('console')}
+                  onChange={(v) => hh.set('console', v)}
+                />
+                <div id="ac-pane-console" className="ac-pane ac-pane--fixed" style={{ height: hv.console }}>
+                  <LeadConsole />
+                </div>
+              </>
+            )}
           </div>
         </main>
         {narrow ? (

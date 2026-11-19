@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { watch as chokidarWatch } from 'chokidar'
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, shell } from 'electron'
 import { existsSync, promises as fsp } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +13,7 @@ import { createAttentionPrefs, type AttentionPrefsFs } from './attention/prefs'
 import { createNotifier } from './attention/notifier'
 import { createStatusHub } from './attention/statusHub'
 import type { HostEnv } from './contracts'
+import { registerContextMenu } from './contextMenu'
 import { createControlManager } from './control/controlManager'
 import { createExternalKiller } from './control/externalKill'
 import { createImageName, createKillTree } from './control/processTree'
@@ -87,6 +88,10 @@ function createWindow(): void {
   })
 
   win.on('ready-to-show', () => win.show())
+  registerContextMenu(win.webContents, {
+    buildMenu: (t) => Menu.buildFromTemplate(t as Electron.MenuItemConstructorOptions[]),
+    writeClipboard: (text) => clipboard.writeText(text)
+  })
 
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event, url) => {
@@ -416,6 +421,7 @@ app.whenReady().then(async () => {
         const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
         return r.canceled || !r.filePaths[0] ? null : r.filePaths[0]
       },
+      openExternal: (url) => shell.openExternal(url),
       defaultCwd: () => (app.isPackaged ? host.home : (process.env['INIT_CWD'] ?? process.cwd()))
     })
   )
