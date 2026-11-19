@@ -7,6 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentGrid } from '@renderer/components/team/AgentGrid'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
+import { ProjectRail } from '@renderer/components/rail/ProjectRail'
 import { TeamHeader } from '@renderer/components/team/TeamHeader'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { mockTeamSnapshot } from '@shared/mock'
@@ -184,20 +185,16 @@ describe('R-12 session picker', () => {
   })
 })
 
-describe('P3-T11 project picker', () => {
-  it('shows name with the live count, the root in the title, newest project first', () => {
+describe('P3-T11 project picker (now the T22 project rail)', () => {
+  it('lists projects newest first with the live count and the root in the title', () => {
     seedLive()
     useConsoleStore.setState({ sessions, projectKey: 'd:/work/alpha' })
-    render(<TeamHeader />)
-    const sel = screen.getByRole('combobox', { name: 'Project' })
-    const opts = within(sel).getAllByRole('option') as HTMLOptionElement[]
-    expect(opts.map((o) => o.value)).toEqual(['d:/work/alpha', 'proj-b'])
-    expect(opts[0]).toHaveTextContent('alpha · 1 live')
-    expect(opts[0]!.title).toBe('D:/work/alpha')
-    expect(opts[1]).toHaveTextContent('proj-b')
-    expect(opts[1]!.textContent).not.toContain('live')
-    expect(sel).toHaveValue('d:/work/alpha')
-    expect(sel).toHaveAttribute('title', 'D:/work/alpha')
+    render(<ProjectRail />)
+    const rows = screen.getAllByRole('listitem').map((li) => li.querySelector('button')!)
+    expect(rows.map((r) => r.getAttribute('aria-label')!.split(',')[0])).toEqual(['alpha', 'proj-b'])
+    expect(rows[0]).toHaveAttribute('aria-current', 'true')
+    expect(rows[0]!.title).toContain('1 live session')
+    expect(rows[1]!.title).toContain('0 live sessions')
   })
 
   it('choosing a project selects auto with that key and remembers it', () => {
@@ -205,19 +202,19 @@ describe('P3-T11 project picker', () => {
     const select = vi.fn().mockResolvedValue(undefined)
     ;(window as unknown as { api: unknown }).api = { transcripts: { select } }
     useConsoleStore.setState({ sessions, projectKey: 'd:/work/alpha' })
-    render(<TeamHeader />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'proj-b' } })
+    render(<ProjectRail />)
+    fireEvent.click(screen.getByRole('button', { name: /^proj-b/ }))
     expect(select).toHaveBeenCalledWith({ mode: 'auto', projectKey: 'proj-b' })
     expect(useConsoleStore.getState().projectKey).toBe('proj-b')
     expect(useConsoleStore.getState().selection).toEqual({ mode: 'auto', projectKey: 'proj-b' })
     expect(window.localStorage.getItem('ac.projectKey')).toBe('proj-b')
   })
 
-  it('a project that vanished from the list keeps showing until another is chosen', () => {
+  it('a project that vanished from the list keeps its name in the header until another is chosen', () => {
     seedLive()
     useConsoleStore.setState({ sessions, projectKey: 'd:/gone/old-repo' })
     render(<TeamHeader />)
-    expect(screen.getByRole('combobox', { name: 'Project' })).toHaveValue('d:/gone/old-repo')
+    expect(screen.getByText('old-repo')).toBeInTheDocument()
   })
 })
 

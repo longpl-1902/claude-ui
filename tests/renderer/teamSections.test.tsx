@@ -215,15 +215,14 @@ describe('P3 TeamHeader picker keeps the chip truncating', () => {
     )
     useConsoleStore.getState().hydrateAccounts(snap)
     const { container } = render(<TeamHeader />)
-    expect(screen.getByRole('combobox', { name: 'Project' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Session' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /need you/ })).toBeInTheDocument()
     expect(container.querySelector('.ac-header__email')).toBeInTheDocument()
     const css = readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/teamLeft.css'), 'utf8')
     expect(css).toMatch(/\.ac-header__chip \{[^}]*flex: 0 1 320px/)
     expect(css).toMatch(/@media \(min-width: 1101px\)\s*\{[^@]*\.ac-header \{ flex-wrap: nowrap/)
     expect(css).toMatch(/\.ac-header__picker \{[^}]*min-width: 120px/)
-    // the project picker shrinks (with ellipsis) before the chip does
-    expect(css).toMatch(/\.ac-header__picker--project \{[^}]*flex: 0 1 200px/)
-    expect(css).toMatch(/\.ac-header > \.ac-header__picker--project \{ flex-shrink: 5/)
+    // the project name label shrinks (with ellipsis) before the chip does
+    expect(css).toMatch(/\.ac-header__project \{[^}]*text-overflow: ellipsis/)
   })
 })

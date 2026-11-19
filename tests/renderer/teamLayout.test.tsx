@@ -232,11 +232,11 @@ describe('column collapse', () => {
     expect(JSON.parse(window.localStorage.getItem('ac.collapsed')!).rightCollapsed).toBe(true)
   })
 
-  it('leaves the empty rail slot as the first column', () => {
+  it('mounts the project rail in the first column', () => {
     const { container } = render(<TeamView />)
     const slot = container.querySelector('.ac-team__cols')!.firstElementChild!
     expect(slot).toHaveClass('ac-team__rail-slot')
-    expect(slot).toBeEmptyDOMElement()
+    expect(within(slot as HTMLElement).getByRole('navigation', { name: 'Projects' })).toBeInTheDocument()
   })
 })
 
@@ -252,7 +252,9 @@ describe('narrow window (matchMedia)', () => {
     expect(screen.queryByRole('separator', { name: 'Resize inspector panel' })).toBeNull()
     expect(grid()).toBeInTheDocument()
     expect(cons()).toBeInTheDocument()
-    expect(wt()).toBeInTheDocument()
+    // The worktrees column merged into the left drawer (T22), so it is not inline any more.
+    expect(screen.queryByRole('separator', { name: 'Resize worktrees panel (height)' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Projects' })).toBeNull()
 
     const toggle = screen.getByRole('button', { name: 'Inspector' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')

@@ -93,3 +93,4 @@
 .ac-cmp__note { margin: 0; padding: 4px 8px; font-size: 11px; color: var(--ac-text-subtle); }
 .ac-cmp__error { color: var(--ac-status-needs-you); font-size: 12px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .ac-tc-seg, .ac-wt, .ac-task { transition: none; animation: none; } }
+.ac-header__project { flex: 0 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ac-text-soft); }

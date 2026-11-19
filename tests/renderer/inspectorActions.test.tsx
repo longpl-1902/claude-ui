@@ -369,7 +369,7 @@ describe('header at narrow width (< 1300 px)', () => {
     useControlStore.setState({ sessions: [ctl({ state: 'busy' })] })
     render(<TeamHeader />)
     expect(document.querySelector('.is-needs')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Project' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /need you/ })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Session' })).toBeInTheDocument()
     expect(btn(/Manage accounts/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Pause all/ })).toBeNull()

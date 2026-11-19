@@ -7,6 +7,8 @@ import { SharedTaskList } from '@renderer/components/team/SharedTaskList'
 import { TeamHeader } from '@renderer/components/team/TeamHeader'
 import { Timeline } from '@renderer/components/team/Timeline'
 import { WorktreeList } from '@renderer/components/team/WorktreeList'
+import { ProjectRail } from '@renderer/components/rail/ProjectRail'
+import { ProjectSwitcher } from '@renderer/components/rail/ProjectSwitcher'
 import { Inspector } from '@renderer/components/inspector/Inspector'
 import { Splitter } from '@renderer/components/layout/Splitter'
 import { trapTab } from '@renderer/components/ui/Dialog'
@@ -44,13 +46,39 @@ export function TeamView() {
   const drawerToggle = useRef<HTMLButtonElement>(null)
   const prevSelected = useRef(selectedAgentId)
 
+  // <1100 px: the rail and the worktrees/tasks column merge into one left drawer.
+  const [leftOpen, setLeftOpen] = useState(false)
+  const leftRef = useRef<HTMLDivElement>(null)
+  const leftToggle = useRef<HTMLButtonElement>(null)
+  const closeLeft = () => {
+    setLeftOpen(false)
+    leftToggle.current?.focus()
+  }
+  useEffect(() => {
+    if (!narrow) setLeftOpen(false)
+  }, [narrow])
+  useEffect(() => {
+    if (leftOpen) leftRef.current?.focus()
+  }, [leftOpen])
+  const onLeftKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeLeft()
+      return
+    }
+    trapTab(e, leftRef.current)
+  }
+
   const closeDrawer = () => {
     setDrawerOpen(false)
     drawerToggle.current?.focus()
   }
   // Selecting another agent opens the drawer on narrow windows.
   useEffect(() => {
-    if (prevSelected.current !== selectedAgentId && narrow) setDrawerOpen(true)
+    if (prevSelected.current !== selectedAgentId && narrow) {
+      setDrawerOpen(true)
+      setLeftOpen(false)
+    }
     prevSelected.current = selectedAgentId
   }, [selectedAgentId, narrow])
   useEffect(() => {
@@ -96,9 +124,52 @@ export function TeamView() {
         Skip to agents
       </a>
       <TeamHeader />
+      <ProjectSwitcher />
       <div className="ac-team__cols" style={colsStyle}>
-        <div className="ac-team__rail-slot" data-compact={compactRail ? 'true' : 'false'} />
-        {leftCollapsed ? (
+        <div className="ac-team__rail-slot" data-compact={compactRail ? 'true' : 'false'}>
+          {!narrow && <ProjectRail compact={compactRail} />}
+        </div>
+        {narrow ? (
+          <>
+            <button
+              ref={leftToggle}
+              type="button"
+              className="ac-team__ldrawer-toggle"
+              aria-expanded={leftOpen}
+              aria-controls="ac-left"
+              onClick={() => {
+                setLeftOpen((o) => !o)
+                setDrawerOpen(false)
+              }}
+            >
+              Projects
+            </button>
+            {leftOpen && (
+              <>
+                <div className="ac-team__scrim" onMouseDown={closeLeft} />
+                <div
+                  id="ac-left"
+                  ref={leftRef}
+                  className="ac-team__ldrawer"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Projects, worktrees and tasks"
+                  tabIndex={-1}
+                  onKeyDown={onLeftKey}
+                >
+                  <button type="button" className="ac-team__collapse" aria-label="Close projects drawer" onClick={closeLeft}>
+                    {'×'}
+                  </button>
+                  <ProjectRail inDrawer onPicked={closeLeft} />
+                  <div className="ac-team__ldrawer-body">
+                    <WorktreeList />
+                    <SharedTaskList />
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        ) : leftCollapsed ? (
           <aside id="ac-left" className="ac-team__strip ac-team__strip--left" aria-label="Worktrees and tasks">
             <button
               type="button"
