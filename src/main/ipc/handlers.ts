@@ -1,7 +1,8 @@
 import type { IpcMain } from 'electron'
 import { INVOKE_CHANNELS, type InvokeChannel, type IpcInvokeMap } from '@shared/ipc'
 import { mockAccountsSnapshot, mockTeamSnapshot } from '@shared/mock'
-import type { OkResult, PtySpawnRequest } from '@shared/types'
+import { EMPTY_TEAM_SNAPSHOT } from '@shared/teamDefaults'
+import type { OkResult, PtySpawnRequest, TeamSelection } from '@shared/types'
 import type { AccountsService } from '../accounts/accountsService'
 import type { PtyManagerApi } from '../pty/types'
 
@@ -96,6 +97,13 @@ export function createHandlers(deps: HandlerDeps = {}): Handlers {
   return { ...mock, ...real }
 }
 
+export function isTeamSelection(v: unknown): v is TeamSelection {
+  if (typeof v !== 'object' || v === null) return false
+  const o = v as Record<string, unknown>
+  if (o.mode === 'auto') return true
+  return o.mode === 'session' && typeof o.accountId === 'string' && typeof o.sessionId === 'string'
+}
+
 function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefault: (id: string) => void): Handlers {
   return {
     'team:get-snapshot': () => structuredClone(mockTeamSnapshot),
@@ -140,7 +148,13 @@ function createMockHandlers(deps: HandlerDeps, getDefault: () => string, setDefa
     'pty:list': () => [],
     'pty:get-buffer': () => ({ data: '', end: 0 }),
     'app:pick-folder': () => null,
-    'app:get-default-cwd': () => ''
+    'app:get-default-cwd': () => '',
+    // Phase 3 stubs; the real transcript/usage wiring replaces these later.
+    'transcripts:list-sessions': () => [],
+    // Valid or invalid selection alike: the mock has no transcripts, so the answer is the empty snapshot.
+    'transcripts:select': () => structuredClone(EMPTY_TEAM_SNAPSHOT),
+    'transcripts:get-selection': () => ({ mode: 'auto' }),
+    'usage:get-today': () => ({ day: '', byAccount: {} })
   }
 }
 
