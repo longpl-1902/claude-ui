@@ -261,24 +261,6 @@
   border-bottom: 1px solid var(--ac-border);
   padding: 0 0 8px;
 }
-.ac-team__ldrawer-toggle {
-  position: fixed;
-  left: 16px;
-  bottom: 16px;
-  z-index: 120;
-  min-height: 40px;
-  padding: 0 16px;
-  background: var(--ac-bg-btn);
-  color: var(--ac-text);
-  border: 1px solid var(--ac-border-btn);
-  border-radius: var(--ac-radius-sm, 6px);
-  font: 500 14px var(--ac-font-ui);
-  box-shadow: var(--ac-shadow-md);
-  cursor: pointer;
-}
-.ac-team__ldrawer-toggle:hover {
-  background: var(--ac-bg-btn-hover);
-}
 .ac-team__ldrawer-body {
   display: flex;
   flex-direction: column;
@@ -491,13 +473,16 @@
   color: var(--ac-text-subtle);
 }
 .ac-switch__label {
+  flex: 0 0 auto;
+  max-width: 60%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ac-switch__detail {
-  margin-left: auto;
+  flex: 1 1 0;
+  text-align: right;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -509,3 +494,20 @@
   padding: 8px;
   color: var(--ac-text-subtle);
 }
+
+/* T32 U10: running = a plain pulsing dot (numbers mean "for you": blocked and ready only) */
+.ac-rail__badge.is-dot {
+  top: -2px;
+  right: -2px;
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+}
+
+.ac-switch__dots { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ac-switch__status, .ac-switch__acct { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.ac-switch__status { background: var(--ac-border-btn); }
+.ac-switch__status.is-needs { background: var(--ac-status-needs-you); }
+.ac-switch__status.is-running { background: var(--ac-status-running); }
+.ac-switch__status.is-waiting { background: var(--ac-status-waiting); }

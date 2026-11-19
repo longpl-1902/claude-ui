@@ -1,7 +1,18 @@
 import type { ActivityItem } from '@shared/types'
+import { shortenPathsInText } from '@shared/displayPath'
 import { toolColor } from '../../theme/colors'
+import { useConsoleStore } from '../../store/useConsoleStore'
+import { rendererPlatform } from '../../store/useWorkspaceStore'
+
+/** The async-launch result is internal bookkeeping; show what it means. */
+export function activityResult(result: string): string {
+  if (result === '…') return 'running…'
+  return /^Async agent launched successfully/i.test(result) ? 'launched in background' : result
+}
 
 export function ActivityTab({ items }: { items: ActivityItem[] }): JSX.Element {
+  const root = useConsoleStore((s) => s.team.cwd)
+  const opts = { ...(root ? { root } : {}), platform: rendererPlatform() }
   return (
     <ol className="insp-activity">
       {items.length === 0 && <li className="insp-empty">No tool calls yet</li>}
@@ -19,10 +30,12 @@ export function ActivityTab({ items }: { items: ActivityItem[] }): JSX.Element {
                 <span className="insp-event__tool" style={{ color }}>
                   {e.tool}
                 </span>{' '}
-                <span className="insp-event__target">{e.target}</span>
+                <span className="insp-event__target" title={e.target}>
+                  {shortenPathsInText(e.target, opts)}
+                </span>
               </span>
               <span className={e.failed ? 'insp-event__result insp-event__result--failed' : 'insp-event__result'}>
-                {e.result === '…' ? 'running…' : e.result}
+                {activityResult(e.result)}
               </span>
             </span>
           </li>

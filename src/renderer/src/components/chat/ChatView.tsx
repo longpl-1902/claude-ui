@@ -6,6 +6,11 @@ import { useMaxWidth } from '../../store/useLayoutStore'
 import { useWindowsStore } from '../../store/useWindowsStore'
 import { chatSpecForCurrent, getWindowSpec } from '../../windowActions'
 import { classifyLine } from '../team/LeadConsole'
+import { useTitlebarInset } from '../../hooks/useTitlebarInset'
+import { useCenterViewStore } from '../../store/useCenterViewStore'
+import { Button } from '../ui/Button'
+import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { midEllipsis } from '../ui/midEllipsis'
 import { PermissionCard } from '../team/PermissionCard'
 import { ControlComposer } from '../team/Composer'
 import { CopyButton } from './CopyButton'
@@ -19,7 +24,9 @@ export const CHAT_NARROW = 900
 const platform = (): string => (typeof navigator !== 'undefined' && /win/i.test(navigator.platform) ? 'win32' : 'posix')
 
 /** Full-height conversation view of the selected session. Nothing is sent except on an explicit Enter/Send (R-19). */
-export function ChatView(): JSX.Element {
+function ChatViewContent(): JSX.Element {
+  useTitlebarInset()
+  const setView = useCenterViewStore((s) => s.setView)
   const narrow = useMaxWidth(CHAT_NARROW)
   const team = useConsoleStore((s) => s.team)
   const demo = useConsoleStore((s) => s.teamMode === 'demo')
@@ -73,13 +80,13 @@ export function ChatView(): JSX.Element {
   const plat = platform()
   const display = (t: string): string => shortenPathsInText(t, { ...(projectRoot ? { root: projectRoot } : {}), platform: plat })
 
-  const stateLabel = demo ? 'demo' : controlled ? (control.state === 'draft' ? 'new session' : control.state) : external ? (summary?.live ? 'running elsewhere' : 'not running') : 'no session'
+  const stateLabel = demo ? 'demo' : controlled ? (control.state === 'draft' ? 'new session' : control.state) : external ? '' : 'no session'
   const disabled = !demo && !controlled
   const where = summary?.entrypoint?.toLowerCase().includes('vscode') ? 'VS Code' : 'a terminal'
   const reason = external
     ? summary?.live
-      ? `This session runs in ${where}. Agent Console cannot type into it.`
-      : 'This session is not running. Switch to Team view to resume or fork it.'
+      ? `Runs in ${where}. Agent Console can't type into it.`
+      : "Not running. Agent Console can't type into it until you resume or fork it."
     : 'No session is running here. Switch to Team view to start one.'
 
   let prevWho = ''
@@ -92,8 +99,9 @@ export function ChatView(): JSX.Element {
       <div key={i} className={`ac-chat__msg${w.isYou ? ' ac-chat__msg--you' : ''}`} data-kind={kind}>
         {head && (
           <div className="ac-chat__speaker">
-            <span className="ac-chat__who" style={{ color: w.color }}>
-              {w.name}
+            <span className="ac-chat__who" title={w.name}>
+              <i className="ac-chat__dot" style={{ background: w.color }} aria-hidden="true" />
+              {midEllipsis(w.name, 28)}
             </span>
             <span className="ac-chat__time">{l.time}</span>
           </div>
@@ -152,8 +160,9 @@ export function ChatView(): JSX.Element {
             {stream?.typing && (
               <div className="ac-chat__msg" data-testid="chat-typing">
                 <div className="ac-chat__speaker">
-                  <span className="ac-chat__who" style={{ color: who('lead').color }}>
-                    {who('lead').name}
+                  <span className="ac-chat__who" title={who('lead').name}>
+                    <i className="ac-chat__dot" style={{ background: who('lead').color }} aria-hidden="true" />
+                    {midEllipsis(who('lead').name, 28)}
                   </span>
                 </div>
                 <div className="ac-chat__bubble">
@@ -182,16 +191,33 @@ export function ChatView(): JSX.Element {
               ))}
             </div>
           )}
-          <ControlComposer
-            {...(control ? { control } : {})}
-            demo={demo}
-            disabled={disabled}
-            disabledReason={reason}
-            stateLabel={stateLabel}
-            placeholder={disabled ? '' : 'Message the lead, or @agent to talk to a teammate'}
-          />
+          {external ? (
+            <div className="ac-chat__external">
+              <p>{reason}</p>
+              <Button size="sm" variant="primary" onClick={() => setView('team')}>
+                Fork it in Team view
+              </Button>
+            </div>
+          ) : (
+            <ControlComposer
+              {...(control ? { control } : {})}
+              demo={demo}
+              disabled={disabled}
+              disabledReason={reason}
+              stateLabel={stateLabel}
+              placeholder={disabled ? '' : 'Message the lead, or @agent to talk to a teammate'}
+            />
+          )}
         </div>
       </div>
     </section>
+  )
+}
+
+export function ChatView(): JSX.Element {
+  return (
+    <ErrorBoundary label="The chat view">
+      <ChatViewContent />
+    </ErrorBoundary>
   )
 }

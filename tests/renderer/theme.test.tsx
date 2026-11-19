@@ -37,6 +37,8 @@ const THEMES = { dark, light } as const
 
 const BGS = ['app', 'panel', 'card', 'console', 'inset', 'btn', 'btn-hover', 'selected'].map((n) => `--ac-bg-${n}`)
 const SURFACES = ['--ac-bg-app', '--ac-bg-panel', '--ac-bg-card']
+// T32 U9: the console and chat sit on --ac-bg-console; the rail badge, inbox footer and agent names are checked there too
+const CONSOLE_SURFACES = [...SURFACES, '--ac-bg-console']
 const TEXTS = Object.keys(dark).filter((k) => /^--ac-text(-|$)/.test(k))
 const STATUSES = ['running', 'waiting', 'needs-you', 'done']
 const hex = (t: Record<string, string>, k: string): string => {
@@ -74,7 +76,7 @@ describe('T31 token contrast (both themes)', () => {
       const bad: string[] = []
       for (const s of STATUSES) {
         const fg = hex(t, `--ac-status-${s}`)
-        for (const bg of [`--ac-status-${s}-bg`, ...SURFACES]) {
+        for (const bg of [`--ac-status-${s}-bg`, ...CONSOLE_SURFACES]) {
           const r = contrastRatio(fg, hex(t, bg))
           if (r < 4.5) bad.push(`${s} on ${bg}: ${r.toFixed(2)}`)
         }
@@ -91,6 +93,8 @@ describe('T31 token contrast (both themes)', () => {
           pairs.push([fg, bg])
         for (const tool of Object.keys(t).filter((k) => k.startsWith('--ac-tool-'))) pairs.push([tool, bg])
       }
+      // the amber inbox footer ("N projects without hooks") is warn text straight on the dialog panel
+      for (const bg of CONSOLE_SURFACES) pairs.push(['--ac-warn-text', bg], ['--ac-text', bg], ['--ac-text-muted', bg])
       pairs.push(['--ac-warn-text', '--ac-warn-bg'], ['--ac-badge-text', '--ac-badge-bg'], ['--ac-text', '--ac-chip-bg'])
       pairs.push(['--ac-on-accent', '--ac-accent'], ['--ac-on-accent', '--ac-accent-2'], ['--ac-on-accent', '--ac-accent-hover'])
       pairs.push(['--ac-on-warn', '--ac-warn-solid'], ['--ac-on-warn', '--ac-warn-solid-hover'])
@@ -219,7 +223,8 @@ describe('T31 global styles', () => {
   it('the headers are the drag region and every interactive child is no-drag', () => {
     expect(globalCss).toMatch(/\.ac-header,\s*\.ac-acc-header,\s*\.ac-ext-header\s*\{[^}]*-webkit-app-region:\s*drag/)
     expect(globalCss).toMatch(/:is\(button, a, input, select, textarea[^)]*\)\s*\{\s*-webkit-app-region:\s*no-drag/)
-    expect(globalCss).toMatch(/env\(titlebar-area-width/)
+    // T32 U2: the space for the window controls comes from --ac-wco-right (useTitlebarInset), not env()
+    expect(globalCss).toMatch(/padding-right:\s*max\(20px,\s*calc\(var\(--ac-wco-right,\s*0px\)\s*\+\s*8px\)\)/)
   })
 })
 

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, RefObject } from 'react'
 import type { AccountView, FolderResolution } from '@shared/types'
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
 import { NeedsYouButton } from '../rail/NeedsYouInbox'
 import { useAttentionStore } from '../../store/useAttentionStore'
-import { ChevronDownIcon, LockIcon, TerminalIcon } from '../ui/Icons'
+import { ChevronDownIcon, LockIcon, PanelLeftIcon, PanelRightIcon, TerminalIcon } from '../ui/Icons'
 import { formatTokens } from '@shared/format'
 import { tokenHeadline } from '@shared/teamDefaults'
 import {
@@ -20,6 +20,7 @@ import { useControlStore } from '../../store/useControlStore'
 import { useMaxWidth } from '../../store/useLayoutStore'
 import { useWorkspaceStore } from '../../store/useWorkspaceStore'
 import { useOverflowItems } from '../../hooks/useOverflowItems'
+import { useTitlebarInset } from '../../hooks/useTitlebarInset'
 import { HooksDialog, hooksLabel } from './HooksDialog'
 import './teamLeft.css'
 import '../inspector/inspector.css'
@@ -27,9 +28,25 @@ import '../inspector/inspector.css'
 /** Below this width the secondary header items move into the "..." menu (plan: Responsive). */
 export const HEADER_OVERFLOW_MAX = 1299
 
-/** Items leave the header in this order when it is too narrow (T35); the note first shrinks to an icon. */
-export const OVERFLOW_ORDER = ['note', 'tokens', 'tokensToday', 'counters', 'hooks', 'extensions', 'pause', 'new'] as const
-const NOTE_ICON_WIDTH = 16
+/**
+ * T32 U4: the header row holds brand, project + session select, account chip, needs-you and one primary action; the rest
+ * lives in the "..." menu. Only the primary action may move into that menu when the row is too narrow (T35 measuring).
+ */
+export const OVERFLOW_ORDER = ['new'] as const
+
+export interface DrawerToggle {
+  open: boolean
+  onClick(): void
+  buttonRef?: RefObject<HTMLButtonElement>
+}
+
+export interface TeamHeaderProps {
+  /** Narrow layout: the Projects / Inspector drawers are opened from icon buttons in the header (T32 U11). */
+  drawers?: {
+    projects?: DrawerToggle
+    inspector?: DrawerToggle
+  }
+}
 
 /**
  * UX M4: the account of the VIEWED session. A live session carries its own accountId ('' = the default config dir);
@@ -82,10 +99,10 @@ function relTime(mtimeMs: number, nowMs: number): string {
   return `${Math.floor(hr / 24)}d ago`
 }
 
-export function TeamHeader() {
+export function TeamHeader({ drawers }: TeamHeaderProps = {}) {
+  useTitlebarInset()
   const team = useConsoleStore((s) => s.team)
   const account = useViewedAccount()
-  const accounts = useConsoleStore((s) => s.accounts.accounts)
   const edge = useConsoleStore((s) => s.accounts.safety.showAccountColorEdge)
   const navigate = useConsoleStore((s) => s.navigate)
   const counters = useTeamCounters()
@@ -173,13 +190,7 @@ export function TeamHeader() {
     }
   }, [demo, projectRoot])
   const resolvedId = resolution && resolution.accountId !== 'ask' ? resolution.accountId : undefined
-  const newAccountName =
-    resolvedId !== undefined
-      ? (accounts.find((a) => a.id === resolvedId)?.name ?? resolvedId)
-      : resolution
-        ? 'choose account'
-        : 'account'
-  const newLabel = demo ? '+ New teammate' : `+ New session in ${projectName || 'project'} as ${newAccountName}`
+  const newLabel = demo ? '+ New teammate' : '+ New session'
   const newDisabled = !demo && !projectRoot
   const onNew = (): void => {
     if (demo) return
@@ -191,22 +202,25 @@ export function TeamHeader() {
 
   // --- Hooks
   const [hooksOpen, setHooksOpen] = useState(false)
-  const hooksText = `Hooks: ${hooksLabel(demo ? null : hooks)}`
+  const hooksState = hooks?.state ?? 'unavailable'
+  const hooksText =
+    hooksState === 'installed'
+      ? 'Hooks: on'
+      : hooksState === 'not-installed'
+        ? 'Hooks: not installed · Install…'
+        : hooksState === 'partial' || hooksState === 'outdated'
+          ? 'Hooks: partial · Reinstall…'
+          : 'Hooks: n/a'
 
-  // --- overflow: measured, priority order (T35). The "needs you in this session" counter and everything in the
-  // never-moved list stay put.
-  const { containerRef, hidden, collapsed, compact } = useOverflowItems({
+  // --- overflow: measured (T35). Only the primary action may leave the row.
+  const { containerRef, hidden, compact } = useOverflowItems({
     order: OVERFLOW_ORDER,
-    absent: team.historyTruncated ? [] : ['note'],
-    collapse: { note: NOTE_ICON_WIDTH },
+    moreInFixed: true,
     fallbackNarrow: narrow
   })
-  const hiddenCount = hidden.size
+  const newHidden = hidden.has('new')
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (hiddenCount === 0) setMenuOpen(false)
-  }, [hiddenCount])
   useEffect(() => {
     if (!menuOpen) return
     const onDown = (e: MouseEvent): void => {
@@ -253,62 +267,42 @@ export function TeamHeader() {
       setMenuOpen(false)
     }
   }
-  const moreHasCount =
-    (hidden.has('tokens') && counters.tokens > 0) ||
-    (hidden.has('tokensToday') && tokensTodayAll > 0) ||
-    (hidden.has('counters') && (counters.agents > 0 || counters.running > 0))
 
   const after = (fn: () => void) => () => {
     fn()
     setMenuOpen(false)
   }
-  const buttons: Record<'pause' | 'new' | 'hooks' | 'extensions', (inMenu: boolean) => JSX.Element> = {
-    pause: (inMenu) => (
-      <Button
-        variant="secondary"
-        disabled={pauseDisabled}
-        title={pauseTitle}
-        onClick={after(onPauseAll)}
-        {...(inMenu ? { role: 'menuitem' } : {})}
-      >
-        {pauseLabel}
-      </Button>
-    ),
-    new: (inMenu) => (
-      <Button
-        variant="primary"
-        disabled={newDisabled}
-        title={newDisabled ? 'No project folder to start a session in' : 'Opens the start form; nothing is sent until you press Send'}
-        onClick={after(onNew)}
-        {...(inMenu ? { role: 'menuitem' } : {})}
-      >
-        {newLabel}
-      </Button>
-    ),
-    hooks: (inMenu) => (
-      <Button
-        variant="secondary"
-        disabled={demo}
-        title={demo ? 'Not available in demo' : 'Install or remove the Agent Console hooks for this project'}
-        onClick={after(() => setHooksOpen(true))}
-        {...(inMenu ? { role: 'menuitem' } : {})}
-      >
-        {hooksText}
-      </Button>
-    ),
-    extensions: (inMenu) => (
-      <Button
-        variant="secondary"
-        title="MCP servers, plugins, skills, agents and commands (Ctrl+Shift+E)"
-        onClick={after(() => navigate('extensions'))}
-        {...(inMenu ? { role: 'menuitem' } : {})}
-      >
-        Extensions
-      </Button>
-    )
-  }
-  // Left to right in the header and top to bottom in the menu.
-  const ACTION_IDS = ['pause', 'new', 'hooks', 'extensions'] as const
+  const showPause = demo || busyHere.length > 0
+  const sessionTitle = `${team.repo} / ${team.teamName}${team.historyTruncated ? ' · older history not loaded' : ''}`
+
+  const newButton = (inMenu: boolean): JSX.Element => (
+    <Button
+      variant="primary"
+      disabled={newDisabled}
+      title={newDisabled ? 'No project folder to start a session in' : 'Opens the start form; nothing is sent until you press Send'}
+      onClick={after(onNew)}
+      {...(inMenu ? { role: 'menuitem' } : {})}
+    >
+      {newLabel}
+    </Button>
+  )
+  const row = (label: string, onClick: () => void, extra: { title?: string; shortcut?: string; keys?: string } = {}): JSX.Element => (
+    <button
+      type="button"
+      role="menuitem"
+      className="ac-header__menurow"
+      {...(extra.title ? { title: extra.title } : {})}
+      {...(extra.keys ? { 'aria-keyshortcuts': extra.keys } : {})}
+      onClick={after(onClick)}
+    >
+      <span>{label}</span>
+      {extra.shortcut && (
+        <kbd className="ac-header__kbd" aria-hidden="true">
+          {extra.shortcut}
+        </kbd>
+      )}
+    </button>
+  )
 
   return (
     <header
@@ -316,32 +310,49 @@ export function TeamHeader() {
       className={`ac-header${compact ? ' is-compact' : ''}`}
       style={{ borderTop: `3px solid ${edge && account ? account.color : 'var(--ac-border)'}` }}
     >
+      {drawers?.projects && (
+        <button
+          ref={drawers.projects.buttonRef}
+          type="button"
+          className="ac-header__icon"
+          data-fixed
+          aria-label="Projects"
+          aria-expanded={drawers.projects.open}
+          aria-controls="ac-left"
+          title="Projects, worktrees and tasks (Ctrl+B)"
+          onClick={drawers.projects.onClick}
+        >
+          <PanelLeftIcon size={16} />
+        </button>
+      )}
       <div className="ac-header__brand" data-fixed data-brand>
         <TerminalIcon size={22} color="var(--ac-accent)" />
         <span className="ac-header__title">Agent Console</span>
-      </div>
-      <div className="ac-header__repo" data-fixed data-min="120" title={`${team.repo} / team: ${team.teamName}`}>
-        {/* In live mode the Project picker already names the repo; show only the session title. */}
-        {demo && (
-          <>
-            <span>{team.repo}</span>
-            <span className="ac-header__sep" aria-hidden="true">/</span>
-          </>
-        )}
-        <span className="ac-header__team">team: {team.teamName}</span>
       </div>
       {demo && (
         <span className="ac-header__badge ac-header__badge--demo" data-fixed title="Showing demo data">
           DEMO <span className="ac-header__badge-note">demo data</span>
         </span>
       )}
-      {live && <span className="ac-header__badge ac-header__badge--live" data-fixed>LIVE</span>}
       {!demo && projectName && (
         <span className="ac-header__project" data-fixed data-min="60" title={projectRoot || projectName}>
           {projectName}
         </span>
       )}
-      <select className="ac-header__picker" data-fixed data-min="160" aria-label="Session" value={selectedValue} onChange={(e) => onPick(e.target.value)}>
+      {demo && (
+        <span className="ac-header__repo" data-fixed data-min="80" title={sessionTitle}>
+          <span className="ac-header__team">{team.repo}</span>
+        </span>
+      )}
+      <select
+        className="ac-header__picker"
+        data-fixed
+        data-min="160"
+        aria-label="Session"
+        title={sessionTitle}
+        value={selectedValue}
+        onChange={(e) => onPick(e.target.value)}
+      >
         <option value="auto">Auto (latest)</option>
         {projectSessions.map((x) => {
           const v = `${x.accountId}|${x.sessionId}`
@@ -360,22 +371,6 @@ export function TeamHeader() {
           </Button>
         </span>
       )}
-      {team.historyTruncated &&
-        (collapsed.has('note') ? (
-          <span
-            className="ac-header__note ac-header__note--icon"
-            data-oi="note"
-            role="img"
-            aria-label="Older history not loaded"
-            title="older history not loaded"
-          >
-            ⓘ
-          </span>
-        ) : (
-          <span className="ac-header__note" data-oi="note">
-            older history not loaded
-          </span>
-        ))}
       <button
         type="button"
         className="ac-header__chip"
@@ -402,83 +397,67 @@ export function TeamHeader() {
       </button>
       <div className="ac-header__spacer" />
       <span className="ac-header__fixed" data-fixed>
-        <NeedsYouButton />
+        <NeedsYouButton inSession={counters.needsYou} />
       </span>
-      <div className="ac-header__counters">
-        {!hidden.has('counters') && (
-          <span className="ac-header__pair" data-oi="counters">
-            <span>
-              <strong>{counters.agents}</strong> agents
-            </span>
-            <span className="is-running">
-              <strong>{counters.running}</strong> running
-            </span>
-          </span>
-        )}
-        <span className="is-needs" data-fixed title="Agents in this session that need you">
-          <strong>{counters.needsYou}</strong> needs you{hidden.has('counters') ? '' : ' in this session'}
+      {!newHidden && (
+        <span className="ac-header__oi" data-oi="new">
+          {newButton(false)}
         </span>
-        {!hidden.has('tokens') && (
-          <span data-oi="tokens">
-            Tokens <strong>{formatTokens(counters.tokens)}</strong>
-          </span>
-        )}
-        {!hidden.has('tokensToday') && (
-          <span data-oi="tokensToday" title={tokensTodayTitle}>
-            Tokens today <strong>{formatTokens(tokensTodayAll)}</strong>
-          </span>
+      )}
+      <div className="ac-header__more" data-fixed data-min="44" ref={menuRef}>
+        <Button
+          variant="secondary"
+          aria-label="More header actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          title="More"
+          onClick={() => setMenuOpen((o) => !o)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setMenuOpen(false)
+            else if (e.key === 'ArrowDown' && !menuOpen) {
+              e.preventDefault()
+              setMenuOpen(true)
+            }
+          }}
+        >
+          {'…'}
+        </Button>
+        {menuOpen && (
+          <div role="menu" aria-label="Header actions" className="ac-header__menu" onKeyDown={onMenuKey}>
+            <div className="ac-header__menu-info" role="presentation">
+              This session: <strong>{counters.agents}</strong> agents · <strong>{counters.running}</strong> running ·{' '}
+              <strong>{formatTokens(counters.tokens)}</strong> tok · <strong>{counters.needsYou}</strong> need you
+            </div>
+            <div className="ac-header__menu-info" role="presentation" title={tokensTodayTitle}>
+              All projects today: <strong>{formatTokens(tokensTodayAll)}</strong> tok
+            </div>
+            <div className="ac-header__menu-sep" role="separator" />
+            {newHidden && newButton(true)}
+            {showPause && row(pauseLabel, onPauseAll, pauseTitle ? { title: pauseTitle } : {})}
+            {!demo && row(hooksText, () => setHooksOpen(true), { title: 'Install or remove the Agent Console hooks for this project' })}
+            {row('Extensions', () => navigate('extensions'), {
+              title: 'MCP servers, plugins, skills, agents and commands',
+              shortcut: 'Ctrl+Shift+E',
+              keys: 'Control+Shift+E'
+            })}
+            {row('Accounts', () => navigate('accounts'), { shortcut: 'Ctrl+Shift+A', keys: 'Control+Shift+A' })}
+          </div>
         )}
       </div>
-      {ACTION_IDS.filter((id) => !hidden.has(id)).map((id) => (
-        <span key={id} className="ac-header__oi" data-oi={id}>
-          {buttons[id](false)}
-        </span>
-      ))}
-      {hiddenCount > 0 && (
-        <div className="ac-header__more" ref={menuRef}>
-          <Button
-            variant="secondary"
-            aria-label="More header actions"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            title="More"
-            onClick={() => setMenuOpen((o) => !o)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setMenuOpen(false)
-              else if (e.key === 'ArrowDown' && !menuOpen) {
-                e.preventDefault()
-                setMenuOpen(true)
-              }
-            }}
-          >
-            {'…'}
-            {moreHasCount && <span className="ac-header__more-dot" aria-hidden="true" />}
-          </Button>
-          {menuOpen && (
-            <div role="menu" aria-label="Header actions" className="ac-header__menu" onKeyDown={onMenuKey}>
-              {hidden.has('counters') && (
-                <div className="ac-header__menu-info" role="presentation">
-                  <strong>{counters.agents}</strong> agents · <strong>{counters.running}</strong> running
-                </div>
-              )}
-              {hidden.has('tokens') && (
-                <div className="ac-header__menu-info" role="presentation">
-                  Tokens <strong>{formatTokens(counters.tokens)}</strong>
-                </div>
-              )}
-              {hidden.has('tokensToday') && (
-                <div className="ac-header__menu-info" role="presentation" title={tokensTodayTitle}>
-                  Tokens today <strong>{formatTokens(tokensTodayAll)}</strong>
-                </div>
-              )}
-              {ACTION_IDS.filter((id) => hidden.has(id)).map((id) => (
-                <span key={id} className="ac-header__menu-item" role="presentation">
-                  {buttons[id](true)}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+      {drawers?.inspector && (
+        <button
+          ref={drawers.inspector.buttonRef}
+          type="button"
+          className="ac-header__icon"
+          data-fixed
+          aria-label="Inspector"
+          aria-expanded={drawers.inspector.open}
+          aria-controls="ac-right"
+          title="Agent inspector (Ctrl+I)"
+          onClick={drawers.inspector.onClick}
+        >
+          <PanelRightIcon size={16} />
+        </button>
       )}
       <HooksDialog open={hooksOpen} onClose={() => setHooksOpen(false)} />
     </header>

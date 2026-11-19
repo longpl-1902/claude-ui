@@ -398,7 +398,9 @@ describe('T28 composer behaviour', () => {
 
   it('Ctrl+Enter option is remembered: Enter adds a line, Ctrl+Enter sends', async () => {
     mountComposer()
-    await userEvent.click(screen.getByRole('button', { name: 'Ctrl+Enter to send' }))
+    expect(screen.getByRole('radiogroup', { name: 'Send with' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Enter' })).toBeChecked()
+    await userEvent.click(screen.getByRole('radio', { name: 'Ctrl+Enter' }))
     expect(window.localStorage.getItem('ac.ctrlEnterSend')).toBe('1')
     await userEvent.type(field(), 'a{Enter}b')
     expect(field().value).toBe('a\nb')
@@ -417,7 +419,7 @@ describe('T28 composer behaviour', () => {
 
   it('nothing is sent on mount or when a toolbar button is used', async () => {
     mountComposer()
-    await userEvent.click(screen.getByRole('button', { name: 'Ctrl+Enter to send' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Ctrl+Enter' }))
     expect(api.send).not.toHaveBeenCalled()
     expect(api.sendRich).not.toHaveBeenCalled()
   })

@@ -108,3 +108,21 @@ export function CheckIcon({ size = 12, color }: IconProps): JSX.Element {
     </Svg>
   )
 }
+
+export function PanelLeftIcon({ size = 16, color }: IconProps): JSX.Element {
+  return (
+    <Svg size={size} color={color}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+    </Svg>
+  )
+}
+
+export function PanelRightIcon({ size = 16, color }: IconProps): JSX.Element {
+  return (
+    <Svg size={size} color={color}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+    </Svg>
+  )
+}

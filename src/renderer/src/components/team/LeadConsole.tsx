@@ -6,12 +6,16 @@ import { useCenterViewStore } from '../../store/useCenterViewStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
 import { CopyButton } from '../chat/CopyButton'
 import { Button } from '../ui/Button'
+import { midEllipsis } from '../ui/midEllipsis'
 import { ASK_LEAD_TEXT, ControlBar } from './ControlBar'
 import type { StartOption } from './ControlBar'
 import { ControlComposer } from './Composer'
 import { PermissionCard } from './PermissionCard'
 import { RawTerminalPane } from './RawTerminalPane'
 import './teamCenter.css'
+
+/** Characters of an agent name kept in the 140 px agent column (middle ellipsis). */
+const WHO_MAX = 18
 
 const DEMO_COMMANDS = ['/pause', '/stop', '/status']
 
@@ -31,6 +35,9 @@ const TOOL_NAMES = new Set([
   'ExitPlanMode', 'Skill', 'ToolSearch', 'LS'
 ])
 
+/** Two or more capitalised humps: PowerShell, SubagentHandback, WebFetch. A plain capitalised word is prose. */
+const CAMEL_TOOL = /^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$/
+
 /** Console lines carry no kind, so classify from the text the transcript model produces. */
 export function classifyLine(l: ConsoleLine): LineKind {
   if (l.who === 'you') return 'message'
@@ -38,6 +45,8 @@ export function classifyLine(l: ConsoleLine): LineKind {
   if (l.text.startsWith('spawned ')) return 'tool'
   const first = l.text.split(' ', 1)[0] ?? ''
   if (first.startsWith('mcp__') || TOOL_NAMES.has(first)) return 'tool'
+  // T32 U8: any other tool (PowerShell, SubagentHandback, ...) is a CamelCase name; "done" is a bare tool result.
+  if (CAMEL_TOOL.test(first) || l.text.trim().toLowerCase() === 'done') return 'tool'
   return 'message'
 }
 
@@ -194,8 +203,9 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
               return (
                 <div key={i} className={`ac-tc-line${isOpen ? ' ac-tc-line--open' : ''}`}>
                   <span className="ac-tc-line__t">{l.time}</span>
-                  <span className="ac-tc-line__who" style={{ color: w.color }}>
-                    {w.name}
+                  <span className="ac-tc-line__who" title={w.name}>
+                    <i className="ac-tc-line__dot" style={{ background: w.color }} aria-hidden="true" />
+                    {midEllipsis(w.name, WHO_MAX)}
                   </span>
                   <button
                     type="button"
@@ -231,8 +241,9 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
             {stream?.typing && (
               <div className="ac-tc-line ac-tc-line--typing" data-testid="typing-row">
                 <span className="ac-tc-line__t" />
-                <span className="ac-tc-line__who" style={{ color: who('lead').color }}>
-                  {who('lead').name}
+                <span className="ac-tc-line__who" title={who('lead').name}>
+                  <i className="ac-tc-line__dot" style={{ background: who('lead').color }} aria-hidden="true" />
+                  {midEllipsis(who('lead').name, WHO_MAX)}
                 </span>
                 <span className="ac-tc-line__msg ac-tc-line__msg--plain">
                   {display(stream.typing.text)}
@@ -261,6 +272,7 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
           ))}
         </div>
       )}
+      {!(promptDisabled && external) && (
       <div className="ac-tc-composer">
         <ControlComposer
           {...(control ? { control } : {})}
@@ -273,15 +285,16 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
           textareaRef={inputRef}
         />
       </div>
+      )}
       {promptDisabled && external && (
         <div className="ac-tc-external">
           <p>
             {summary?.live
-              ? `This session runs in ${where}. Agent Console cannot type into it.`
-              : 'This session is not running. Agent Console cannot type into it until you resume or fork it.'}
+              ? `Runs in ${where}. Agent Console can't type into it.`
+              : "Not running. Agent Console can't type into it until you resume or fork it."}
           </p>
           <div className="ac-tc-external__actions">
-            <Button size="sm" onClick={() => startPreset('fork')}>
+            <Button size="sm" variant="primary" onClick={() => startPreset('fork')}>
               Fork here
             </Button>
             {!summary?.live && (

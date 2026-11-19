@@ -150,18 +150,19 @@ describe('AccountCards tokens used today', () => {
 })
 
 describe('P3-C inspector actions and wrapping', () => {
-  it('live without a controlled session: actions are disabled with reasons', () => {
+  it('live without a controlled session: disabled actions are not shown (T32 U15)', () => {
     seedLive([liveAgent()])
     render(<Inspector />)
-    expect(screen.getByRole('button', { name: 'Message agent' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Message agent' })).toHaveAttribute('title', expect.stringContaining('VS Code'))
-    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Stop process…' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Message agent' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull()
   })
-  it('demo: the three actions are enabled', () => {
+  it('demo: the actions are enabled; Stop is in the "..." menu', async () => {
     seedDemoTeam()
     render(<Inspector />)
-    for (const n of ['Message agent', 'Pause', 'Stop']) expect(screen.getByRole('button', { name: n })).toBeEnabled()
+    for (const n of ['Message agent', 'Pause', 'More actions']) expect(screen.getByRole('button', { name: n })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('menuitem', { name: 'Stop' })).toBeEnabled()
   })
   it('activity CSS wraps long text without a horizontal scrollbar', () => {
     const css = readFileSync(resolve(__dirname, '../../src/renderer/src/components/inspector/inspector.css'), 'utf8')

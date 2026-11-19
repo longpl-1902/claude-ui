@@ -4,6 +4,7 @@ import { Dialog } from '../ui/Dialog'
 import { sessionProjectKey, useConsoleStore } from '../../store/useConsoleStore'
 import { useSwitcherStore } from '../../store/useSwitcherStore'
 import { mergeProjects } from '../../store/useRailStore'
+import { worstState } from './ProjectRail'
 import { useAttentionStore } from '../../store/useAttentionStore'
 import { useWindowsStore } from '../../store/useWindowsStore'
 import './rail.css'
@@ -17,6 +18,9 @@ interface Entry {
   accountId?: string
   sessionId?: string
   windowId?: number
+  /** Status dot (needs / running / waiting / none) and the account colour dot. */
+  state?: string
+  color?: string
 }
 
 /** Ctrl+K: filter over projects and their live sessions. Open it with useSwitcherStore.open(). */
@@ -26,6 +30,9 @@ export function ProjectSwitcher(): JSX.Element | null {
   const sessions = useConsoleStore((s) => s.sessions)
   const hubProjects = useAttentionStore((s) => s.snapshot.projects)
   const windowList = useWindowsStore((s) => s.list)
+  const accounts = useConsoleStore((s) => s.accounts.accounts)
+  const colorOf = (id: string | undefined): string =>
+    (id === '' ? accounts.find((a) => a.isDefaultDir) : accounts.find((a) => a.id === id))?.color ?? 'var(--ac-text-muted)'
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
@@ -43,7 +50,7 @@ export function ProjectSwitcher(): JSX.Element | null {
     for (const p of mergeProjects(hubProjects, sessions).sort((a, b) => b.lastActivityMs - a.lastActivityMs)) {
       const live = sessions.filter((s) => s.live && sessionProjectKey(s) === p.key)
       const matchesProject = q === '' || p.name.toLowerCase().includes(q) || p.root.toLowerCase().includes(q)
-      if (matchesProject) out.push({ id: `p:${p.key}`, kind: 'project', label: p.name, detail: p.root, projectKey: p.key })
+      if (matchesProject) out.push({ id: `p:${p.key}`, kind: 'project', label: p.name, detail: p.root, projectKey: p.key, state: worstState(p), color: colorOf(p.accountIds[0]) })
       for (const s of live) {
         const title = s.title ?? s.sessionId.slice(0, 8)
         if (matchesProject || title.toLowerCase().includes(q) || s.sessionId.toLowerCase().startsWith(q)) {
@@ -54,7 +61,9 @@ export function ProjectSwitcher(): JSX.Element | null {
             detail: `${p.name} · live session`,
             projectKey: p.key,
             accountId: s.accountId,
-            sessionId: s.sessionId
+            sessionId: s.sessionId,
+            state: 'running',
+            color: colorOf(s.accountId)
           })
         }
       }
@@ -72,7 +81,8 @@ export function ProjectSwitcher(): JSX.Element | null {
       }
     }
     return out
-  }, [query, sessions, hubProjects, windowList])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, sessions, hubProjects, windowList, accounts])
 
   const activate = (e: Entry): void => {
     const c = useConsoleStore.getState()
@@ -131,8 +141,18 @@ export function ProjectSwitcher(): JSX.Element | null {
               onClick={() => activate(e)}
             >
               <span className="ac-switch__kind">{e.kind === 'project' ? 'Project' : e.kind === 'window' ? 'Window' : 'Session'}</span>
-              <span className="ac-switch__label">{e.label}</span>
-              <span className="ac-switch__detail">{e.detail}</span>
+              {e.state !== undefined && (
+                <span className="ac-switch__dots" aria-hidden="true">
+                  <i className={`ac-switch__status is-${e.state}`} />
+                  <i className="ac-switch__acct" style={{ background: e.color ?? 'var(--ac-text-muted)' }} />
+                </span>
+              )}
+              <span className="ac-switch__label" title={e.label}>
+                {e.label}
+              </span>
+              <span className="ac-switch__detail" title={e.detail}>
+                {e.detail}
+              </span>
             </li>
           ))}
         </ul>

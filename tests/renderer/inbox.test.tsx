@@ -42,6 +42,13 @@ const openInbox = async () => {
   await userEvent.click(screen.getByRole('button', { name: /need you/ }))
   return screen.getByRole('dialog', { name: 'Needs you' })
 }
+it('T32 U15: the inbox has a visible close button in its title row', async () => {
+  render(<NeedsYouButton />)
+  const d = await openInbox()
+  await userEvent.click(within(d).getByRole('button', { name: 'Close' }))
+  expect(screen.queryByRole('dialog', { name: 'Needs you' })).toBeNull()
+})
+
 const rowFor = (dialog: HTMLElement, text: RegExp | string) =>
   within(dialog)
     .getAllByRole('listitem')
@@ -374,7 +381,7 @@ describe('F3 blind spots footer', () => {
 })
 
 describe('S2 tokens today in the header', () => {
-  it('shows all accounts, with the per-project breakdown in the title', () => {
+  it('shows all accounts, with the per-project breakdown in the title', async () => {
     seedDemoTeam()
     seedMockAccounts()
     useConsoleStore.setState({
@@ -388,10 +395,13 @@ describe('S2 tokens today in the header', () => {
     })
     seed([], [project('d:/work/alpha', { tokensToday: 2000 }), project('d:/work/beta', { tokensToday: 3000 })])
     render(<TeamHeader />)
-    const el = screen.getByText(/Tokens today/)
+    // T32 U3: the scoped stats live in the "..." menu; the header has only the global needs-you button.
+    await userEvent.click(screen.getByRole('button', { name: 'More header actions' }))
+    const el = screen.getByText(/All projects today/)
     expect(el).toHaveTextContent('5k')
     expect(el.getAttribute('title')).toContain('alpha 2k')
     expect(el.getAttribute('title')).toContain('beta 3k')
-    expect(document.querySelector('.is-needs')).toHaveTextContent(/in this session/)
+    expect(screen.getByText(/This session:/)).toBeInTheDocument()
+    expect(document.querySelector('.is-needs')).toBeNull()
   })
 })

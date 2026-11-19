@@ -45,7 +45,7 @@ describe('R-15 TeamView smoke', () => {
     expect(screen.getByText('Lead console')).toBeInTheDocument()
     expect(screen.getByText('Assigned task')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Message agent' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeInTheDocument()
   })
 
   it('shows every status with its text label', () => {
@@ -94,8 +94,8 @@ describe('R-14 responsive CSS (static check; visual check is manual)', () => {
     expect(css).toMatch(/flex-wrap:\s*wrap/)
   })
 
-  it('has narrow-window breakpoints at 1100px and 760px', () => {
-    expect(css).toMatch(/@media\s*\(max-width:\s*1100px\)/)
+  it('has narrow-window breakpoints at 1439px (inspector drawer) and 760px', () => {
+    expect(css).toMatch(/@media\s*\(max-width:\s*1439px\)/)
     expect(css).toMatch(/@media\s*\(max-width:\s*760px\)/)
   })
 })

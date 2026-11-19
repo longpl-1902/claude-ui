@@ -2,6 +2,8 @@
 import './jestDom'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockAccountsSnapshot } from '@shared/mock'
 import type { AccountsSnapshot } from '@shared/types'
@@ -91,27 +93,35 @@ describe('Account cards', () => {
     expect(card('Company')).toHaveTextContent('(default folder)')
   })
 
-  it('Locked badge disables Sign in again', () => {
+  /** T32 U14: Sign in again, Rename & color and Remove live in the card's "..." menu. */
+  const openMenu = async (name: string): Promise<HTMLElement> => {
+    await userEvent.click(within(card(name)).getByRole('button', { name: `More actions for ${name}` }))
+    return screen.getByRole('menu')
+  }
+
+  it('Locked badge removes Sign in again from the menu', async () => {
     patch((s) => {
       s.accounts[1]!.locked = true
     })
     setup()
     const c = card('Personal')
     expect(within(c).getByText(/Locked/)).toBeInTheDocument()
-    expect(within(c).getByRole('button', { name: 'Sign in again' })).toBeDisabled()
-    expect(within(card('Company')).getByRole('button', { name: 'Sign in again' })).toBeEnabled()
+    expect(within(await openMenu('Personal')).queryByRole('menuitem', { name: 'Sign in again' })).toBeNull()
+    await userEvent.keyboard('{Escape}')
+    expect(within(await openMenu('Company')).getByRole('menuitem', { name: 'Sign in again' })).toBeInTheDocument()
   })
 
   it('Sign in again calls startSignIn with the config dir', async () => {
     setup()
-    await userEvent.click(within(card('Personal')).getByRole('button', { name: 'Sign in again' }))
+    await openMenu('Personal')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Sign in again' }))
     expect(api.startSignIn).toHaveBeenCalledWith('~/.claude-personal')
   })
 
-  it('Set as default calls the api and is disabled for the default', async () => {
+  it('Set as default calls the api and is not offered for the default', async () => {
     setup()
     expect(within(card('Company')).getByText('Default')).toBeInTheDocument()
-    expect(within(card('Company')).getByRole('button', { name: 'Set as default' })).toBeDisabled()
+    expect(within(card('Company')).queryByRole('button', { name: 'Set as default' })).toBeNull()
     await userEvent.click(within(card('Personal')).getByRole('button', { name: 'Set as default' }))
     expect(api.setDefault).toHaveBeenCalledWith('personal')
     expect(within(card('Personal')).getByText('Default')).toBeInTheDocument()
@@ -206,7 +216,8 @@ describe('Account cards', () => {
 
   it('Rename & color edits in place, keeps the folder read-only and sends the id', async () => {
     setup()
-    await userEvent.click(within(card('Personal')).getByRole('button', { name: 'Rename & color' }))
+    await openMenu('Personal')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename & color' }))
     const form = screen.getByRole('form', { name: 'Rename and color' })
     expect(within(form).getByLabelText('Config folder')).toHaveAttribute('readonly')
     const name = within(form).getByLabelText('Name')
@@ -226,10 +237,12 @@ describe('Account cards', () => {
   it('Remove asks for confirmation first', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     setup()
-    await userEvent.click(within(card('Personal')).getByRole('button', { name: 'Remove' }))
+    await openMenu('Personal')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove…' }))
     expect(api.removeProfile).not.toHaveBeenCalled()
     confirm.mockReturnValue(true)
-    await userEvent.click(within(card('Personal')).getByRole('button', { name: 'Remove' }))
+    await openMenu('Personal')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove…' }))
     expect(api.removeProfile).toHaveBeenCalledWith('personal')
   })
 })
@@ -302,12 +315,69 @@ describe('Policies', () => {
     setup()
     expect(screen.getByRole('radio', { name: /Pause the team/ })).toBeChecked()
     expect(
-      screen.getByText(/Only for personal folders\. Applies once usage data is available \(Phase 3\)\./)
+      screen.getByText(/Only for personal folders\. Applies once usage data is available\./)
     ).toBeInTheDocument()
     await userEvent.click(screen.getByRole('radio', { name: /Switch to the other account/ }))
     expect(api.setLimitPolicy).toHaveBeenCalledWith('switch')
     await userEvent.click(screen.getByRole('radio', { name: /Wait for the reset/ }))
     expect(api.setLimitPolicy).toHaveBeenLastCalledWith('wait')
+  })
+})
+
+describe('T32 U14', () => {
+  it('Detected logins collapse to one line when every login is already linked', async () => {
+    patch((s) => {
+      s.detected = [
+        { configDir: '~/.claude', sources: ['vscode'], signedIn: true, linkedAccountId: 'company' },
+        { configDir: '~/.claude-personal', sources: ['cli'], signedIn: true, linkedAccountId: 'personal' }
+      ]
+    })
+    setup()
+    expect(screen.getByText('2 logins found · all linked')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scan again' })).toBeInTheDocument()
+    expect(screen.queryByText('Found in: vscode')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Show details' }))
+    expect(screen.getByText('Found in: vscode')).toBeInTheDocument()
+  })
+
+  it('an unlinked login keeps the full card', () => {
+    patch((s) => {
+      s.detected = [{ configDir: '~/.claude-new', sources: ['cli'], signedIn: true }]
+    })
+    setup()
+    expect(screen.getByRole('button', { name: 'Use this' })).toBeInTheDocument()
+  })
+
+  it('Running now lists live sessions started elsewhere, labelled where they run', () => {
+    patch((s) => {
+      s.sessions = []
+    })
+    useConsoleStore.setState({
+      sessions: [
+        {
+          sessionId: 'sess-1',
+          accountId: 'company',
+          configDir: 'C:/c',
+          projectDir: 'p',
+          cwd: 'C:/Users/u/acme',
+          title: 'Fix the build',
+          project: { key: 'c:/users/u/acme', name: 'acme', root: 'C:/Users/u/acme', git: true },
+          mtimeMs: 1,
+          sizeBytes: 1,
+          live: true,
+          entrypoint: 'claude-vscode'
+        }
+      ]
+    })
+    setup()
+    expect(screen.getByText('Fix the build')).toBeInTheDocument()
+    expect(screen.getByText(/in VS Code/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing running/)).toBeNull()
+  })
+
+  it('the header is sticky so needs-you and Back never scroll away', () => {
+    const css = readFileSync(resolve(__dirname, '../../src/renderer/src/screens/AccountsView.css'), 'utf8')
+    expect(css).toMatch(/\.ac-acc-header \{ position: sticky; top: 0/)
   })
 })
 
@@ -324,7 +394,7 @@ describe('Running now', () => {
       s.sessions = []
     })
     setup()
-    expect(screen.getByText(/No sessions running\. Start one from the lead console/)).toBeInTheDocument()
+    expect(screen.getByText(/Nothing running\. Start one with \+ New session in the Team view\./)).toBeInTheDocument()
   })
 })
 

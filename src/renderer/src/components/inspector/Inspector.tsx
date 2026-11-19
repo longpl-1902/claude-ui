@@ -109,6 +109,7 @@ function InspectorBody({
   const [confirm, setConfirm] = useState<"stop-session" | "stop-process" | null>(null);
   const [confirmError, setConfirmError] = useState("");
   const [working, setWorking] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -263,43 +264,69 @@ function InspectorBody({
       </div>
 
       <div className="insp__task">
-        <span className="insp__task-label">Assigned task</span>
-        <span className="insp__task-title">{agent.taskTitle}</span>
+        {agent.taskTitle && agent.taskTitle !== agent.worktree && (
+          <>
+            <span className="insp__task-label">Assigned task</span>
+            <span className="insp__task-title">{agent.taskTitle}</span>
+          </>
+        )}
         <span className="insp__task-wt">⎇ {live ? agent.worktree || "—" : agent.worktree}</span>
       </div>
+      {/* T32 U15: only enabled actions, one primary; Stop (confirm-gated) lives in the "..." menu. */}
       <div className="insp__actions">
-        <Button
-          size="lg"
-          disabled={messageDisabled}
-          title={messageTitle}
-          aria-expanded={live && controlled ? composerOpen : undefined}
-          onClick={messageAgent}
-        >
-          Message agent
-        </Button>
-        <Button
-          size="lg"
-          disabled={!worktreePath}
-          title={worktreePath ? undefined : "No worktree path for this agent"}
-          onClick={() => {
-            if (worktreePath)
-              void window.api?.worktree.openInEditor(worktreePath);
-          }}
-        >
-          Open worktree
-        </Button>
-        <Button size="lg" disabled={pauseDisabled} title={pauseTitle} onClick={pause}>
-          Pause
-        </Button>
-        <Button
-          size="lg"
-          variant="danger"
-          disabled={stopDisabled}
-          title={stopTitle}
-          onClick={stopAction}
-        >
-          {stopLabel}
-        </Button>
+        {!messageDisabled && (
+          <Button
+            size="lg"
+            variant="primary"
+            aria-expanded={live && controlled ? composerOpen : undefined}
+            onClick={messageAgent}
+          >
+            Message agent
+          </Button>
+        )}
+        {worktreePath && (
+          <Button
+            size="lg"
+            {...(messageDisabled ? { variant: "primary" as const } : {})}
+            onClick={() => void window.api?.worktree.openInEditor(worktreePath)}
+          >
+            Open worktree
+          </Button>
+        )}
+        {!pauseDisabled && (
+          <Button size="lg" title={pauseTitle} onClick={pause}>
+            Pause
+          </Button>
+        )}
+        {!stopDisabled && (
+          <span className="insp__more">
+            <Button
+              size="lg"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((o) => !o)}
+            >
+              {"…"}
+            </Button>
+            {moreOpen && (
+              <div role="menu" aria-label="More actions" className="insp__menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="insp__menurow"
+                  title={stopTitle}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    stopAction();
+                  }}
+                >
+                  {stopLabel}
+                </button>
+              </div>
+            )}
+          </span>
+        )}
       </div>
       {live && controlled && composerOpen && (
         <div className="insp__composer">

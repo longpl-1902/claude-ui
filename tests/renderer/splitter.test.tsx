@@ -3,6 +3,7 @@ import './jestDom'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Splitter } from '@renderer/components/layout/Splitter'
+import { fitWidths } from '@renderer/hooks/usePanelWidths'
 import { TeamView } from '@renderer/screens/TeamView'
 import { resetConsoleStore } from '@renderer/store/useConsoleStore'
 import { seedDemoTeam } from './seedTeam'
@@ -124,14 +125,11 @@ describe('pointer drag', () => {
 })
 
 describe('center minimum', () => {
+  // T32 U6: below 1440 px the inspector is a drawer, so the two-column limit is exercised on the pure fit function.
   it('limits the dragged width so the center keeps 420px', () => {
-    setViewport(1200) // avail = 1200 - 420 - 12 = 768
-    render(<TeamView />)
-    fireEvent.keyDown(right(), { key: 'End' })
-    expect(now(right())).toBe(528) // 768 - 240
-    fireEvent.keyDown(left(), { key: 'End' })
-    expect(now(left())).toBe(240) // right already fills the rest
-    expect(now(left()) + now(right())).toBeLessThanOrEqual(768)
+    const w = fitWidths({ left: 240, right: 640 }, 1200) // avail = 1200 - 420 - 12 = 768
+    expect(w).toEqual({ left: 240, right: 528 })
+    expect(w.left + w.right).toBeLessThanOrEqual(768)
   })
 
   it('shrinks side widths when the window shrinks', () => {
@@ -139,13 +137,37 @@ describe('center minimum', () => {
     window.localStorage.setItem(KEY, JSON.stringify({ left: 480, right: 640 }))
     render(<TeamView />)
     expect(now(left()) + now(right())).toBe(1120)
-    act(() => {
-      setViewport(1200)
-      window.dispatchEvent(new Event('resize'))
-    })
-    expect(now(left()) + now(right())).toBeLessThanOrEqual(768)
-    expect(now(left())).toBeGreaterThanOrEqual(180)
-    expect(now(right())).toBeGreaterThanOrEqual(280)
+    const w = fitWidths({ left: 480, right: 640 }, 1200)
+    expect(w.left + w.right).toBeLessThanOrEqual(768)
+    expect(w.left).toBeGreaterThanOrEqual(180)
+    expect(w.right).toBeGreaterThanOrEqual(280)
+  })
+
+  it('below 1440 px the inspector is a drawer opened from the header, not a docked column', () => {
+    setViewport(1200)
+    render(<TeamView />)
+    expect(screen.queryByRole('separator', { name: 'Resize inspector panel' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Inspector' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('separator', { name: 'Resize worktrees panel' })).toBeInTheDocument()
+  })
+
+  it('between 1440 and 1599 px only one of worktrees / inspector is docked; opening one folds the other', () => {
+    setViewport(1500)
+    render(<TeamView />)
+    expect(screen.queryByRole('separator', { name: 'Resize worktrees panel' })).toBeNull()
+    expect(screen.getByRole('separator', { name: 'Resize inspector panel' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand worktrees panel' }))
+    expect(screen.getByRole('separator', { name: 'Resize worktrees panel' })).toBeInTheDocument()
+    expect(screen.queryByRole('separator', { name: 'Resize inspector panel' })).toBeNull()
+    // The user's own widths are untouched by the folding.
+    expect(JSON.parse(window.localStorage.getItem('ac.collapsed') ?? '{}')).not.toMatchObject({ rightCollapsed: true })
+  })
+
+  it('at 1600 px and wider both columns are docked', () => {
+    setViewport(1600)
+    render(<TeamView />)
+    expect(left()).toBeInTheDocument()
+    expect(right()).toBeInTheDocument()
   })
 })
 

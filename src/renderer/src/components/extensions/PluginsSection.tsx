@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Button } from '../ui/Button'
 import { useExtensionsStore } from '../../store/useExtensionsStore'
+import { describe } from './describe'
+import { RowMenu } from './RowMenu'
 
 export function PluginsSection({ accountId }: { accountId: string }): JSX.Element {
   const plugins = useExtensionsStore((s) => s.plugins)
@@ -25,7 +27,7 @@ export function PluginsSection({ accountId }: { accountId: string }): JSX.Elemen
           if (id.trim()) void run('install', id.trim())
         }}
       >
-        <input aria-label="Plugin to install" placeholder="plugin@marketplace" value={id} onChange={(e) => setId(e.target.value)} />
+        <input className="ac-acc-text" aria-label="Plugin to install" placeholder="plugin@marketplace" value={id} onChange={(e) => setId(e.target.value)} />
         <Button type="submit" disabled={id.trim() === ''}>
           Install…
         </Button>
@@ -50,7 +52,7 @@ export function PluginsSection({ accountId }: { accountId: string }): JSX.Elemen
                 {p.scope && <span className="ac-ext-badge">{p.scope}</span>}
                 <span className="ac-ext-status">{p.enabled ? 'enabled' : 'disabled'}</span>
               </div>
-              {p.description && <span className="ac-ext-desc">{p.description}</span>}
+              {p.description && <span className="ac-ext-desc">{describe(p.description)}</span>}
               <div className="ac-ext-item__actions">
                 <Button
                   size="sm"
@@ -59,9 +61,10 @@ export function PluginsSection({ accountId }: { accountId: string }): JSX.Elemen
                 >
                   {p.enabled ? 'Disable' : 'Enable'}
                 </Button>
-                <Button size="sm" variant="danger" aria-label={`Uninstall ${p.name}`} onClick={() => void run('uninstall', p.id)}>
-                  Uninstall…
-                </Button>
+                <RowMenu
+                  label={`More actions for ${p.name}`}
+                  items={[{ label: 'Uninstall…', ariaLabel: `Uninstall ${p.name}`, danger: true, onSelect: () => void run('uninstall', p.id) }]}
+                />
               </div>
             </li>
           ))}

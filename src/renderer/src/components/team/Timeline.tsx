@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import type { ActivitySpan, Agent } from '@shared/types'
 import { useAgentStatuses, useConsoleStore } from '../../store/useConsoleStore'
 import { Button } from '../ui/Button'
+import { midEllipsis } from '../ui/midEllipsis'
 import { SEGMENT_COLORS, TIMELINE_LEGEND } from '../../theme/colors'
 import './teamCenter.css'
 import './teamLeft.css'
@@ -23,50 +25,76 @@ export function spanGeometry(s: ActivitySpan, nowMs: number): { left: number; wi
   return { left: ((start - from) / WINDOW_MS) * 100, width: ((end - start) / WINDOW_MS) * 100 }
 }
 
+const LANE_LABEL_MAX = 16
+const legendText = TIMELINE_LEGEND.map((l) => l.label).join(', ')
+
+/** Legend chips; in a narrow column (container query) they fold into one "Legend" button with a tooltip. */
 function Legend(): JSX.Element {
   return (
     <>
-      {TIMELINE_LEGEND.map((l) => (
-        <span key={l.kind} className="ac-tc-legend">
-          <i style={{ background: SEGMENT_COLORS[l.kind] }} aria-hidden="true" />
-          {l.label}
-        </span>
-      ))}
+      <span className="ac-tc-legend-chips">
+        {TIMELINE_LEGEND.map((l) => (
+          <span key={l.kind} className="ac-tc-legend">
+            <i style={{ background: SEGMENT_COLORS[l.kind] }} aria-hidden="true" />
+            {l.label}
+          </span>
+        ))}
+      </span>
+      <button type="button" className="ac-tc-legend-btn" title={legendText} aria-label={`Legend: ${legendText}`}>
+        Legend
+      </button>
     </>
   )
 }
 
-function LiveTimeline(): JSX.Element {
+/** Title row with the collapse toggle (T32 U5); collapsed = just this one-line strip. */
+function TimelineHead({ open, onToggle, children }: { open: boolean; onToggle(): void; children?: ReactNode }): JSX.Element {
+  return (
+    <div className="ac-tc-tl-head">
+      <button type="button" className="ac-tc-tl-toggle" aria-expanded={open} aria-label={open ? 'Collapse timeline' : 'Expand timeline'} onClick={onToggle}>
+        {open ? '▾' : '▸'}
+      </button>
+      <h2>Timeline</h2>
+      <span className="ac-tc-hint">last 20 min</span>
+      <div className="ac-tc-spacer" />
+      {children}
+    </div>
+  )
+}
+
+function LiveTimeline({ defaultCollapsed }: { defaultCollapsed: boolean }): JSX.Element {
   const agents = useConsoleStore((s) => s.team.agents)
   const nowMs = useConsoleStore((s) => s.nowMs)
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
   const statuses = useAgentStatuses()
   const [showFinished, setShowFinished] = useState(false)
+  const [open, setOpen] = useState(!defaultCollapsed)
 
-  const isLead = (a: Agent, i: number): boolean => a.runtime?.kind === 'lead' || a.id === 'lead' || i === 0
-  const shown: Agent[] = []
-  let finished = 0
-  agents.forEach((a, i) => {
-    const done = statuses[a.id] === 'done' && !isLead(a, i)
-    if (!done || showFinished) shown.push(a)
-    else finished += 1
-  })
   const geo = (a: Agent): { span: ActivitySpan; left: number; width: number }[] =>
     (a.spans ?? []).flatMap((span) => {
       const g = spanGeometry(span, nowMs)
       return g ? [{ span, ...g }] : []
     })
+  // U12: the lead, agents with activity in the window, and running / needs-you agents; the rest stays out of the way.
+  const isLead = (a: Agent, i: number): boolean => a.runtime?.kind === 'lead' || a.id === 'lead' || i === 0
+  const shown: Agent[] = []
+  let finished = 0
+  agents.forEach((a, i) => {
+    const lead = isLead(a, i)
+    const done = statuses[a.id] === 'done' && !lead
+    const live = statuses[a.id] === 'running' || statuses[a.id] === 'needs-you'
+    const relevant = lead || live || geo(a).length > 0
+    if (done && !showFinished) finished += 1
+    else if (relevant || showFinished) shown.push(a)
+  })
   const anyActivity = agents.some((a) => geo(a).length > 0)
 
   return (
     <section className="ac-tc-panel">
-      <div className="ac-tc-tl-head">
-        <h2>Timeline</h2>
-        <span className="ac-tc-hint">last 20 min</span>
-        <div className="ac-tc-spacer" />
-        <Legend />
-      </div>
-      {!anyActivity ? (
+      <TimelineHead open={open} onToggle={() => setOpen((o) => !o)}>
+        {open && <Legend />}
+      </TimelineHead>
+      {!open ? null : !anyActivity ? (
         <p className="ac-tc-empty-line">No activity in the last 20 minutes</p>
       ) : (
         <div className="ac-tc-scroll">
@@ -77,7 +105,7 @@ function LiveTimeline(): JSX.Element {
                   className={a.id === selectedAgentId ? 'ac-tc-lane-name ac-tc-lane-name--sel' : 'ac-tc-lane-name'}
                   title={a.name}
                 >
-                  {a.name}
+                  {midEllipsis(a.name, LANE_LABEL_MAX)}
                 </span>
                 <div className="ac-tc-lane" role="img" aria-label={`${a.name} activity, last 20 minutes`}>
                   {geo(a).map(({ span, left, width }, i) => (
@@ -102,7 +130,7 @@ function LiveTimeline(): JSX.Element {
           </div>
         </div>
       )}
-      {(finished > 0 || showFinished) && (
+      {open && (finished > 0 || showFinished) && (
         <div className="ac-tc-finished">
           {finished > 0 && <span>{`${finished} finished`}</span>}
           <Button variant="ghost" size="sm" aria-pressed={showFinished} onClick={() => setShowFinished((v) => !v)}>
@@ -114,11 +142,11 @@ function LiveTimeline(): JSX.Element {
   )
 }
 
-export function Timeline(): JSX.Element {
+export function Timeline({ defaultCollapsed = false }: { defaultCollapsed?: boolean } = {}): JSX.Element {
   const team = useConsoleStore((s) => s.team)
   const demo = useConsoleStore((s) => s.team.source === 'demo')
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
-  if (!demo) return <LiveTimeline />
+  if (!demo) return <LiveTimeline defaultCollapsed={defaultCollapsed} />
   return (
     <section className="ac-tc-panel">
       <div className="ac-tc-tl-head">

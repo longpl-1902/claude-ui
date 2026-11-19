@@ -1,4 +1,5 @@
 import { shortenPath } from '@shared/displayPath'
+import { useState } from 'react'
 import type { Agent, Worktree } from '@shared/types'
 import { rendererPlatform, selectWorktreeViews, useWorkspaceStore } from '../../store/useWorkspaceStore'
 import { useConsoleStore } from '../../store/useConsoleStore'
@@ -10,10 +11,98 @@ import { BranchIcon } from '../ui/Icons'
 import { isKnownReason, reasonText } from '../ui/reasonText'
 import './teamLeft.css'
 
+interface ShortPath {
+  short: string
+  full: string
+}
+
 const errText = (e: string): string => (isKnownReason(e) ? reasonText(e) : e)
 const shortErr = (e: string): string => {
   const t = errText(e)
   return t.length > 80 ? `${t.slice(0, 79)}…` : t
+}
+
+/** Avatars shown in the stack before "+n". */
+export const WT_STACK_MAX = 5
+
+/** Worktree card (T32 U6): branch, short path, agent count with an avatar stack; the agent list opens on click. */
+function LiveWorktreeCard({
+  wt: w,
+  path: p,
+  byId,
+  onSelect
+}: {
+  wt: Worktree
+  path: ShortPath
+  byId: Map<string, Agent>
+  onSelect(id: string): void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const overlaps = w.overlapsWith ?? []
+  const agents = w.agentIds.flatMap((id) => {
+    const a = byId.get(id)
+    return a ? [a] : []
+  })
+  const count = agents.length
+  return (
+    <div className={`ac-wt${overlaps.length ? ' ac-wt--warn' : ''}`}>
+      <div className="ac-wt__top">
+        <BranchIcon size={14} color="var(--ac-text-muted)" />
+        <span className="ac-wt__branch" title={w.branch}>
+          {w.branch}
+        </span>
+        <CopyButton text={w.branch} label={`branch ${w.branch}`} />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ac-wt__open"
+          aria-label={`Open ${w.branch} in editor`}
+          onClick={() => void window.api?.worktree?.openInEditor(w.path)}
+        >
+          Open
+        </Button>
+      </div>
+      {p.short !== '' && p.short !== '.' && (
+        <div className="ac-wt__path" title={p.full}>
+          {p.short}
+          <CopyButton text={w.path} label={`path of ${w.branch}`} />
+        </div>
+      )}
+      {count > 0 && (
+        <button
+          type="button"
+          className="ac-wt__stack"
+          aria-expanded={open}
+          aria-label={`${count} agent${count === 1 ? '' : 's'} in ${w.branch}`}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className="ac-wt__stack-avatars" aria-hidden="true">
+            {agents.slice(0, WT_STACK_MAX).map((a) => (
+              <Avatar key={a.id} initials={a.initials} color={a.avatarColor} size={20} shape="circle" />
+            ))}
+            {count > WT_STACK_MAX && <span className="ac-wt__stack-more">+{count - WT_STACK_MAX}</span>}
+          </span>
+          <span className="ac-wt__stack-count">{count} {count === 1 ? 'agent' : 'agents'}</span>
+        </button>
+      )}
+      {open && (
+        <div className="ac-wt__avatars">
+          {agents.map((a) => (
+            <button key={a.id} type="button" className="ac-wt__avatar" aria-label={`Select ${a.name}`} title={a.name} onClick={() => onSelect(a.id)}>
+              <Avatar initials={a.initials} color={a.avatarColor} size={20} shape="circle" />
+              <span className="ac-wt__agent-name">{a.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="ac-wt__meta">
+        <span>{`${w.changedFiles} changed`}</span>
+        {(w.ahead > 0 || (w.behind ?? 0) > 0) && <span className="ac-wt__ab">{`+${w.ahead} / -${w.behind ?? 0}`}</span>}
+        {overlaps.length > 0 && <span className="ac-wt__overlap">{`overlaps ${overlaps.join(', ')}`}</span>}
+      </div>
+      {w.error && <ErrorBanner message={shortErr(w.error)} title={errText(w.error)} />}
+    </div>
+  )
 }
 
 function LiveWorktrees(): JSX.Element {
@@ -36,63 +125,15 @@ function LiveWorktrees(): JSX.Element {
     const byId = new Map<string, Agent>(agents.map((a) => [a.id, a]))
     body = (
       <>
-        {ordered.map((w: Worktree) => {
-          const p = shortenPath(w.path, { ...(workspace.root ? { root: workspace.root } : {}), platform })
-          const overlaps = w.overlapsWith ?? []
-          return (
-            <div key={w.path} className={`ac-wt${overlaps.length ? ' ac-wt--warn' : ''}`}>
-              <div className="ac-wt__top">
-                <BranchIcon size={14} color="var(--ac-text-muted)" />
-                <span className="ac-wt__branch" title={w.branch}>
-                  {w.branch}
-                </span>
-                <CopyButton text={w.branch} label={`branch ${w.branch}`} />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ac-wt__open"
-                  aria-label={`Open ${w.branch} in editor`}
-                  onClick={() => void window.api?.worktree?.openInEditor(w.path)}
-                >
-                  Open
-                </Button>
-              </div>
-              <div className="ac-wt__path" title={p.full}>
-                {p.short}
-                <CopyButton text={w.path} label={`path of ${w.branch}`} />
-              </div>
-              {w.agentIds.length > 0 && (
-                <div className="ac-wt__avatars">
-                  {w.agentIds.map((id) => {
-                    const a = byId.get(id)
-                    if (!a) return null
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        className="ac-wt__avatar"
-                        aria-label={`Select ${a.name}`}
-                        title={a.name}
-                        onClick={() => selectAgent(id)}
-                      >
-                        <Avatar initials={a.initials} color={a.avatarColor} size={20} shape="circle" />
-                        <span className="ac-wt__agent-name">{a.name}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-              <div className="ac-wt__meta">
-                <span>{`${w.changedFiles} changed`}</span>
-                {(w.ahead > 0 || (w.behind ?? 0) > 0) && (
-                  <span className="ac-wt__ab">{`+${w.ahead} / -${w.behind ?? 0}`}</span>
-                )}
-                {overlaps.length > 0 && <span className="ac-wt__overlap">{`overlaps ${overlaps.join(', ')}`}</span>}
-              </div>
-              {w.error && <ErrorBanner message={shortErr(w.error)} title={errText(w.error)} />}
-            </div>
-          )
-        })}
+        {ordered.map((w: Worktree) => (
+          <LiveWorktreeCard
+            key={w.path}
+            wt={w}
+            path={shortenPath(w.path, { ...(workspace.root ? { root: workspace.root } : {}), platform })}
+            byId={byId}
+            onSelect={selectAgent}
+          />
+        ))}
         {ordered.length === 0 && <p className="ac-left-placeholder">No worktrees found</p>}
       </>
     )

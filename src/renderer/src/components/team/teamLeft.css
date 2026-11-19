@@ -98,3 +98,20 @@
 .ac-cmp__error { color: var(--ac-status-needs-you); font-size: 12px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .ac-tc-seg, .ac-wt, .ac-task { transition: none; animation: none; } }
 .ac-header__project { flex: 0 1 160px; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ac-text-soft); }
+
+/* T32 U4: "..." menu rows, drawer icon buttons (U11) */
+.ac-header__menurow { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.ac-header__menurow:hover, .ac-header__menurow:focus-visible { background: var(--ac-bg-btn-hover); }
+.ac-header__kbd { font-family: var(--ac-font-mono); font-size: 11px; color: var(--ac-text-muted); white-space: nowrap; }
+.ac-header__menu-sep { height: 1px; margin: 4px 0; background: var(--ac-border); }
+.ac-header__icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; padding: 0; border: 1px solid var(--ac-border-btn); border-radius: 6px; background: var(--ac-bg-btn); color: var(--ac-text); cursor: pointer; }
+.ac-header__icon:hover { background: var(--ac-bg-btn-hover); }
+.ac-header__icon[aria-expanded='true'] { border-color: var(--ac-accent); }
+
+/* T32 U6: worktree card = branch, path, agent count + avatar stack */
+.ac-wt__stack { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; max-width: 100%; padding: 2px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-text-soft); font: inherit; font-size: 11px; cursor: pointer; }
+.ac-wt__stack:hover { background: var(--ac-bg-inset); }
+.ac-wt__stack:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
+.ac-wt__stack-avatars { display: inline-flex; align-items: center; }
+.ac-wt__stack-avatars > * + * { margin-left: -4px; }
+.ac-wt__stack-more { margin-left: 4px !important; color: var(--ac-text-muted); }

@@ -1,7 +1,10 @@
 import { useId } from 'react'
 import type { Agent, AgentStatus } from '../../../../shared/types'
 import { formatElapsed, formatTokens } from '../../../../shared/format'
+import { shortenPathsInText } from '../../../../shared/displayPath'
 import { STATUS_META, toolColor } from '../../theme/colors'
+import { useConsoleStore } from '../../store/useConsoleStore'
+import { rendererPlatform } from '../../store/useWorkspaceStore'
 import { Avatar } from '../ui/Avatar'
 import { StatusPill } from '../ui/StatusPill'
 import './teamCenter.css'
@@ -26,6 +29,7 @@ export function AgentCard({
   onSelect(id: string): void
   compact?: boolean
 }): JSX.Element {
+  const root = useConsoleStore((s) => s.team.cwd)
   const uid = useId()
   const nameId = `${uid}-name`
   const descIds = ['role', 'status', 'tool', 'meta'].map((k) => `${uid}-${k}`)
@@ -65,7 +69,8 @@ export function AgentCard({
         <span id={descIds[1]} style={{ display: 'contents' }}><StatusPill status={status} /></span>
       </span>
       <span id={descIds[2]} className="ac-card__tool">
-        <span style={{ color: toolColor(agent.current.tool) }}>{agent.current.tool}</span> {agent.current.target}
+        <span style={{ color: toolColor(agent.current.tool) }}>{agent.current.tool}</span>{' '}
+        <span title={agent.current.target}>{shortenPathsInText(agent.current.target, { ...(root ? { root } : {}), platform: rendererPlatform() })}</span>
       </span>
       <span id={descIds[3]} className="ac-card__meta">
         <span className="ac-card__wt">⎇ {agent.worktree}</span>

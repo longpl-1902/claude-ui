@@ -66,7 +66,9 @@ describe('copy buttons (X-I8)', () => {
       worktree: { openInEditor: vi.fn() }
     }
     render(<Inspector />)
-    await userEvent.click(screen.getByRole('button', { name: 'Stop process…' }))
+    // T32 U15: Stop process... lives in the inspector's "..." menu.
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Stop process…' }))
     const dlg = screen.getByRole('dialog')
     await userEvent.click(within(dlg).getByRole('button', { name: 'Copy process id' }))
     expect(writeText).toHaveBeenLastCalledWith('4242')

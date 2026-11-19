@@ -392,23 +392,31 @@ export function ControlComposer(p: ControlComposerProps): JSX.Element {
           />
         </>
       )}
-      <button
-        type="button"
-        className="ac-composer__tool"
-        aria-pressed={ctrlEnter}
-        title="When on, Enter adds a new line and Ctrl+Enter sends"
-        onClick={() => {
-          const v = !ctrlEnter
-          setCtrlEnter(v)
-          try {
-            window.localStorage.setItem(CTRL_ENTER_KEY, v ? '1' : '0')
-          } catch {
-            /* storage unavailable: keep the in-memory choice */
-          }
-        }}
-      >
-        Ctrl+Enter to send
-      </button>
+      <span className="ac-composer__switch" role="radiogroup" aria-label="Send with">
+        <span className="ac-composer__switch-label" aria-hidden="true">
+          Send with:
+        </span>
+        {([false, true] as const).map((v) => (
+          <button
+            key={String(v)}
+            type="button"
+            role="radio"
+            aria-checked={ctrlEnter === v}
+            className={`ac-composer__opt${ctrlEnter === v ? ' is-on' : ''}`}
+            title={v ? 'Enter adds a new line and Ctrl+Enter sends' : 'Enter sends and Shift+Enter adds a new line'}
+            onClick={() => {
+              setCtrlEnter(v)
+              try {
+                window.localStorage.setItem(CTRL_ENTER_KEY, v ? '1' : '0')
+              } catch {
+                /* storage unavailable: keep the in-memory choice */
+              }
+            }}
+          >
+            {v ? 'Ctrl+Enter' : 'Enter'}
+          </button>
+        ))}
+      </span>
       {p.toolbar}
     </>
   )
