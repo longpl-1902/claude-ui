@@ -13,6 +13,9 @@ import {
   compactSummaryPrompt,
   customTitle,
   editResult,
+  errorResult,
+  subOkResult,
+  writeCreateResult,
   interruptedLine,
   sendMessageUse,
   systemApiError,
@@ -111,10 +114,10 @@ describe('R-05 agent tree', () => {
   })
 
   it('R-05 name, role, task title and model come from meta and lines', () => {
-    expect(agentOf(snap, SUB1)).toMatchObject({ name: 'Explore', role: 'Explore', taskTitle: 'Explore repo', model: 'claude-test-haiku' })
-    expect(agentOf(snap, NESTED)).toMatchObject({ role: 'general-purpose', taskTitle: 'Nested look' })
+    expect(agentOf(snap, SUB1)).toMatchObject({ name: 'Explore repo', role: 'Explore · claude-test-haiku', taskTitle: 'Explore repo', model: 'claude-test-haiku' })
+    expect(agentOf(snap, NESTED)).toMatchObject({ name: 'Nested look', role: 'general-purpose · claude-test-opus', taskTitle: 'Nested look' })
     expect(agentOf(snap, NOMETA)).toMatchObject({ name: 'agent', role: '', taskTitle: '' })
-    expect(agentOf(snap, ORPHAN).name).toBe('Plan')
+    expect(agentOf(snap, ORPHAN).name).toBe('Orphan')
   })
 
   it('R-05 an agent with meta.name is a teammate and is named after it', () => {
@@ -354,12 +357,12 @@ describe('R-06 messages (Messages tab)', () => {
 
   it('R-06 a sub-agent first task is an "in" message from its parent', () => {
     expect(msgs(SUB1).find((m) => m.direction === 'in' && m.text === 'List the files')).toMatchObject({ peer: 'lead' })
-    expect(msgs(NESTED).find((m) => m.direction === 'in' && m.text.includes('nested thing'))).toMatchObject({ peer: 'Explore' })
+    expect(msgs(NESTED).find((m) => m.direction === 'in' && m.text.includes('nested thing'))).toMatchObject({ peer: 'Explore repo' })
   })
 
   it('R-06 the parent\'s Agent result text is an "out" message on the child', () => {
     expect(msgs(SUB1).find((m) => m.direction === 'out' && m.text.includes('Found 3 files'))).toMatchObject({ peer: 'lead' })
-    expect(msgs(NESTED).find((m) => m.direction === 'out' && m.text.includes('nested done'))).toMatchObject({ peer: 'Explore' })
+    expect(msgs(NESTED).find((m) => m.direction === 'out' && m.text.includes('nested done'))).toMatchObject({ peer: 'Explore repo' })
   })
 
   it('R-06 SendMessage is out on the sender and in on the recipient when it resolves to an agent', () => {
@@ -699,5 +702,122 @@ describe('R-06 user decisions: tokens headline', () => {
   it('R-06 headline = input + output + cacheCreation; cacheRead is not included', () => {
     const t = mini(assistantBlocks([textBlock('x')], { ts: at(1), messageId: 'msg_h', stopReason: 'end_turn', usage: usage(1, 2, 4, 1_000_000) }))
     expect(agentOf(t.snap(), 'lead').tokens).toBe(7)
+  })
+})
+
+describe('fix round 1: sub-agent realism (results without toolUseResult)', () => {
+  const use = (agent: string, sec: number, id: string, name: string, input: Record<string, unknown>) =>
+    assistantBlocks([toolUseBlock(id, name, input)], { ts: at(sec), agentId: agent, messageId: `msg_${id}`, stopReason: 'tool_use' })
+  const agentUse = (agent: string, sec: number, id: string, input: Parameters<typeof agentToolUse>[1]) =>
+    assistantBlocks([agentToolUse(id, input)], { ts: at(sec), agentId: agent, messageId: `msg_${id}`, stopReason: 'tool_use' })
+
+  it('O-1 sub-agents of one agentType are named by description; role is the agentType', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.setMeta('sa1', { agentType: 'general-purpose', description: 'Alpha job', toolUseId: 'toolu_x1' })
+    m.setMeta('sa2', { agentType: 'general-purpose', description: 'Beta job', toolUseId: 'toolu_x2' })
+    const snap = m.snapshot(NOW_MS)
+    const a = agentOf(snap, 'sa1')
+    const b = agentOf(snap, 'sa2')
+    expect(a.name).toBe('Alpha job')
+    expect(b.name).toBe('Beta job')
+    expect(a.initials).toBe('AJ')
+    expect(b.initials).toBe('BJ')
+    expect(a.role).toBe('general-purpose')
+    expect(b.role).toBe('general-purpose')
+  })
+
+  it('O-1 role adds the model when known; meta.name still wins', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.setMeta('sa1', { agentType: 'Explore', description: 'Look around', name: 'scout', model: 'claude-test-haiku' })
+    expect(agentOf(m.snapshot(NOW_MS), 'sa1')).toMatchObject({ name: 'scout', role: 'Explore · claude-test-haiku' })
+  })
+
+  it('O-2 files come from the tool_use input when the result has no toolUseResult (Write and Edit)', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.ingest('sa1', recs([
+      ...use('sa1', 1, 'toolu_w', 'Write', { file_path: 'd:/x/new.ts', content: 'a\nb\nc' }),
+      writeCreateResult('toolu_w', 'd:/x/new.ts', 'a\nb\nc', { ts: at(2), agentId: 'sa1', omitToolUseResult: true }),
+      ...use('sa1', 3, 'toolu_e', 'Edit', { file_path: 'd:/x/old.ts', old_string: 'p', new_string: 'q\nr' }),
+      editResult('toolu_e', 'd:/x/old.ts', ['-p', '+q', '+r'], { ts: at(4), agentId: 'sa1', omitToolUseResult: true })
+    ]))
+    const a = agentOf(m.snapshot(NOW_MS), 'sa1')
+    expect(a.files).toHaveLength(2)
+    expect(a.files.find((f: any) => f.path === 'd:/x/new.ts')).toMatchObject({ added: 3, removed: 0 })
+    expect(a.files.find((f: any) => f.path === 'd:/x/old.ts')).toMatchObject({ added: 2, removed: 1 })
+    expect(a.activity.map((x: any) => x.result)).toEqual(['+3 −0', '+2 −1'])
+  })
+
+  it('O-2 an errored Edit (string toolUseResult, is_error) adds no file', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.ingest('sa1', recs([
+      ...use('sa1', 1, 'toolu_e', 'Edit', { file_path: 'd:/x/old.ts', old_string: 'p', new_string: 'q' }),
+      errorResult('toolu_e', 'Error: string not found', { ts: at(2), agentId: 'sa1' })
+    ]))
+    const a = agentOf(m.snapshot(NOW_MS), 'sa1')
+    expect(a.files).toEqual([])
+    expect(a.activity[0].failed).toBe(true)
+  })
+
+  it('R-05 a fork file repeating the parent Agent tool_use keeps the real parent and opens no tool', () => {
+    const parentLines = [
+      ...agentUse('par', 1, 'toolu_F', { description: 'Fork job' }),
+      subOkResult('toolu_F', 'fork done', { ts: at(9), agentId: 'par' })
+    ]
+    const forkLines = [
+      ...agentUse('frk', 1, 'toolu_F', { description: 'Fork job' }), // copy of the spawning call, new uuid
+      ...use('frk', 3, 'toolu_r', 'Read', { file_path: 'd:/x/a.ts' }),
+      subOkResult('toolu_r', 'contents', { ts: at(4), agentId: 'frk' })
+    ]
+    for (const order of [['par', 'frk'], ['frk', 'par']]) {
+      const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+      m.ingest('lead', recs(assistantBlocks([agentToolUse('toolu_P', { description: 'Parent' })], { ts: at(0), messageId: 'msg_P', stopReason: 'tool_use' })))
+      m.setMeta('par', { agentType: 'general-purpose', description: 'Parent', toolUseId: 'toolu_P' })
+      m.setMeta('frk', { agentType: 'general-purpose', description: 'Fork job', toolUseId: 'toolu_F' })
+      for (const id of order) m.ingest(id, recs(id === 'par' ? parentLines : forkLines))
+      const f = agentOf(m.snapshot(NOW_MS), 'frk')
+      expect(f.parentId).toBe('par')
+      expect(f.runtime.openTools).toEqual([])
+      expect(f.toolCalls).toBe(1)
+      expect(f.activity.map((x: any) => x.tool)).toEqual(['Read'])
+    }
+  })
+
+  it('R-05 meta.parentAgentId nests under that agent when the spawning tool_use is unknown', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.setMeta('par', { agentType: 'general-purpose', description: 'Parent' })
+    m.setMeta('kid', { agentType: 'general-purpose', description: 'Kid', toolUseId: 'toolu_unknown', parentAgentId: 'par' })
+    m.setMeta('lost', { agentType: 'general-purpose', description: 'Lost', toolUseId: 'toolu_unknown', parentAgentId: 'nobody' })
+    const snap = m.snapshot(NOW_MS)
+    expect(agentOf(snap, 'kid')).toMatchObject({ parentId: 'par', depth: 2 })
+    expect(agentOf(snap, 'lost').parentId).toBe('lead')
+    expect(parseSubagentMeta(JSON.stringify({ parentAgentId: 'par' }))).toEqual({ parentAgentId: 'par' })
+  })
+
+  it('R-06 a nested Agent result without toolUseResult still yields the out message and finished', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.ingest('lead', recs(assistantBlocks([agentToolUse('toolu_P', { description: 'Parent' })], { ts: at(0), messageId: 'msg_P', stopReason: 'tool_use' })))
+    m.setMeta('par', { agentType: 'general-purpose', description: 'Parent', toolUseId: 'toolu_P' })
+    m.setMeta('kid', { agentType: 'general-purpose', description: 'Kid', toolUseId: 'toolu_K' })
+    m.ingest('par', recs([
+      ...agentUse('par', 1, 'toolu_K', { description: 'Kid' }),
+      subOkResult('toolu_K', 'kid report', { ts: at(8), agentId: 'par' })
+    ]))
+    const kid = agentOf(m.snapshot(NOW_MS), 'kid')
+    expect(kid.parentId).toBe('par')
+    expect(kid.runtime.finished).toBe(true)
+    expect(kid.messages.find((x: any) => x.direction === 'out')).toMatchObject({ text: 'kid report', peer: 'Parent' })
+  })
+
+  it('R-06 a nested background Agent result without toolUseResult is async_launched (background, not finished)', () => {
+    const m = createSessionModel({ sessionId: SESSION_ID, accountId: 'acc' })
+    m.setMeta('par', { agentType: 'general-purpose', description: 'Parent' })
+    m.setMeta('kid', { agentType: 'general-purpose', description: 'Kid', toolUseId: 'toolu_K' })
+    m.ingest('par', recs([
+      ...agentUse('par', 1, 'toolu_K', { description: 'Kid', run_in_background: true }),
+      subOkResult('toolu_K', 'launched', { ts: at(2), agentId: 'par' })
+    ]))
+    const kid = agentOf(m.snapshot(NOW_MS), 'kid')
+    expect(kid.runtime.background).toBe(true)
+    expect(kid.runtime.finished).toBeUndefined()
   })
 })

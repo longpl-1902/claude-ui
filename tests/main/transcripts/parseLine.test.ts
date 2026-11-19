@@ -432,3 +432,47 @@ describe('R-04 targetFor', () => {
     expect(targetFor('Read', { file_path: 'f'.repeat(500) }).length).toBeLessThanOrEqual(161)
   })
 })
+
+describe('R-06 tool_use edit counts from the input (sub-agent results carry no toolUseResult)', () => {
+  const useOf = (name: string, input: Record<string, unknown>) => {
+    const r = parse(assistantLine(toolUseBlock('toolu_e', name, input), { messageId: 'msg_e', stopReason: 'tool_use' })) as any
+    return r.toolUses[0]
+  }
+  it('R-06 Write: added = lines of content, removed 0, kind unknown', () => {
+    expect(useOf('Write', { file_path: 'd:/x/a.ts', content: 'l1\nl2\nl3' }).edit).toEqual({ added: 3, removed: 0, kind: 'unknown' })
+    expect(useOf('Write', { file_path: 'd:/x/a.ts', content: '' }).edit).toEqual({ added: 0, removed: 0, kind: 'unknown' })
+  })
+  it('R-06 Edit: removed = lines of old_string, added = lines of new_string', () => {
+    expect(useOf('Edit', { file_path: 'd:/x/a.ts', old_string: 'a\nb', new_string: 'c\nd\ne' }).edit).toMatchObject({ added: 3, removed: 2 })
+  })
+  it('R-06 MultiEdit sums over edits[]', () => {
+    const u = useOf('MultiEdit', {
+      file_path: 'd:/x/a.ts',
+      edits: [
+        { old_string: 'a', new_string: 'b\nc' },
+        { old_string: 'd\ne', new_string: 'f' }
+      ]
+    })
+    expect(u.edit).toMatchObject({ added: 3, removed: 3 })
+  })
+  it('R-06 NotebookEdit counts new_source lines; other tools have no edit', () => {
+    expect(useOf('NotebookEdit', { notebook_path: 'd:/x/n.ipynb', new_source: 'x\ny' }).edit).toMatchObject({ added: 2, removed: 0 })
+    expect(useOf('Read', { file_path: 'd:/x/a.ts' }).edit).toBeUndefined()
+  })
+  it('R-06 the input text is not copied into the record', () => {
+    expect(JSON.stringify(useOf('Write', { file_path: 'd:/x/a.ts', content: 'SECRET-BODY' }))).not.toContain('SECRET-BODY')
+  })
+})
+
+describe('R-04 result flags for string toolUseResult and interrupt text', () => {
+  it('R-04 a string toolUseResult containing "rejected" marks the result as an error', () => {
+    const r = parse(toolResult('toolu_r', 'No.', { toolUseResult: 'The user rejected this tool use' })) as any
+    expect(r.results[0].isError).toBe(true)
+  })
+  it('R-04 a tool_result whose text starts with [Request interrupted is interrupted', () => {
+    const r = parse(toolResult('toolu_i', '[Request interrupted by user for tool use]\nmore', { isError: true })) as any
+    expect(r.results[0]).toMatchObject({ isError: true, interrupted: true })
+    const ok = parse(toolResult('toolu_k', 'fine')) as any
+    expect(ok.results[0].interrupted).toBe(false)
+  })
+})

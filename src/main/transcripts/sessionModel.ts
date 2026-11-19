@@ -22,6 +22,7 @@ export interface SubagentMeta {
   finished?: boolean
   name?: string
   requestShape?: string
+  parentAgentId?: string
 }
 
 export function parseSubagentMeta(text: string): SubagentMeta | null {
@@ -34,7 +35,7 @@ export function parseSubagentMeta(text: string): SubagentMeta | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   const o = raw as Record<string, unknown>
   const out: SubagentMeta = {}
-  for (const k of ['agentType', 'description', 'toolUseId', 'model', 'name', 'requestShape'] as const) {
+  for (const k of ['agentType', 'description', 'toolUseId', 'model', 'name', 'requestShape', 'parentAgentId'] as const) {
     const v = o[k]
     if (typeof v === 'string') out[k] = v
   }
@@ -83,6 +84,9 @@ interface ToolInfo {
   name: string
   target: string
   item: ActivityItem
+  filePath?: string
+  edit?: { added: number; removed: number }
+  background?: boolean
 }
 
 interface AgentResultInfo {
@@ -247,12 +251,22 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
         }
         for (const tu of rec.toolUses) {
           if (a.toolIds.has(tu.id)) continue
+          // A fork file repeats its spawning Agent call: it belongs to the spawner, not to this agent.
+          const owner = toolOwner.get(tu.id)
+          if ((owner !== undefined && owner !== a.id) || (a.meta?.toolUseId === tu.id && tu.name === 'Agent')) continue
           a.toolIds.add(tu.id)
           toolOwner.set(tu.id, a.id)
           const item: ActivityItem = { time: hms(ms), tool: tu.name, target: tu.target, result: '…', failed: false }
           a.activity.push(item)
           if (a.activity.length > capActivity * 2) a.activity.splice(0, a.activity.length - capActivity)
-          a.toolInfo.set(tu.id, { name: tu.name, target: tu.target, item })
+          a.toolInfo.set(tu.id, {
+            name: tu.name,
+            target: tu.target,
+            item,
+            ...(tu.filePath !== undefined ? { filePath: tu.filePath } : {}),
+            ...(tu.edit ? { edit: { added: tu.edit.added, removed: tu.edit.removed } } : {}),
+            ...(tu.agent?.background ? { background: true } : {})
+          })
           a.openTools.push({ id: tu.id, name: tu.name, startedMs: ms })
           a.lastTool = { tool: tu.name, target: tu.target }
           pushEvent(src, ms, withTokens(base('tool_start', { tool: tu.name, target: tu.target, toolUseId: tu.id })))
@@ -272,7 +286,9 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       case 'tool_results': {
         for (const r of rec.results) {
           const info = a.toolInfo.get(r.toolUseId)
-          const text = resultText(r)
+          // Sub-agent results carry no toolUseResult: take the +/- counts from the tool_use input.
+          const inputEdit = !r.fileChange && !r.isError && !r.interrupted && info?.edit && info.filePath ? info : undefined
+          const text = inputEdit ? `+${inputEdit.edit!.added} −${inputEdit.edit!.removed}` : resultText(r)
           if (info) {
             info.item.result = text
             info.item.failed = r.isError
@@ -285,6 +301,23 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
             f.removed += r.fileChange.removed
             a.files.delete(r.fileChange.path)
             a.files.set(r.fileChange.path, f) // Map order = recency
+          }
+          if (inputEdit) {
+            const path = inputEdit.filePath!
+            const f = a.files.get(path) ?? { added: 0, removed: 0 }
+            f.added += inputEdit.edit!.added
+            f.removed += inputEdit.edit!.removed
+            a.files.delete(path)
+            a.files.set(path, f)
+          }
+          if (!r.agentResult && !r.isError && !r.interrupted && info?.name === 'Agent') {
+            agentResults.set(r.toolUseId, {
+              owner: src,
+              agentId: '',
+              status: info.background ? 'async_launched' : 'completed',
+              ...(r.summary !== '' ? { text: r.summary } : {}),
+              ms
+            })
           }
           if (r.agentResult) {
             agentResults.set(r.toolUseId, {
@@ -369,7 +402,15 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
     for (const a of all) {
       if (a.id === LEAD_ID) continue
       const owner = a.meta?.toolUseId ? toolOwner.get(a.meta.toolUseId) : undefined
-      parent.set(a.id, owner && owner !== a.id && agents.has(owner) ? owner : LEAD_ID)
+      const hint = a.meta?.parentAgentId
+      parent.set(
+        a.id,
+        owner && owner !== a.id && agents.has(owner)
+          ? owner
+          : !owner && hint !== undefined && hint !== a.id && agents.has(hint)
+            ? hint
+            : LEAD_ID
+      )
     }
     for (const a of all) {
       if (a.id === LEAD_ID) continue
@@ -409,10 +450,13 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
       return undefined
     }
     const title = pick('custom') ?? pick('ai') ?? pick('agent')
-    const nameOf = (a: AgentState): string => (a.id === LEAD_ID ? 'lead' : (a.meta?.name ?? a.meta?.agentType ?? 'agent'))
+    const nameOf = (a: AgentState): string =>
+      a.id === LEAD_ID ? 'lead' : (a.meta?.name ?? a.meta?.description ?? a.meta?.agentType ?? 'agent')
+    // SendMessage resolution stays keyed on meta.name (or agentType) and agentId, never on the description.
+    const keyOf = (a: AgentState): string => (a.id === LEAD_ID ? 'lead' : (a.meta?.name ?? a.meta?.agentType ?? 'agent'))
     const byName = new Map<string, AgentState>()
     for (const a of ordered) {
-      const n = nameOf(a).toLowerCase()
+      const n = keyOf(a).toLowerCase()
       if (!byName.has(n)) byName.set(n, a)
       if (!byName.has(a.id.toLowerCase())) byName.set(a.id.toLowerCase(), a)
     }
@@ -537,7 +581,9 @@ export function createSessionModel(opts: SessionModelOptions): SessionModel {
         name,
         initials,
         avatarColor: isLead ? PALETTE[0]! : PALETTE[a.order % PALETTE.length]!,
-        role: isLead ? (title ?? 'Lead') : (a.meta?.agentType ?? ''),
+        role: isLead
+          ? (title ?? 'Lead')
+          : a.meta?.agentType ? [a.meta.agentType, a.model || a.meta.model].filter(Boolean).join(' · ') : '',
         model: a.model || a.meta?.model || '',
         worktree: a.worktree,
         taskTitle: isLead ? '' : (a.meta?.description ?? ''),

@@ -58,6 +58,34 @@ export function targetFor(name: string, input: Record<string, unknown>): string 
   return truncate(out, 160)
 }
 
+const NL = String.fromCharCode(10)
+const lineCount =(v: unknown): number => (typeof v === 'string' && v !== '' ? v.split(NL).length : 0)
+
+function editFromInput(name: string, input: Obj): ToolUseRec['edit'] | undefined {
+  switch (name) {
+    case 'Write':
+      return { added: lineCount(input.content), removed: 0, kind: 'unknown' }
+    case 'Edit':
+      return { added: lineCount(input.new_string), removed: lineCount(input.old_string), kind: 'update' }
+    case 'MultiEdit': {
+      let added = 0
+      let removed = 0
+      if (Array.isArray(input.edits)) {
+        for (const e of input.edits) {
+          if (!isObj(e)) continue
+          added += lineCount(e.new_string)
+          removed += lineCount(e.old_string)
+        }
+      }
+      return { added, removed, kind: 'update' }
+    }
+    case 'NotebookEdit':
+      return { added: lineCount(input.new_source), removed: 0, kind: 'update' }
+    default:
+      return undefined
+  }
+}
+
 function parseToolUse(b: Obj): ToolUseRec | null {
   const id = str(b.id)
   const name = str(b.name)
@@ -68,6 +96,8 @@ function parseToolUse(b: Obj): ToolUseRec | null {
   if (fp !== undefined) rec.filePath = fp
   const cmd = str(input.command)
   if (cmd !== undefined) rec.command = cmd
+  const edit = editFromInput(name, input)
+  if (edit) rec.edit = edit
   if (name === 'Agent') {
     const agent: NonNullable<ToolUseRec['agent']> = {}
     const d = str(input.description)
@@ -218,8 +248,12 @@ function parseToolResults(o: Obj, blocks: Obj[], env: Env): TranscriptRecord {
     }
     const rec: ToolResultRec = {
       toolUseId: str(b.tool_use_id) ?? '',
-      isError: b.is_error === true || (typeof turHere === 'string' && turHere.startsWith('Error')) || denial !== undefined,
-      interrupted: (isObj(turHere) && turHere.interrupted === true) || denial === 'interrupted' || denial === 'cancelled',
+      isError: b.is_error === true || (typeof turHere === 'string' && (turHere.startsWith('Error') || /rejected/i.test(turHere))) || denial !== undefined,
+      interrupted:
+        (isObj(turHere) && turHere.interrupted === true) ||
+        denial === 'interrupted' ||
+        denial === 'cancelled' ||
+        textOf(b.content).trimStart().startsWith('[Request interrupted'),
       summary
     }
     if (denial !== undefined) rec.denial = denial

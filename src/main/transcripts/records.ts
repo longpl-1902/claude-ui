@@ -14,6 +14,8 @@ export interface ToolUseRec {
   agent?: { description?: string; subagentType?: string; name?: string; background?: boolean }
   /** SendMessage: to = input.to ?? input.recipient. */
   send?: { to: string; text: string; summary?: string }
+  /** Line counts from the tool input (Write/Edit/MultiEdit/NotebookEdit); sub-agent results carry no toolUseResult. */
+  edit?: { added: number; removed: number; kind: 'create' | 'update' | 'unknown' }
 }
 export interface FileChange {
   path: string
