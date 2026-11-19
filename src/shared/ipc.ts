@@ -476,7 +476,7 @@ export interface ConsoleApi {
   worktree: { openInEditor(path: string): Promise<OkResult> }
   theme?: {
     get(): Promise<ThemeState>
-    setSource(source: ThemeSource): Promise<ThemeState>
+    setSource(source: ThemeSource): Promise<ThemeState | { ok: false; reason: 'invalid-args' }>
     onChanged(cb: (s: ThemeState) => void): () => void
   }
   windows?: {

@@ -8,6 +8,7 @@ import { TeamView } from '@renderer/screens/TeamView'
 import { resetConsoleStore, useConsoleStore } from '@renderer/store/useConsoleStore'
 import { CENTER_VIEW_KEY, resetCenterViewStore, useCenterViewStore } from '@renderer/store/useCenterViewStore'
 import { useControlStore } from '@renderer/store/useControlStore'
+import { useWindowsStore } from '@renderer/store/useWindowsStore'
 import { resetLayoutStore } from '@renderer/store/useLayoutStore'
 import { mockTeamSnapshot } from '@shared/mock'
 import type { ControlSessionInfo, PermissionPrompt, TeamSnapshot } from '@shared/types'
@@ -178,6 +179,21 @@ describe('T33 ChatView', () => {
     expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull()
     expect(screen.getByText(/Agent Console can't type into it/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Fork it in Team view' })).toBeInTheDocument()
+  })
+
+  it('chat pop-out: the external-session fork opens the project window instead', async () => {
+    seed()
+    window.history.replaceState({}, '', '/?kind=chat&projectKey=acme&sessionRef=a1%7Cs1')
+    const open = vi.fn().mockResolvedValue(true)
+    useWindowsStore.setState({ open })
+    try {
+      render(<ChatView />)
+      expect(screen.queryByRole('button', { name: 'Fork it in Team view' })).toBeNull()
+      await userEvent.click(screen.getByRole('button', { name: 'Fork it in the project window' }))
+      expect(open).toHaveBeenCalledWith({ kind: 'project', projectKey: 'acme' })
+    } finally {
+      window.history.replaceState({}, '', '/')
+    }
   })
 
   it('pending permission is pinned above the composer and answered through the store', async () => {

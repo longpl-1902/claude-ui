@@ -60,9 +60,53 @@ Sessions started by the app run `claude` as a child process with stream-json I/O
 - start, resume, continue or fork a session;
 - pick the model and permission mode;
 - answer permission prompts (Allow, Allow for this session, Deny);
-- interrupt the current turn or stop the process.
+- interrupt the current turn or stop the process;
+- show a context meter, the running cost and MCP server chips for the session;
+- rename the session;
+- rewind or fork from a message (after a confirmation).
 
 Allow is not offered next to a truncated command; expand the full tool input first. Nothing is sent on your behalf.
+
+## Chat view
+
+The **Team | Chat** toggle (Ctrl+Shift+C) switches the center between the team grid and a conversation view with
+rendered markdown.
+
+- **Composer**: a switch picks the send key (Enter, or Ctrl+Enter with Enter for a new line); `/` opens the command
+  palette; `@` mentions a teammate; images can be attached, pasted or dropped. Nothing is sent except by the send
+  key or the Send button.
+- **Cards**: permission prompts, question cards and plan cards appear in the conversation and are answered in place.
+- **External (VS Code) sessions** are read-only. They can be forked into a session the app controls.
+
+## Multiple windows / two monitors
+
+Chat and project views can be popped out into their own windows.
+
+- Ways to open one: the **Open in new window** button in the Chat header, the project rail menu, Ctrl+Shift+N, or
+  dragging the Chat tab out of the window.
+- At most 8 pop-out windows. Each window views its own session; sessions and data are shared by the app.
+- Closing a pop-out never stops a session.
+- Each window remembers its position, monitor and zoom. **Reopen pop-out windows on start** (Accounts, Appearance)
+  controls whether they come back on the next launch.
+- When a monitor is removed, its windows are rescued onto a remaining one.
+- A toast, or Ctrl+J, focuses the window that already shows that session instead of opening another view.
+
+## Theme
+
+System, Light or Dark in Accounts, Appearance; Ctrl+Shift+L cycles through them. The app follows the Windows accent
+colour and High Contrast. Window controls are the native overlay, and Windows 11 gets a Mica backdrop.
+
+## Extensions
+
+Ctrl+Shift+E lists MCP servers, plugins and skills per account and per project.
+
+- Adding or removing an MCP server or a plugin runs `claude mcp ...` / `claude plugin ...` only after the app shows
+  the exact command and you confirm.
+- Secrets (tokens, keys, header values) are masked.
+
+## Copy
+
+Copy buttons sit on messages, the session id, paths and errors. Right-click offers Copy (and Copy link on links).
 
 ## External sessions
 
@@ -99,6 +143,7 @@ Hooks give live events from external sessions (permission prompts, idle, complet
   answer in place. For external sessions the row only takes you to the session: answer it in its own terminal or
   VS Code window.
 - **Notifications**: toasts and taskbar flash/overlay for blocked items only by default (ready items are opt-in).
+  The taskbar flash covers every window; the overlay count stays on the main window.
   Do-not-disturb silences everything; each project can be muted separately.
 - **Per-project view memory**: each project remembers its selected session, view (Team or Chat), panel sizes and
   collapsed columns.
@@ -113,7 +158,11 @@ Hooks give live events from external sessions (permission prompts, idle, complet
 | Ctrl+L | Focus the lead prompt |
 | Ctrl+Shift+T | Team view |
 | Ctrl+Shift+A | Accounts |
+| Ctrl+Shift+E | Extensions (MCP servers, plugins, skills) |
 | Ctrl+Shift+C | Switch between Team and Chat view |
+| Ctrl+Shift+L | Cycle the theme: System / Light / Dark |
+| Ctrl+Shift+N | Open the current chat (or project) in a new window |
+| Ctrl+W | Close this window (pop-out windows only) |
 | Ctrl+Shift+M | Maximize / restore the lead console |
 | Ctrl+B | Collapse / expand the left column |
 | Ctrl+I | Collapse / expand the inspector |
@@ -128,7 +177,7 @@ Hooks give live events from external sessions (permission prompts, idle, complet
 
 **What the app reads** (read-only): session transcripts and the session registry under each linked Claude config
 folder (for example `C:/Users/u/.claude/projects/...`), project folders you allow, git metadata of those projects,
-and a project's `settings.local.json` when you preview hooks.
+plugin and skill folders, `.mcp.json` files, and a project's `settings.local.json` when you preview hooks.
 
 **What it never reads**: OAuth or API tokens, `.credentials.json`, environment secrets, or anything in a
 credentials store. Sign-in state is inferred from the CLI, not from token files. It makes no network calls except
@@ -136,7 +185,8 @@ the local hook server on 127.0.0.1 (the production Content-Security-Policy is `c
 
 **What it writes**: its own settings and window state in `%APPDATA%/Agent Console/`, the hook script and
 `endpoint.json` there, and (only after a preview and your confirmation) a project's `.claude/settings.local.json`
-plus its `.bak` backup. Controlled sessions are written by the `claude` process itself.
+plus its `.bak` backup. Confirmed extension actions run the `claude` CLI. Controlled sessions are written by the
+`claude` process itself.
 
 ## Windows notes
 

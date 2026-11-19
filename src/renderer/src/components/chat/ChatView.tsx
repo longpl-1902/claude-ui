@@ -39,6 +39,7 @@ function ChatViewContent(): JSX.Element {
   const answer = useControlStore((s) => s.answer)
 
   const controlled = control !== undefined && control.state !== 'exited'
+  const winSpec = getWindowSpec()
   const external = !demo && !controlled && control === undefined && team.source === 'live' && !!team.sessionId
   const projectRoot = summary?.project?.root ?? team.cwd
 
@@ -128,7 +129,7 @@ function ChatViewContent(): JSX.Element {
             <CopyButton className="ac-copy--always" text={team.sessionId} label="session id" />
           </span>
         )}
-        {team.sessionId && !demo && getWindowSpec().kind !== 'chat' && (
+        {team.sessionId && !demo && winSpec.kind !== 'chat' && (
           <button
             type="button"
             className="ac-chat__popout"
@@ -194,9 +195,18 @@ function ChatViewContent(): JSX.Element {
           {external ? (
             <div className="ac-chat__external">
               <p>{reason}</p>
-              <Button size="sm" variant="primary" onClick={() => setView('team')}>
-                Fork it in Team view
-              </Button>
+              {winSpec.kind === 'chat' ? (
+                // A chat pop-out has no Team view: the fork lives in the project window.
+                winSpec.projectKey && (
+                  <Button size="sm" variant="primary" onClick={() => void useWindowsStore.getState().open({ kind: 'project', projectKey: winSpec.projectKey })}>
+                    Fork it in the project window
+                  </Button>
+                )
+              ) : (
+                <Button size="sm" variant="primary" onClick={() => setView('team')}>
+                  Fork it in Team view
+                </Button>
+              )}
             </div>
           ) : (
             <ControlComposer

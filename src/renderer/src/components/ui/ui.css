@@ -63,7 +63,9 @@
 .ac-errbanner__x:hover { color: var(--ac-text); }
 .ac-errbanner__x:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 1px; }
 .ac-errorboundary__root { display: contents; }
-.ac-errorboundary { display: flex; align-items: center; gap: 12px; margin: 16px; padding: 8px 12px; border: 1px solid var(--ac-danger-border); border-radius: var(--ac-radius-sm); background: var(--ac-bg-card); color: var(--ac-text); font-size: 13px; }
+.ac-errorboundary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px; padding: 8px 12px; border: 1px solid var(--ac-danger-border); border-radius: var(--ac-radius-sm); background: var(--ac-bg-card); color: var(--ac-text); font-size: 13px; }
 .ac-errorboundary__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-errorboundary__stack { flex-basis: 100%; min-width: 0; font-size: 12px; color: var(--ac-text-dim); }
+.ac-errorboundary__stack pre { margin: 6px 0 0; max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-word; user-select: text; }
 .ac-errorboundary__btn { flex: none; min-height: 32px; padding: 0 12px; border: 1px solid var(--ac-border-btn); border-radius: var(--ac-radius-control); background: var(--ac-bg-btn); color: var(--ac-text); font: inherit; cursor: pointer; }
 .ac-errorboundary__btn:hover { background: var(--ac-bg-btn-hover); }

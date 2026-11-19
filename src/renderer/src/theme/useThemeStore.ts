@@ -91,7 +91,10 @@ export const useThemeStore = create<ThemeStore>((set, get) => {
     setSource(s) {
       saveSource(s)
       commit(s, get().system)
-      void window.api?.theme?.setSource(s).then((st) => get().applySystem(st)).catch(() => {})
+      void window.api?.theme?.setSource(s).then((st) => {
+          if ('mode' in st) get().applySystem(st)
+        })
+        .catch(() => {})
     },
     cycle() {
       const i = THEME_SOURCES.indexOf(get().source)
@@ -108,7 +111,9 @@ export const useThemeStore = create<ThemeStore>((set, get) => {
         off = api.onChanged((s) => get().applySystem(s))
         void api
           .setSource(get().source)
-          .then((s) => get().applySystem(s))
+          .then((s) => {
+            if ('mode' in s) get().applySystem(s)
+          })
           .catch(() => {})
       }
       let mq: MediaQueryList | undefined

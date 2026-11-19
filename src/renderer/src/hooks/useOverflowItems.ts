@@ -116,6 +116,9 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
   // Re-plans applied in the current frame; the commit effect stops applying after MAX_REPLANS (never loops).
   const replans = useRef({ n: 0, frame: 0 })
   const lastSig = useRef('')
+  // A plan was refused by the per-frame cap: re-measure once the frame ends (rAF does not run while hidden, see below).
+  const dropped = useRef(false)
+  const measureRef = useRef<(fromCommit?: boolean) => void>(() => {})
   const optsRef = useRef(opts)
   optsRef.current = opts
 
@@ -128,12 +131,21 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
       if (next.k === prev.k && next.compact === prev.compact) return
       if (fromCommit) {
         const r = replans.current
-        if (r.n >= MAX_REPLANS) return
+        if (r.n >= MAX_REPLANS) {
+          // The plan is lost: forget the signature so the next measure with the same inputs is not skipped.
+          lastSig.current = ''
+          dropped.current = true
+          return
+        }
         r.n += 1
         if (r.frame === 0 && typeof requestAnimationFrame === 'function') {
           r.frame = requestAnimationFrame(() => {
             r.n = 0
             r.frame = 0
+            if (dropped.current) {
+              dropped.current = false
+              measureRef.current()
+            }
           })
         }
       }
@@ -195,6 +207,7 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
     const input = needCompact ? { ...base, fixed: fixed - (prev.compact ? 0 : Math.max(0, brandFull.current - BRAND_COMPACT_WIDTH)) } : full
     apply({ k: planOverflow(input, prev.k), compact: needCompact })
   }, [])
+  measureRef.current = measure
 
   // Every commit: item labels / counts change widths without the container resizing.
   useLayoutEffect(() => {
@@ -208,10 +221,16 @@ export function useOverflowItems(opts: UseOverflowOptions): UseOverflowResult {
     ro?.observe(el)
     const onResize = (): void => measure()
     window.addEventListener('resize', onResize)
+    // rAF is paused while hidden: a plan dropped by the cap is picked up when the window shows again.
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') measure()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     void document.fonts?.ready?.then(() => measure())
     return () => {
       ro?.disconnect()
       window.removeEventListener('resize', onResize)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [measure])
 

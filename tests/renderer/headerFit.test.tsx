@@ -307,4 +307,28 @@ describe('T32 U1: useOverflowItems never loops (blank window at 2400+ CSS px)', 
   it('caps the commit-driven re-plans per frame', () => {
     expect(MAX_REPLANS).toBe(2)
   })
+
+  it('a plan refused by the cap is re-measured when the frame ends (not lost)', () => {
+    const frames: FrameRequestCallback[] = []
+    const origRaf = window.requestAnimationFrame
+    window.requestAnimationFrame = (cb: FrameRequestCallback): number => frames.push(cb)
+    try {
+      width = 2560
+      const { container, rerender } = render(<Row onRender={() => {}} />)
+      const commit = (w: number): void => {
+        width = w
+        rerender(<Row onRender={() => {}} />)
+      }
+      commit(380) // re-plan 1
+      commit(2560) // re-plan 2 (the cap)
+      commit(380) // refused: no frame has run yet
+      expect(container.querySelector('[data-oi="note"]')).not.toHaveAttribute('data-collapsed')
+      act(() => {
+        for (const f of frames.splice(0)) f(0)
+      })
+      expect(container.querySelector('[data-oi="note"]')).toHaveAttribute('data-collapsed')
+    } finally {
+      window.requestAnimationFrame = origRaf
+    }
+  })
 })

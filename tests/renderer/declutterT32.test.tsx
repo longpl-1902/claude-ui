@@ -43,6 +43,23 @@ describe('T32 U1: error boundary', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('shows the stack in a collapsed details and copies message plus stack', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(
+      <ErrorBoundary>
+        <Bomb />
+      </ErrorBoundary>
+    )
+    const details = document.querySelector('details.ac-errorboundary__stack') as HTMLDetailsElement
+    expect(details).not.toBeNull()
+    expect(details.open).toBe(false)
+    expect(details.querySelector('pre')?.textContent).toContain('boom: bad layout')
+    await userEvent.click(screen.getByRole('button', { name: 'Copy error' }))
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(String(writeText.mock.calls[0]![0])).toContain('boom: bad layout')
+  })
+
   it('does not touch a healthy tree', () => {
     explode = false
     render(

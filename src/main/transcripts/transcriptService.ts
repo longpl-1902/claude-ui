@@ -290,7 +290,16 @@ export function createTranscriptService(deps: TranscriptServiceDeps): Transcript
     if (waiting) s.waitingForSession = true
     return s
   }
-  const viewerSnapshot = (v: Viewer): TeamSnapshot => (v.session ? sessionSnapshot(v.session) : emptySnapshot(v.waiting))
+  function viewerSnapshot(v: Viewer): TeamSnapshot {
+    const sel = v.session
+    if (!sel) return emptySnapshot(v.waiting)
+    // model.snapshot() clears the dirty flag: when this read consumed pending changes (e.g. while ingestLines awaits),
+    // afterIngest would see "clean" and the session's other viewers would never get the push. Schedule it here.
+    const wasDirty = sel.model.isDirty()
+    const snap = sessionSnapshot(sel)
+    if (wasDirty && isActive(sel)) schedulePush(sel)
+    return snap
+  }
   function pushNow(vs: Iterable<Viewer>): void {
     if (disposed) return
     // a session's snapshot is computed once per call (model.snapshot() clears its dirty flag)
