@@ -1,3 +1,63 @@
+import { Avatar } from '../ui/Avatar'
+import { Button } from '../ui/Button'
+import { ChevronDownIcon, TerminalIcon } from '../ui/Icons'
+import { formatTokens } from '@shared/format'
+import { selectActiveAccount, useConsoleStore, useTeamCounters } from '../../store/useConsoleStore'
+import './teamLeft.css'
+
 export function TeamHeader() {
-  return <section data-stub="TeamHeader" />
+  const team = useConsoleStore((s) => s.team)
+  const account = useConsoleStore(selectActiveAccount)
+  const edge = useConsoleStore((s) => s.accounts.safety.showAccountColorEdge)
+  const navigate = useConsoleStore((s) => s.navigate)
+  const counters = useTeamCounters()
+
+  return (
+    <header
+      className="ac-header"
+      style={{ borderTop: `3px solid ${edge ? account.color : 'var(--ac-border)'}` }}
+    >
+      <div className="ac-header__brand">
+        <TerminalIcon size={22} color="var(--ac-accent)" />
+        <span className="ac-header__title">Agent Console</span>
+      </div>
+      <div className="ac-header__repo">
+        <span>{team.repo}</span>
+        <span className="ac-header__sep">/</span>
+        <span className="ac-header__team">team: {team.teamName}</span>
+      </div>
+      <button
+        type="button"
+        className="ac-header__chip"
+        aria-label={`Account: ${account.name}. Manage accounts`}
+        onClick={() => navigate('accounts')}
+      >
+        <Avatar initials={account.name.charAt(0).toUpperCase()} color={account.color} size={30} shape="circle" />
+        <span>{account.name}</span>
+        {account.email && <span className="ac-header__email">{account.email}</span>}
+        <ChevronDownIcon size={12} color="var(--ac-text-muted)" />
+      </button>
+      <div className="ac-header__spacer" />
+      <div className="ac-header__counters">
+        <span>
+          <strong>{counters.agents}</strong> agents
+        </span>
+        <span className="is-running">
+          <strong>{counters.running}</strong> running
+        </span>
+        <span className="is-needs">
+          <strong>{counters.needsYou}</strong> needs you
+        </span>
+        <span>
+          Tokens <strong>{formatTokens(counters.tokens)}</strong>
+        </span>
+      </div>
+      <div className="ac-header__actions">
+        <Button variant="secondary" onClick={() => void window.api?.team.pauseAll()}>
+          Pause all
+        </Button>
+        <Button variant="primary">+ New teammate</Button>
+      </div>
+    </header>
+  )
 }
