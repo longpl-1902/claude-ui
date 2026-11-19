@@ -65,7 +65,7 @@ describe('R-09 ptyManager spawn', () => {
     const { mgr, spawn } = setup()
     const out = await mgr.spawnClaude({ ...req, args: ['auth', 'login'], cols: 100, rows: 40 })
     expect(out).toEqual({ ok: true, id: 'pty-1' })
-    const [file, args, opts] = spawn.mock.calls[0] as [string, string[], { cols: number; rows: number; cwd: string; name: string }]
+    const [file, args, opts] = spawn.mock.calls[0]! as [string, string[], { cols: number; rows: number; cwd: string; name: string }]
     expect(file).toBe('C:/bin/claude.exe')
     expect(args).toEqual(['auth', 'login'])
     expect(opts).toMatchObject({ cwd: 'C:/work/x', cols: 100, rows: 40, name: 'xterm-256color' })
@@ -74,7 +74,7 @@ describe('R-09 ptyManager spawn', () => {
   it('R-09 defaults to 120x30 and prepends the resolver argsPrefix', async () => {
     const { mgr, spawn } = setup({ claude: { file: 'cmd.exe', argsPrefix: ['/d', '/s', '/c', 'C:/npm/claude.cmd'], via: 'cmd-shim' } })
     await mgr.spawnClaude(req)
-    const [file, args, opts] = spawn.mock.calls[0] as [string, string[], { cols: number; rows: number }]
+    const [file, args, opts] = spawn.mock.calls[0]! as [string, string[], { cols: number; rows: number }]
     expect(file).toBe('cmd.exe')
     expect(args).toEqual(['/d', '/s', '/c', 'C:/npm/claude.cmd'])
     expect(opts).toMatchObject({ cols: 120, rows: 30 })
@@ -83,18 +83,18 @@ describe('R-09 ptyManager spawn', () => {
   it('R-09 child env has no ELECTRON_RUN_AS_NODE / session vars and CLAUDE_CONFIG_DIR is the requested dir', async () => {
     const { mgr, spawn } = setup()
     await mgr.spawnClaude(req)
-    const env = (spawn.mock.calls[0][2] as { env: Record<string, string> }).env
+    const env = (spawn.mock.calls[0]![2] as { env: Record<string, string> }).env
     expect(env).not.toHaveProperty('ELECTRON_RUN_AS_NODE')
     expect(env).not.toHaveProperty('CLAUDECODE')
     expect(env).not.toHaveProperty('CLAUDE_CODE_SESSION_ID')
     expect(env.ANTHROPIC_MODEL).toBe('keep-me')
-    expect(env.CLAUDE_CONFIG_DIR.replace(/\\/g, '/')).toBe('C:/Users/u/.claude-work')
+    expect(env.CLAUDE_CONFIG_DIR!.replace(/\\/g, '/')).toBe('C:/Users/u/.claude-work')
   })
 
   it('R-09 default account: CLAUDE_CONFIG_DIR is not set in the child env', async () => {
     const { mgr, spawn } = setup()
     await mgr.spawnClaude({ ...req, configDirAbs: null, configDirDisplay: '~/.claude' })
-    const env = (spawn.mock.calls[0][2] as { env: Record<string, string> }).env
+    const env = (spawn.mock.calls[0]![2] as { env: Record<string, string> }).env
     expect(Object.keys(env)).not.toContain('CLAUDE_CONFIG_DIR')
   })
 
@@ -160,14 +160,14 @@ describe('R-09 ptyManager lifecycle', () => {
     mgr.onData(a)
     const off = mgr.onData(b)
     await mgr.spawnClaude(req)
-    ptys[0].emitData('hello ')
-    ptys[0].emitData('world')
+    ptys[0]!.emitData('hello ')
+    ptys[0]!.emitData('world')
     expect(a).toHaveBeenCalledWith('pty-1', 'hello ')
     expect(a).toHaveBeenCalledWith('pty-1', 'world')
     expect(b).toHaveBeenCalledTimes(2)
     expect(mgr.buffer('pty-1')).toBe('hello world')
     off()
-    ptys[0].emitData('!')
+    ptys[0]!.emitData('!')
     expect(b).toHaveBeenCalledTimes(2)
     expect(a).toHaveBeenCalledTimes(3)
   })
@@ -175,8 +175,8 @@ describe('R-09 ptyManager lifecycle', () => {
   it('R-09 the ring buffer trims from the front to bufferLimit', async () => {
     const { mgr, ptys } = setup({ bufferLimit: 10 })
     await mgr.spawnClaude(req)
-    ptys[0].emitData('0123456789')
-    ptys[0].emitData('ABCDE')
+    ptys[0]!.emitData('0123456789')
+    ptys[0]!.emitData('ABCDE')
     expect(mgr.buffer('pty-1')).toBe('56789ABCDE')
     expect(mgr.buffer('nope')).toBe('')
   })
@@ -186,8 +186,8 @@ describe('R-09 ptyManager lifecycle', () => {
     await mgr.spawnClaude(req)
     expect(mgr.write('pty-1', 'ls\r')).toBe(true)
     expect(mgr.resize('pty-1', 90, 20)).toBe(true)
-    expect(ptys[0].written).toEqual(['ls\r'])
-    expect(ptys[0].resized).toEqual([[90, 20]])
+    expect(ptys[0]!.written).toEqual(['ls\r'])
+    expect(ptys[0]!.resized).toEqual([[90, 20]])
     expect(mgr.write('zzz', 'x')).toBe(false)
     expect(mgr.resize('zzz', 1, 1)).toBe(false)
     expect(mgr.kill('zzz')).toBe(false)
@@ -198,20 +198,20 @@ describe('R-09 ptyManager lifecycle', () => {
     const onExit = vi.fn()
     mgr.onExit(onExit)
     await mgr.spawnClaude(req)
-    ptys[0].emitExit(3)
+    ptys[0]!.emitExit(3)
     expect(onExit).toHaveBeenCalledWith('pty-1', 3)
     expect(mgr.list()[0]).toMatchObject({ id: 'pty-1', exitCode: 3 })
     expect(mgr.write('pty-1', 'x')).toBe(false)
     expect(mgr.resize('pty-1', 5, 5)).toBe(false)
     expect(mgr.kill('pty-1')).toBe(false)
-    expect(ptys[0].killed).toBe(0)
+    expect(ptys[0]!.killed).toBe(0)
   })
 
   it('R-09 kill terminates a live pty', async () => {
     const { mgr, ptys } = setup()
     await mgr.spawnClaude(req)
     expect(mgr.kill('pty-1')).toBe(true)
-    expect(ptys[0].killed).toBe(1)
+    expect(ptys[0]!.killed).toBe(1)
   })
 
   it('R-09 disposeAll kills every live pty and skips exited ones', async () => {
@@ -219,7 +219,7 @@ describe('R-09 ptyManager lifecycle', () => {
     await mgr.spawnClaude(req)
     await mgr.spawnClaude(req)
     await mgr.spawnClaude(req)
-    ptys[1].emitExit(0)
+    ptys[1]!.emitExit(0)
     mgr.disposeAll()
     expect(ptys.map((p) => p.killed)).toEqual([1, 0, 1])
   })
@@ -228,7 +228,7 @@ describe('R-09 ptyManager lifecycle', () => {
     const { mgr, ptys } = setup()
     for (let i = 0; i < 25; i++) {
       await mgr.spawnClaude(req)
-      ptys[i].emitExit(0)
+      ptys[i]!.emitExit(0)
     }
     const ids = mgr.list().map((p) => p.id)
     expect(ids.length).toBeLessThanOrEqual(21)

@@ -46,7 +46,7 @@ describe('R-09 resolveClaudeCommand (win32)', () => {
     expect(r!.via).toBe('cmd-shim')
     expect(fwd(r!.file)).toBe('C:/Windows/System32/cmd.exe')
     expect(r!.argsPrefix.slice(0, 3)).toEqual(['/d', '/s', '/c'])
-    expect(fwd(r!.argsPrefix[3])).toBe(`${NPM}/claude.cmd`)
+    expect(fwd(r!.argsPrefix[3]!)).toBe(`${NPM}/claude.cmd`)
   })
 
   it('R-09 cmd-shim without ComSpec uses cmd.exe', () => {
