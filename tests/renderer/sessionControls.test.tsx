@@ -2,7 +2,7 @@
 import './jestDom'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ControlBar } from '@renderer/components/team/ControlBar'
@@ -89,6 +89,15 @@ function setup(c: ControlSessionInfo, d: ControlDetails = det()): void {
 const renderBar = (c: ControlSessionInfo): ReturnType<typeof render> =>
   render(<ControlBar control={c} projectName="alpha" projectRoot="D:/work/alpha" onAskLead={() => undefined} />)
 
+const openMenu = async (): Promise<HTMLElement> => {
+  await userEvent.click(screen.getByRole('button', { name: 'More session actions' }))
+  return screen.getByRole('menu', { name: 'Session actions' })
+}
+const openMcp = async (): Promise<HTMLElement> => {
+  await userEvent.click(screen.getByRole('button', { name: /^MCP servers:/ }))
+  return screen.getByRole('dialog', { name: 'MCP servers' })
+}
+
 function mockMatchMedia(width: number): void {
   window.matchMedia = ((q: string) => {
     const max = Number(/max-width:\s*(\d+)px/.exec(q)?.[1] ?? Infinity)
@@ -171,11 +180,17 @@ describe('context meter and cost', () => {
   it('shows the label, categories tooltip and refreshes', async () => {
     setup(ctl())
     renderBar(ctl())
-    expect(screen.getByText('62% context (124k / 200k)')).toBeInTheDocument()
     const meter = screen.getByRole('meter', { name: 'Context window' })
+    // compact: just "62%" in the row; the detail is in the tooltip / value text
+    expect(meter).toHaveTextContent('62%')
+    expect(meter).not.toHaveTextContent('124k')
+    expect(meter).toHaveAttribute('aria-valuetext', '62% context (124k / 200k)')
     expect(meter).toHaveAttribute('data-level', 'ok')
+    expect(meter).toHaveAttribute('title', expect.stringContaining('62% context (124k / 200k)'))
     expect(meter).toHaveAttribute('title', expect.stringContaining('Messages'))
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh context usage' }))
+    expect(api.refreshContext).not.toHaveBeenCalled()
+    await openMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh usage' }))
     expect(api.refreshContext).toHaveBeenCalledWith('c1')
   })
 
@@ -194,8 +209,12 @@ describe('context meter and cost', () => {
   it('shows last turn tokens/cost and the session total as API-equivalent cost', () => {
     setup(ctl())
     renderBar(ctl())
-    expect(screen.getByText(/Last turn: 1\.2k in \/ 800 out \/ 5\.0k cache · \$0\.0421/)).toBeInTheDocument()
-    expect(screen.getByText(/Session \$1\.50 \(API-equivalent cost\)/)).toBeInTheDocument()
+    const title = screen.getByRole('meter', { name: 'Context window' }).getAttribute('title') ?? ''
+    expect(title).toMatch(/Last turn: 1\.2k in \/ 800 out \/ 5\.0k cache/)
+    expect(title).toMatch(/\$0\.0421/)
+    expect(title).toMatch(/Session \$1\.50 \(API-equivalent cost\)/)
+    // not a permanent line in the toolbar
+    expect(screen.queryByText(/Last turn:/)).toBeNull()
   })
 })
 
@@ -203,6 +222,7 @@ describe('MCP chips', () => {
   it('toggles a connected server off for this session and enables a disabled one', async () => {
     setup(ctl())
     renderBar(ctl())
+    await openMcp()
     await userEvent.click(screen.getByRole('button', { name: 'MCP github: connected' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Disable for this session' }))
     expect(api.mcpToggle).toHaveBeenCalledWith('c1', 'github', false)
@@ -214,6 +234,7 @@ describe('MCP chips', () => {
   it('reconnects, and needs-auth points to the raw terminal', async () => {
     setup(ctl())
     renderBar(ctl())
+    await openMcp()
     await userEvent.click(screen.getByRole('button', { name: 'MCP figma: needs-auth' }))
     expect(screen.getByText('Authenticate in the Raw terminal: /mcp')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('menuitem', { name: 'Reconnect' }))
@@ -223,6 +244,7 @@ describe('MCP chips', () => {
   it('Manage servers navigates to the extensions screen', async () => {
     setup(ctl())
     renderBar(ctl())
+    await openMcp()
     await userEvent.click(screen.getByRole('button', { name: 'Manage servers…' }))
     expect(useConsoleStore.getState().screen).toBe('extensions')
   })
@@ -232,8 +254,10 @@ describe('rename', () => {
   it('edits the title inline and calls rename', async () => {
     setup(ctl())
     renderBar(ctl())
-    expect(screen.getByText('My session')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect(screen.queryByText('My session')).toBeNull()
+    const menu = await openMenu()
+    expect(within(menu).getByText('My session')).toBeInTheDocument()
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename session…' }))
     const input = screen.getByRole('textbox', { name: 'Session title' })
     await userEvent.clear(input)
     await userEvent.type(input, 'Renamed')
@@ -244,7 +268,8 @@ describe('rename', () => {
 
 describe('checkpoints (R-19, R-31)', () => {
   const open = async (): Promise<void> => {
-    await userEvent.click(screen.getByRole('button', { name: 'Checkpoints' }))
+    await openMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Checkpoints' }))
   }
 
   it('rewind needs a dry-run preview and an explicit confirm; lists newest first', async () => {
@@ -331,33 +356,194 @@ describe('R-19 nothing is sent by mounting or changing controls', () => {
   })
 })
 
-describe('responsive: narrow width', () => {
-  it('collapses secondary controls behind "More controls" and keeps the essentials reachable', async () => {
-    mockMatchMedia(800)
+describe('T37 compact toolbar', () => {
+  it('has exactly one status chip', () => {
     setup(ctl())
     renderBar(ctl())
-    expect(screen.getByRole('combobox', { name: 'Model' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Permission mode' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Checkpoints' })).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull()
-    expect(screen.queryByTestId('session-details-strip')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: 'More controls' }))
-    expect(screen.getByRole('combobox', { name: 'Effort' })).toBeInTheDocument()
-    const strip = screen.getByTestId('session-details-strip')
-    // css is not loaded under vitest: the wrap rule lives in controlBar.css (theme-token stylesheet, no inline styles)
-    expect(strip).toHaveClass('ac-ctl-strip')
-    expect(readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/controlBar.css'), 'utf8')).toMatch(
-      /\.ac-ctl-strip\s*\{[^}]*flex-wrap:\s*wrap/
-    )
-    expect(within(strip).getByRole('button', { name: 'MCP github: connected' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Fewer controls' })).toBeInTheDocument())
+    const chips = screen.getAllByRole('status')
+    expect(chips).toHaveLength(1)
+    expect(chips[0]).toHaveTextContent('Ready')
   })
 
-  it('wide window shows everything without the disclosure', () => {
+  it('a model id outside the list is a selected option labelled with its id; no empty custom box', () => {
+    setup(ctl({ model: 'claude-acme-9' }))
+    renderBar(ctl({ model: 'claude-acme-9' }))
+    const model = screen.getByRole('combobox', { name: 'Model' }) as HTMLSelectElement
+    expect(model.value).toBe('claude-acme-9')
+    expect(within(model).getByRole('option', { name: 'claude-acme-9' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Custom model' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Set model' })).toBeNull()
+  })
+
+  it('the custom model input and "Set model" appear only after picking "Custom…"', async () => {
+    setup(ctl())
+    renderBar(ctl())
+    expect(screen.queryByRole('textbox', { name: 'Custom model' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Set model' })).toBeNull()
+    const model = screen.getByRole('combobox', { name: 'Model' })
+    await userEvent.selectOptions(model, 'Custom…')
+    const box = screen.getByRole('textbox', { name: 'Custom model' })
+    const set = screen.getByRole('button', { name: 'Set model' })
+    expect(set).toBeDisabled()
+    expect(api.setModel).not.toHaveBeenCalled()
+    await userEvent.type(box, 'claude-acme-9')
+    expect(set).toBeEnabled()
+    await userEvent.click(set)
+    expect(api.setModel).toHaveBeenCalledWith('c1', 'claude-acme-9')
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Custom model' })).toBeNull())
+  })
+
+  it('picking a listed model, or Esc, closes the custom box', async () => {
+    setup(ctl())
+    renderBar(ctl())
+    const model = screen.getByRole('combobox', { name: 'Model' })
+    await userEvent.selectOptions(model, 'Custom…')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Custom model' }), '{Escape}')
+    expect(screen.queryByRole('textbox', { name: 'Custom model' })).toBeNull()
+    await userEvent.selectOptions(model, 'Custom…')
+    await userEvent.selectOptions(model, 'opus')
+    expect(screen.queryByRole('textbox', { name: 'Custom model' })).toBeNull()
+    expect(api.setModel).toHaveBeenCalledWith('c1', 'opus')
+  })
+
+  it('"Changes apply from the next turn." shows only after a change, then fades', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      setup(ctl())
+      renderBar(ctl())
+      expect(screen.queryByText('Changes apply from the next turn.')).toBeNull()
+      fireEvent.change(screen.getByRole('combobox', { name: 'Permission mode' }), { target: { value: 'plan' } })
+      await act(async () => {
+        for (let i = 0; i < 20; i++) await Promise.resolve()
+      })
+      expect(screen.getByText('Changes apply from the next turn.')).toBeInTheDocument()
+      act(() => {
+        vi.advanceTimersByTime(7000)
+      })
+      expect(screen.queryByText('Changes apply from the next turn.')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('the more menu is a role=menu with every moved action, keyboard operable, Esc returns focus', async () => {
+    setup(ctl())
+    renderBar(ctl())
+    const trigger = screen.getByRole('button', { name: 'More session actions' })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    // nothing is a permanent toolbar button any more
+    for (const n of ['Checkpoints', 'Rename', 'Refresh', 'Ask lead to start a teammate', 'Manage servers…', 'Stop'])
+      expect(screen.queryByRole('button', { name: n })).toBeNull()
+    const menu = await openMenu()
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items.map((i) => i.textContent)).toEqual([
+      'Checkpoints',
+      'Rename session…',
+      'Refresh usage',
+      'Ask lead to start a teammate',
+      'Stop process'
+    ])
+    expect(items[0]).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}')
+    expect(items[1]).toHaveFocus()
+    await userEvent.keyboard('{End}')
+    expect(items[4]).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}')
+    expect(items[0]).toHaveFocus()
+    await userEvent.keyboard('{ArrowUp}')
+    expect(items[4]).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('opening the menu or the MCP popover sends and requests nothing (R-19)', async () => {
+    setup(ctl())
+    renderBar(ctl())
+    await waitFor(() => expect(api.details).toHaveBeenCalled())
+    api.details.mockClear()
+    await openMenu()
+    await userEvent.keyboard('{Escape}')
+    await openMcp()
+    await userEvent.keyboard('{Escape}')
+    for (const f of [api.send, api.start, api.refreshContext, api.details, api.mcpToggle, api.mcpReconnect, api.stop, api.rewind, api.rewindPreview])
+      expect(f).not.toHaveBeenCalled()
+  })
+
+  it('Stop is the only danger button and shows only while busy; idle it is "Stop process" in the menu', async () => {
+    setup(ctl())
+    const { unmount } = renderBar(ctl())
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+    await openMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Stop process' }))
+    expect(api.stop).toHaveBeenCalledWith('c1')
+    unmount()
+    setup(ctl({ state: 'busy' }))
+    renderBar(ctl({ state: 'busy' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(api.stop).toHaveBeenCalledTimes(2)
+    await openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Stop process' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Interrupt lead (alpha)' })).toBeInTheDocument()
+  })
+
+  it('MCP summary chip: count and status dot, popover lists the server chips and Manage servers', async () => {
+    setup(ctl())
+    const { unmount } = renderBar(ctl())
+    const chip = screen.getByRole('button', { name: 'MCP servers: 3, 1 need attention' })
+    expect(chip).toHaveTextContent('MCP 3')
+    expect(chip).toHaveAttribute('data-level', 'warn')
+    expect(chip).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(screen.queryByRole('button', { name: 'MCP github: connected' })).toBeNull()
+    const pop = await openMcp()
+    expect(within(pop).getByRole('button', { name: 'MCP github: connected' })).toBeInTheDocument()
+    expect(within(pop).getByRole('button', { name: 'Manage servers…' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'MCP servers' })).toBeNull()
+    expect(chip).toHaveFocus()
+    unmount()
+    setup(ctl(), det({ mcp: [{ name: 'github', status: 'connected' }] }))
+    renderBar(ctl())
+    expect(screen.getByRole('button', { name: 'MCP servers: 1' })).toHaveAttribute('data-level', 'ok')
+  })
+})
+
+describe('responsive: narrow width (about 900 px)', () => {
+  const css = (): string =>
+    readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/controlBar.css'), 'utf8').replace(/\r\n/g, '\n')
+
+  it('keeps every control reachable with no "More controls" disclosure; the toolbar wraps by itself', () => {
+    mockMatchMedia(900)
+    setup(ctl())
+    renderBar(ctl())
+    expect(screen.queryByRole('button', { name: 'More controls' })).toBeNull()
+    for (const n of ['Model', 'Permission mode', 'Effort', 'Output style'])
+      expect(screen.getByRole('combobox', { name: n })).toBeInTheDocument()
+    expect(screen.getByRole('meter', { name: 'Context window' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^MCP servers:/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More session actions' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Session controls' })).toHaveClass('ac-ctl-toolbar')
+  })
+
+  it('wide window shows the same toolbar', () => {
     mockMatchMedia(1440)
     setup(ctl())
     renderBar(ctl())
     expect(screen.queryByRole('button', { name: 'More controls' })).toBeNull()
     expect(screen.getByRole('combobox', { name: 'Effort' })).toBeInTheDocument()
+  })
+
+  it('css (not loaded under vitest): one wrapping row at every width, selects capped, tokens only', () => {
+    const c = css()
+    expect(c).toMatch(/\.ac-tc-ctl__row\.ac-ctl-toolbar\s*\{[^}]*flex-direction:\s*row[^}]*flex-wrap:\s*wrap/)
+    expect(c).toMatch(/\.ac-ctl-select\s*\{[^}]*max-width:\s*\d+px/)
+    // the narrow-window rule in teamCenter.css stacks .ac-tc-ctl__row; the toolbar must out-rank it
+    const center = readFileSync(resolve(__dirname, '../../src/renderer/src/components/team/teamCenter.css'), 'utf8')
+    expect(center).toMatch(/max-width: 899px\)[^]*\.ac-tc-ctl__row, \.ac-tc-start__row \{ flex-direction: column/)
+    // new T37 rules use theme tokens, no raw colours
+    const t37 = c.slice(c.indexOf('T37: one compact toolbar row'))
+    expect(t37).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/)
   })
 })

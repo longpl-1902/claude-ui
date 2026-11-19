@@ -280,7 +280,8 @@ export function LeadConsole({ filter, defaultFilter = 'messages', onFilterChange
           disabled={promptDisabled}
           id="ac-prompt"
           ariaLabel="Message the lead"
-          stateLabel={demo ? 'demo' : controlled ? (isDraft ? 'new session' : control.state) : ''}
+          // T37: the toolbar's status chip is the only one; the composer shows it only where the toolbar is hidden.
+          stateLabel={demo ? 'demo' : controlled && rawOpen ? (isDraft ? 'new session' : control.state) : ''}
           placeholder={placeholder}
           textareaRef={inputRef}
         />

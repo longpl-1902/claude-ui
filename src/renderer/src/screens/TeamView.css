@@ -110,6 +110,17 @@
   overflow: auto;
 }
 
+/* T37: a collapsed timeline is just its strip; the console pane takes the freed room (no dead gap). */
+.ac-pane--timeline[data-open='false'] {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ac-pane--console-fill {
+  min-height: 0;
+}
+
 /* Inspector: [top section][splitter][tabs + panel]; the top height comes from TeamView. */
 .ac-team__body .insp {
   flex: 1 1 0;
@@ -286,5 +297,10 @@
   }
   .ac-pane--timeline {
     min-height: 0;
+  }
+  #ac-pane-console.ac-pane--console-fill {
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
   }
 }

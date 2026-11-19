@@ -9,9 +9,32 @@ export type PaneGroup = 'center' | 'left' | 'right'
 export const HANDLE_H = 6
 /** T32 U5: rows of the center grid are [agents minmax(96px, grid)] [timeline auto] [console minmax(220px, 1fr)]. */
 export const GRID_MIN = 96
-export const CONSOLE_MIN = 220
-export const CONSOLE_DEF = 240
+/** T37: header + toolbar + filter tabs (~110 px) and the composer (~110 px) leave the log some lines even at the minimum. */
+export const CONSOLE_MIN = 300
+export const CONSOLE_DEF = 320
 export const TIMELINE_MIN = 60
+/** T37: a collapsed timeline is its one-line strip (padding + 24 px head); the console takes the rest of its room. */
+export const TIMELINE_COLLAPSED_H = 58
+/** T37: agent grid sizing: the "Team" header and one card row (compact 44, comfortable 128 incl. the gap). */
+export const GRID_HEAD_H = 44
+export const GRID_ROW_COMPACT_H = 44
+export const GRID_ROW_COMFORTABLE_H = 128
+export const GRID_DEF_ROWS = { compact: 3, comfortable: 2 } as const
+
+/** Height that shows up to 3 compact (or 2 comfortable) card rows whole, without an inner scrollbar. */
+export function gridWantHeight(agentCount: number, density: 'compact' | 'comfortable'): number {
+  const rows = Math.min(agentCount, GRID_DEF_ROWS[density])
+  const rowH = density === 'compact' ? GRID_ROW_COMPACT_H : GRID_ROW_COMFORTABLE_H
+  return GRID_HEAD_H + rows * rowH
+}
+
+export interface HeightOpts {
+  /** False while the timeline is collapsed: its space goes to the console (T37). Default true. */
+  timelineOpen?: boolean
+  /** Content-fit default for the grid (see gridWantHeight); capped at the 40 % share. */
+  gridWant?: number
+}
+const tlOf = (o: HeightOpts): number => (o.timelineOpen === false ? TIMELINE_COLLAPSED_H : TIMELINE_MIN)
 /** Timeline row when it is open by default; below TIMELINE_OPEN_MIN_H of column height it starts collapsed. */
 export const TIMELINE_DEF = 150
 export const TIMELINE_OPEN_MIN_H = 800
@@ -60,15 +83,23 @@ function save(r: Raw): void {
 }
 
 /** Default (unclamped) height of a pane for the container heights. */
-function defOf(key: PaneKey, h: Heights): number {
+function gridDef(h: Heights, o: HeightOpts): number {
+  const share = Math.max(GRID_MIN, Math.round(h.center * GRID_MAX_SHARE))
+  return o.gridWant === undefined ? share : Math.min(share, Math.max(GRID_MIN, Math.round(o.gridWant)))
+}
+
+function defOf(key: PaneKey, h: Heights, o: HeightOpts): number {
   switch (key) {
     case 'grid':
-      return Math.max(GRID_MIN, Math.round(h.center * GRID_MAX_SHARE))
+      return gridDef(h, o)
     case 'console':
       // The console takes what the grid and the timeline leave.
       return Math.max(
         CONSOLE_DEF,
-        h.center - 2 * HANDLE_H - Math.max(GRID_MIN, Math.round(h.center * GRID_MAX_SHARE)) - (h.center >= TIMELINE_OPEN_MIN_H ? TIMELINE_DEF : TIMELINE_MIN)
+        h.center -
+          2 * HANDLE_H -
+          gridDef(h, o) -
+          (o.timelineOpen === false ? TIMELINE_COLLAPSED_H : h.center >= TIMELINE_OPEN_MIN_H ? TIMELINE_DEF : TIMELINE_MIN)
       )
     case 'worktrees':
       return Math.round(h.left * 0.5)
@@ -85,19 +116,27 @@ const MINS: Record<PaneKey, number> = {
 }
 
 /** Resolve every pane height so the other panes keep their minimums. */
-export function fitHeights(raw: Raw, h: Heights): Record<PaneKey, number> {
-  const get = (k: PaneKey): number => Math.round(raw[k] ?? defOf(k, h))
-  const centerRoom = h.center - 2 * HANDLE_H - TIMELINE_MIN
-  const consoleH = clamp(get('console'), CONSOLE_MIN, centerRoom - GRID_MIN)
-  const grid = clamp(get('grid'), GRID_MIN, centerRoom - consoleH)
+export function fitHeights(raw: Raw, h: Heights, o: HeightOpts = {}): Record<PaneKey, number> {
+  const get = (k: PaneKey): number => Math.round(raw[k] ?? defOf(k, h, o))
+  const centerRoom = h.center - 2 * HANDLE_H - tlOf(o)
+  let grid: number
+  let consoleH: number
+  if (o.timelineOpen === false) {
+    // T37: no dead gap: the console is whatever the grid leaves; the stored console height waits for the timeline.
+    grid = clamp(get('grid'), GRID_MIN, centerRoom - CONSOLE_MIN)
+    consoleH = Math.max(CONSOLE_MIN, centerRoom - grid)
+  } else {
+    consoleH = clamp(get('console'), CONSOLE_MIN, centerRoom - GRID_MIN)
+    grid = clamp(get('grid'), GRID_MIN, centerRoom - consoleH)
+  }
   const worktrees = clamp(get('worktrees'), WORKTREES_MIN, h.left - HANDLE_H - TASKS_MIN)
   const inspectorTop = clamp(get('inspectorTop'), INSPECTOR_TOP_MIN, h.right - HANDLE_H - INSPECTOR_TABS_MIN)
   return { grid, console: consoleH, worktrees, inspectorTop }
 }
 
 /** Upper limit for one pane given the current values of its siblings. */
-function maxOf(key: PaneKey, v: Record<PaneKey, number>, h: Heights): number {
-  const centerRoom = h.center - 2 * HANDLE_H - TIMELINE_MIN
+function maxOf(key: PaneKey, v: Record<PaneKey, number>, h: Heights, o: HeightOpts): number {
+  const centerRoom = h.center - 2 * HANDLE_H - tlOf(o)
   switch (key) {
     // Growing one of the pair pushes the other down to its minimum (T32 U5), so each may use all the room but the
     // other's minimum.
@@ -117,7 +156,7 @@ function maxOf(key: PaneKey, v: Record<PaneKey, number>, h: Heights): number {
  * `bind(group)` returns a ref callback that measures the container; without
  * ResizeObserver (jsdom), or when `observe` is false, window.innerHeight is used.
  */
-export function usePanelHeights(observe = true) {
+export function usePanelHeights(observe = true, opts: HeightOpts = {}) {
   const [raw, setRaw] = useState<Raw>(load)
   const [viewport, setViewport] = useState<number>(() => window.innerHeight)
   const [measured, setMeasured] = useState<Partial<Heights>>({})
@@ -184,16 +223,23 @@ export function usePanelHeights(observe = true) {
     left: measured.left ?? viewport,
     right: measured.right ?? viewport
   }
-  const values = fitHeights(raw, h)
+  const values = fitHeights(raw, h, opts)
 
-  const max = (key: PaneKey): number => maxOf(key, values, h)
-  const def = (key: PaneKey): number => clamp(defOf(key, h), MINS[key], maxOf(key, values, h))
+  const max = (key: PaneKey): number => maxOf(key, values, h, opts)
+  const def = (key: PaneKey): number => clamp(defOf(key, h, opts), MINS[key], maxOf(key, values, h, opts))
   const set = (key: PaneKey, v: number): void => {
-    const nv = clamp(Math.round(v), MINS[key], maxOf(key, values, h))
+    const nv = clamp(Math.round(v), MINS[key], maxOf(key, values, h, opts))
+    const room = h.center - 2 * HANDLE_H - tlOf(opts)
     const next: Raw = { ...raw, [key]: nv }
-    const room = h.center - 2 * HANDLE_H - TIMELINE_MIN
-    if (key === 'grid' && nv + values.console > room) next.console = Math.max(CONSOLE_MIN, room - nv)
-    if (key === 'console' && nv + values.grid > room) next.grid = Math.max(GRID_MIN, room - nv)
+    if (opts.timelineOpen === false) {
+      // The console edge is the grid edge while the timeline is collapsed; the stored console height is kept.
+      if (key === 'console') next.grid = Math.max(GRID_MIN, room - nv)
+      if (raw.console === undefined) delete next.console
+      else next.console = raw.console
+    } else {
+      if (key === 'grid' && nv + values.console > room) next.console = Math.max(CONSOLE_MIN, room - nv)
+      if (key === 'console' && nv + values.grid > room) next.grid = Math.max(GRID_MIN, room - nv)
+    }
     setRaw(next)
     save(next)
   }

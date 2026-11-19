@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ControlPermissionMode,
   Effort,
@@ -12,6 +12,8 @@ import { useControlStore } from '../../store/useControlStore'
 import { useDetailsStore } from '../../store/useDetailsStore'
 import { Button } from '../ui/Button'
 import { ContextMeter } from './ContextMeter'
+import { McpPopover, MoreMenu } from './ControlMenus'
+import type { MenuAction } from './ControlMenus'
 import { McpChips } from './McpChips'
 import { RewindDialog } from './RewindDialog'
 import { isKnownReason, reasonText } from '../ui/reasonText'
@@ -25,26 +27,12 @@ const MODEL_RE = /^[A-Za-z0-9._[\]-]{1,64}$/
 const CUSTOM = '__custom__'
 const DEFAULT_MODEL = ''
 const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
-const NARROW_QUERY = '(max-width: 899px)'
+/** How long "Changes apply from the next turn." stays next to the control that was changed. */
+const APPLIED_HINT_MS = 6000
 const NEXT_START = 'Applies on next start: the running session could not change this live.'
 
 const usd = (n: number): string => `$${n.toFixed(n < 0.1 ? 4 : 2)}`
 const tok = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
-
-function useNarrow(): boolean {
-  const query = (): boolean =>
-    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW_QUERY).matches
-  const [narrow, setNarrow] = useState(query)
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia(NARROW_QUERY)
-    const on = (): void => setNarrow(mq.matches)
-    on()
-    mq.addEventListener?.('change', on)
-    return () => mq.removeEventListener?.('change', on)
-  }, [])
-  return narrow
-}
 
 export type StartOption = 'new' | 'continue' | 'resume' | 'fork'
 
@@ -108,11 +96,11 @@ export function ControlBar({
   const details = useDetailsStore((s) => (control ? s.byControl[control.id] : undefined))
   const detailsLoad = useDetailsStore((s) => s.load)
   const refreshContext = useDetailsStore((s) => s.refreshContext)
-  const narrow = useNarrow()
-  const [moreOpen, setMoreOpen] = useState(false)
   const [rewindOpen, setRewindOpen] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [liveNote, setLiveNote] = useState('')
+  const [applied, setApplied] = useState(false)
+  const renameRef = useRef<HTMLInputElement>(null)
   const controlId = control?.id
   const isLive = control !== undefined && control.state !== 'exited'
   useEffect(() => {
@@ -126,16 +114,31 @@ export function ControlBar({
           ...(m.description ? { title: m.description } : {})
         }))
       : MODELS.map((m) => ({ value: m, label: m }))
-  const known = control?.model !== undefined && modelList.some((m) => m.value === control.model)
+  const curModel = control?.model
+  const known = curModel !== undefined && modelList.some((m) => m.value === curModel)
   const [customLive, setCustomLive] = useState(false)
   const [customLiveText, setCustomLiveText] = useState('')
-  const liveModelValue = customLive || (control?.model && !known) ? CUSTOM : (control?.model ?? DEFAULT_MODEL)
+  // A model id outside the list is its own selected option (label = the id); the box shows only for "Custom…".
+  const liveModelValue = customLive ? CUSTOM : (curModel ?? DEFAULT_MODEL)
   const liveCustomValid = MODEL_RE.test(customLiveText) && !customLiveText.startsWith('-')
   const [liveError, setLiveError] = useState('')
   const report = (r: { ok: boolean; reason?: string }): void => {
     setLiveError(r.ok ? '' : (isKnownReason(r.reason) ? reasonText(r.reason) : `Could not change that (${r.reason ?? 'failed'}).`))
     setLiveNote(r.ok && r.reason === 'applies-on-next-start' ? NEXT_START : '')
   }
+  // Model / mode / effort / style: the next-turn hint shows next to them for a moment, not permanently.
+  const reportChange = (r: { ok: boolean; reason?: string }): void => {
+    report(r)
+    setApplied(r.ok && !r.reason)
+  }
+  useEffect(() => {
+    if (!applied) return
+    const t = setTimeout(() => setApplied(false), APPLIED_HINT_MS)
+    return () => clearTimeout(t)
+  }, [applied])
+  useEffect(() => {
+    if (renaming !== null) renameRef.current?.focus()
+  }, [renaming === null]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- start form
   const [folder, setFolder] = useState('')
@@ -251,21 +254,46 @@ export function ControlBar({
     }
   }
 
+  const sessionTitle = details?.title ?? 'Untitled session'
+  const costLine = details
+    ? `${
+        details.lastTurn
+          ? `Last turn: ${tok(details.lastTurn.input)} in / ${tok(details.lastTurn.output)} out / ${tok(
+              details.lastTurn.cacheRead + details.lastTurn.cacheCreation
+            )} cache${details.lastTurn.costUsd !== undefined ? ` · ${usd(details.lastTurn.costUsd)}` : ''} · `
+          : ''
+      }Session ${usd(details.sessionCostUsd)} (API-equivalent cost)`
+    : ''
+  const menuActions: MenuAction[] = control
+    ? [
+        { key: 'checkpoints', label: 'Checkpoints', onSelect: () => setRewindOpen(true) },
+        { key: 'rename', label: 'Rename session…', onSelect: () => setRenaming(details?.title ?? '') },
+        {
+          key: 'refresh',
+          label: 'Refresh usage',
+          onSelect: () => void refreshContext(control.id).then(report)
+        },
+        { key: 'ask', label: 'Ask lead to start a teammate', onSelect: onAskLead },
+        ...(busy
+          ? []
+          : [{ key: 'stop', label: 'Stop process', danger: true, onSelect: () => void stop(control.id) }])
+      ]
+    : []
+
   return (
     <div className="ac-tc-ctl">
-      <div className="ac-tc-ctl__row">
-        {control && (
+      {control && (
+        <div className="ac-tc-ctl__row ac-ctl-toolbar" role="group" aria-label="Session controls">
           <span className={`ac-tc-chip ac-tc-chip--${control.state}`} role="status">
             {STATE_LABEL[control.state] ?? control.state}
             {control.queuedTurns > 0 ? ` · ${control.queuedTurns} queued` : ''}
           </span>
-        )}
-        {live && (
-          <>
-            <label className="ac-tc-ctl__field">
-              <span>Model</span>
+          {live && (
+            <>
               <select
+                className="ac-ctl-select"
                 aria-label="Model"
+                title="Model"
                 value={liveModelValue}
                 onChange={(e) => {
                   const v = e.target.value
@@ -274,10 +302,11 @@ export function ControlBar({
                     return
                   }
                   setCustomLive(false)
-                  void setModel(control.id, v === DEFAULT_MODEL ? null : v).then(report)
+                  void setModel(control.id, v === DEFAULT_MODEL ? null : v).then(reportChange)
                 }}
               >
                 <option value={DEFAULT_MODEL}>Account default</option>
+                {curModel && !known && <option value={curModel}>{curModel}</option>}
                 {modelList.map((m) => (
                   <option key={m.value} value={m.value} {...(m.title ? { title: m.title } : {})}>
                     {m.label}
@@ -285,31 +314,47 @@ export function ControlBar({
                 ))}
                 <option value={CUSTOM}>Custom…</option>
               </select>
-            </label>
-            {liveModelValue === CUSTOM && (
-              <>
-                <input
-                  className="ac-tc-ctl__input"
-                  aria-label="Custom model"
-                  aria-invalid={customLiveText !== '' && !liveCustomValid}
-                  value={customLiveText}
-                  onChange={(e) => setCustomLiveText(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  disabled={!liveCustomValid}
-                  onClick={() => void setModel(control.id, customLiveText).then(report)}
+              {liveModelValue === CUSTOM && (
+                <form
+                  className="ac-ctl-custom"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (!liveCustomValid) return
+                    void setModel(control.id, customLiveText).then((r) => {
+                      reportChange(r)
+                      if (r.ok) {
+                        setCustomLive(false)
+                        setCustomLiveText('')
+                      }
+                    })
+                  }}
                 >
-                  Set model
-                </Button>
-              </>
-            )}
-            <label className="ac-tc-ctl__field">
-              <span>Mode</span>
+                  <input
+                    className="ac-tc-ctl__input ac-ctl-custom__input"
+                    aria-label="Custom model"
+                    aria-invalid={customLiveText !== '' && !liveCustomValid}
+                    placeholder="model id"
+                    autoFocus
+                    value={customLiveText}
+                    onChange={(e) => setCustomLiveText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.stopPropagation()
+                        setCustomLive(false)
+                      }
+                    }}
+                  />
+                  <Button size="sm" type="submit" disabled={!liveCustomValid}>
+                    Set model
+                  </Button>
+                </form>
+              )}
               <select
+                className="ac-ctl-select"
                 aria-label="Permission mode"
+                title="Permission mode"
                 value={control.permissionMode}
-                onChange={(e) => void setMode(control.id, e.target.value as ControlPermissionMode).then(report)}
+                onChange={(e) => void setMode(control.id, e.target.value as ControlPermissionMode).then(reportChange)}
               >
                 {MODES.map((m) => (
                   <option key={m} value={m}>
@@ -317,157 +362,130 @@ export function ControlBar({
                   </option>
                 ))}
               </select>
-            </label>
-            {(!narrow || moreOpen) && control && (
-              <>
-                <label className="ac-tc-ctl__field">
-                  <span>Effort</span>
-                  <select
-                    aria-label="Effort"
-                    value={details?.effort ?? ''}
-                    onChange={(e) =>
-                      void useDetailsStore
-                        .getState()
-                        .setEffort(control.id, e.target.value === '' ? null : (e.target.value as Effort))
-                        .then(report)
-                    }
-                  >
-                    <option value="">default</option>
-                    {EFFORTS.map((x) => (
-                      <option key={x} value={x}>
-                        {x}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="ac-tc-ctl__field">
-                  <span>Style</span>
-                  <select
-                    aria-label="Output style"
-                    value={details?.outputStyle ?? ''}
-                    onChange={(e) =>
-                      void useDetailsStore
-                        .getState()
-                        .setOutputStyle(control.id, e.target.value === '' ? null : e.target.value)
-                        .then(report)
-                    }
-                  >
-                    <option value="">default</option>
-                    {(details?.availableOutputStyles ?? [])
-                      .filter((x) => x !== 'default')
-                      .map((x) => (
-                        <option key={x} value={x}>
-                          {x}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </>
-            )}
-            {narrow && (
-              <Button size="sm" variant="ghost" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
-                {moreOpen ? 'Fewer controls' : 'More controls'}
-              </Button>
-            )}
-            <Button size="sm" onClick={() => setRewindOpen(true)}>
-              Checkpoints
-            </Button>
-            {busy && (
-              <Button size="sm" variant="warn" aria-keyshortcuts="Control+." onClick={() => void interrupt(control.id)}>
-                {`Interrupt lead (${projectName})`}
-              </Button>
-            )}
-            <Button size="sm" variant="danger" onClick={() => void stop(control.id)}>
-              Stop
-            </Button>
-            <Button size="sm" variant="ghost" onClick={onAskLead}>
-              Ask lead to start a teammate
-            </Button>
-          </>
-        )}
-      </div>
-      {live && control && (
-        <p className="ac-tc-hint ac-ctl-hint">
-          {control.state === 'draft'
-            ? 'Model, effort, mode and style are used when the session starts.'
-            : 'Changes apply from the next turn.'}
-        </p>
+              <select
+                className="ac-ctl-select"
+                aria-label="Effort"
+                title="Effort"
+                value={details?.effort ?? ''}
+                onChange={(e) =>
+                  void useDetailsStore
+                    .getState()
+                    .setEffort(control.id, e.target.value === '' ? null : (e.target.value as Effort))
+                    .then(reportChange)
+                }
+              >
+                <option value="">Effort: default</option>
+                {EFFORTS.map((x) => (
+                  <option key={x} value={x}>
+                    {`Effort: ${x}`}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="ac-ctl-select"
+                aria-label="Output style"
+                title="Output style"
+                value={details?.outputStyle ?? ''}
+                onChange={(e) =>
+                  void useDetailsStore
+                    .getState()
+                    .setOutputStyle(control.id, e.target.value === '' ? null : e.target.value)
+                    .then(reportChange)
+                }
+              >
+                <option value="">Style: default</option>
+                {(details?.availableOutputStyles ?? [])
+                  .filter((x) => x !== 'default')
+                  .map((x) => (
+                    <option key={x} value={x}>
+                      {`Style: ${x}`}
+                    </option>
+                  ))}
+              </select>
+              {applied && (
+                <span className="ac-tc-hint ac-ctl-applied" role="status">
+                  Changes apply from the next turn.
+                </span>
+              )}
+              {control.state === 'draft' && (
+                <span className="ac-tc-hint ac-ctl-applied">
+                  Model, effort, mode and style are used when the session starts.
+                </span>
+              )}
+              <ContextMeter {...(details?.context ? { context: details.context } : {})} detail={costLine} />
+              <McpPopover servers={details?.mcp ?? []}>
+                <McpChips
+                  servers={details?.mcp ?? []}
+                  onToggle={(name, on) => useDetailsStore.getState().mcpToggle(control.id, name, on)}
+                  onReconnect={(name) => useDetailsStore.getState().mcpReconnect(control.id, name)}
+                  onManage={() => useConsoleStore.getState().navigate('extensions')}
+                  onResult={report}
+                />
+              </McpPopover>
+              <div className="ac-tc-spacer" />
+              {busy && (
+                <Button
+                  size="sm"
+                  variant="warn"
+                  aria-keyshortcuts="Control+."
+                  aria-label={`Interrupt lead (${projectName})`}
+                  onClick={() => void interrupt(control.id)}
+                >
+                  Interrupt
+                </Button>
+              )}
+              {busy && (
+                <Button size="sm" variant="danger" onClick={() => void stop(control.id)}>
+                  Stop
+                </Button>
+              )}
+              <MoreMenu title={sessionTitle} actions={menuActions} />
+            </>
+          )}
+        </div>
+      )}
+      {live && control && renaming !== null && (
+        <form
+          className="ac-ctl-rename"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const t = renaming.trim()
+            if (!t) return
+            void useDetailsStore
+              .getState()
+              .rename(control.id, t)
+              .then((r) => {
+                report(r)
+                if (r.ok) setRenaming(null)
+              })
+          }}
+        >
+          <input
+            ref={renameRef}
+            className="ac-tc-ctl__input"
+            aria-label="Session title"
+            value={renaming}
+            maxLength={200}
+            onChange={(e) => setRenaming(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                setRenaming(null)
+              }
+            }}
+          />
+          <Button size="sm" type="submit" variant="primary" disabled={renaming.trim() === ''}>
+            Save title
+          </Button>
+          <Button size="sm" onClick={() => setRenaming(null)}>
+            Cancel
+          </Button>
+        </form>
       )}
       {liveNote && (
         <p className="ac-tc-hint ac-ctl-hint" role="status">
           {liveNote}
         </p>
-      )}
-      {live && control && (!narrow || moreOpen) && (
-        <div className="ac-tc-ctl__row ac-ctl-strip" data-testid="session-details-strip">
-          {renaming === null ? (
-            <>
-              <span title={details?.title ?? ''} className="ac-ctl-title">
-                {details?.title ?? 'Untitled session'}
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => setRenaming(details?.title ?? '')}>
-                Rename
-              </Button>
-            </>
-          ) : (
-            <form
-              className="ac-ctl-rename"
-              onSubmit={(e) => {
-                e.preventDefault()
-                const t = renaming.trim()
-                if (!t) return
-                void useDetailsStore
-                  .getState()
-                  .rename(control.id, t)
-                  .then((r) => {
-                    report(r)
-                    if (r.ok) setRenaming(null)
-                  })
-              }}
-            >
-              <input
-                className="ac-tc-ctl__input"
-                aria-label="Session title"
-                value={renaming}
-                maxLength={200}
-                onChange={(e) => setRenaming(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.stopPropagation()
-                    setRenaming(null)
-                  }
-                }}
-              />
-              <Button size="sm" type="submit" variant="primary" disabled={renaming.trim() === ''}>
-                Save title
-              </Button>
-              <Button size="sm" onClick={() => setRenaming(null)}>
-                Cancel
-              </Button>
-            </form>
-          )}
-          <ContextMeter
-            {...(details?.context ? { context: details.context } : {})}
-            onRefresh={() => void refreshContext(control.id).then(report)}
-          />
-          {details && (
-            <span className="ac-tc-hint" title="API-equivalent cost: subscriptions are not billed per token">
-              {details.lastTurn
-                ? `Last turn: ${tok(details.lastTurn.input)} in / ${tok(details.lastTurn.output)} out / ${tok(
-                    details.lastTurn.cacheRead + details.lastTurn.cacheCreation
-                  )} cache${details.lastTurn.costUsd !== undefined ? ` · ${usd(details.lastTurn.costUsd)}` : ''} · `
-                : ''}
-              Session {usd(details.sessionCostUsd)} (API-equivalent cost)
-            </span>
-          )}
-          <McpChips
-            servers={details?.mcp ?? []}
-            onToggle={(name, on) => useDetailsStore.getState().mcpToggle(control.id, name, on)}
-            onReconnect={(name) => useDetailsStore.getState().mcpReconnect(control.id, name)}
-            onManage={() => useConsoleStore.getState().navigate('extensions')}
-            onResult={report}
-          />
-        </div>
       )}
       {control && (
         <RewindDialog

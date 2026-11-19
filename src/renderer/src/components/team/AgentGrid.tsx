@@ -19,9 +19,11 @@ export function sortAgentsByStatus(agents: Agent[], statuses: Record<string, Age
 
 export type GridDensity = 'comfortable' | 'compact'
 export const DENSITY_KEY = 'ac.gridDensity'
+/** Fired on window when the density changes, so the center layout can size the grid for it (T37). */
+export const DENSITY_EVENT = 'ac:gridDensity'
 const NARROW_QUERY = '(max-width: 899px)'
 
-function readDensity(): GridDensity {
+export function readDensity(): GridDensity {
   try {
     return window.localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
   } catch {
@@ -75,6 +77,7 @@ export function AgentGrid(): JSX.Element {
     setDensityState(d)
     try {
       window.localStorage.setItem(DENSITY_KEY, d)
+      window.dispatchEvent(new Event(DENSITY_EVENT))
     } catch {
       /* storage unavailable: keep the choice for this session only */
     }

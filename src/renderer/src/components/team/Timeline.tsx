@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ActivitySpan, Agent } from '@shared/types'
 import { useAgentStatuses, useConsoleStore } from '../../store/useConsoleStore'
@@ -62,13 +62,15 @@ function TimelineHead({ open, onToggle, children }: { open: boolean; onToggle():
   )
 }
 
-function LiveTimeline({ defaultCollapsed }: { defaultCollapsed: boolean }): JSX.Element {
+function LiveTimeline({ defaultCollapsed, onOpenChange }: { defaultCollapsed: boolean; onOpenChange?(open: boolean): void }): JSX.Element {
   const agents = useConsoleStore((s) => s.team.agents)
   const nowMs = useConsoleStore((s) => s.nowMs)
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
   const statuses = useAgentStatuses()
   const [showFinished, setShowFinished] = useState(false)
   const [open, setOpen] = useState(!defaultCollapsed)
+  // T37: the center layout gives a collapsed timeline's space to the grid and the console.
+  useEffect(() => onOpenChange?.(open), [open, onOpenChange])
 
   const geo = (a: Agent): { span: ActivitySpan; left: number; width: number }[] =>
     (a.spans ?? []).flatMap((span) => {
@@ -142,11 +144,14 @@ function LiveTimeline({ defaultCollapsed }: { defaultCollapsed: boolean }): JSX.
   )
 }
 
-export function Timeline({ defaultCollapsed = false }: { defaultCollapsed?: boolean } = {}): JSX.Element {
+export function Timeline({
+  defaultCollapsed = false,
+  onOpenChange
+}: { defaultCollapsed?: boolean; onOpenChange?(open: boolean): void } = {}): JSX.Element {
   const team = useConsoleStore((s) => s.team)
   const demo = useConsoleStore((s) => s.team.source === 'demo')
   const selectedAgentId = useConsoleStore((s) => s.selectedAgentId)
-  if (!demo) return <LiveTimeline defaultCollapsed={defaultCollapsed} />
+  if (!demo) return <LiveTimeline defaultCollapsed={defaultCollapsed} {...(onOpenChange ? { onOpenChange } : {})} />
   return (
     <section className="ac-tc-panel">
       <div className="ac-tc-tl-head">

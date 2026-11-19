@@ -36,10 +36,10 @@
 .ac-tc-ticks { display: flex; justify-content: space-between; font-family: var(--ac-font-mono); font-size: 10px; color: var(--ac-text-faint); }
 
 .ac-tc-console { border: 1px solid var(--ac-border); background: var(--ac-bg-console); border-radius: var(--ac-radius-card); display: flex; flex-direction: column; overflow: hidden; }
-.ac-tc-console__bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--ac-border-inset); background: var(--ac-bg-panel); }
+.ac-tc-console__bar { display: flex; align-items: center; gap: 8px; flex: none; padding: 4px 8px; border-bottom: 1px solid var(--ac-border-inset); background: var(--ac-bg-panel); }
 .ac-tc-console__bar h2 { margin: 0; font-size: 13px; font-weight: 600; }
 .ac-tc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ac-status-running); }
-.ac-tc-log { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-family: var(--ac-font-mono); font-size: 12px; line-height: 1.5; max-height: 280px; overflow-y: auto; }
+.ac-tc-log { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; font-family: var(--ac-font-mono); font-size: 12px; line-height: 1.5; max-height: 280px; overflow-y: auto; }
 .ac-tc-line { display: flex; gap: 10px; min-width: 0; }
 .ac-tc-line__t { flex: 0 0 auto; color: var(--ac-text-faint); }
 .ac-tc-line__who { flex: 0 0 96px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -77,12 +77,12 @@
 .ac-tc-line--error .ac-tc-line__msg { color: var(--ac-status-error); }
 .ac-tc-line--notice .ac-tc-line__who, .ac-tc-line--thinking .ac-tc-line__who { color: var(--ac-text-subtle); }
 .ac-tc-typing { margin-left: 8px; font-size: 11px; color: var(--ac-text-subtle); }
-.ac-tc-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; }
+.ac-tc-chips { display: flex; flex: none; flex-wrap: wrap; gap: 4px; padding: 4px 8px; }
 .ac-tc-chipbtn { min-height: 28px; padding: 2px 10px; border: 1px solid var(--ac-border-btn); border-radius: 999px; background: transparent; color: var(--ac-text-muted); font-size: 12px; cursor: pointer; }
 .ac-tc-chipbtn.is-on { background: var(--ac-accent); border-color: var(--ac-accent); color: var(--ac-on-accent); }
 .ac-tc-chipbtn:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
 
-.ac-tc-ctl { display: flex; flex-direction: column; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--ac-border-inset); }
+.ac-tc-ctl { display: flex; flex: none; flex-direction: column; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--ac-border-inset); }
 .ac-tc-ctl:empty, .ac-tc-ctl__row:empty { display: none; }
 .ac-tc-ctl__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .ac-tc-ctl__field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ac-text-muted); }

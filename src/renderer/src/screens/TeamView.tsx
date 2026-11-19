@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, KeyboardEvent } from 'react'
 import { ChatView } from '@renderer/components/chat/ChatView'
-import { AgentGrid } from '@renderer/components/team/AgentGrid'
+import { AgentGrid, DENSITY_EVENT, readDensity } from '@renderer/components/team/AgentGrid'
 import { LeadConsole } from '@renderer/components/team/LeadConsole'
 import { OverlapBanner } from '@renderer/components/team/OverlapBanner'
 import { SharedTaskList } from '@renderer/components/team/SharedTaskList'
@@ -20,6 +20,7 @@ import {
   INSPECTOR_TOP_MIN,
   TIMELINE_OPEN_MIN_H,
   WORKTREES_MIN,
+  gridWantHeight,
   usePanelHeights
 } from '@renderer/hooks/usePanelHeights'
 import { useConsoleStore } from '@renderer/store/useConsoleStore'
@@ -36,6 +37,8 @@ const NARROW = 1100
 const INSPECTOR_OVERLAY = 1439
 /** Below 1600 CSS px only one of the worktrees column and the inspector is docked at a time (T32 U6). */
 const ONE_DOCK = 1599
+/** Below 900 CSS px the agent grid is always compact (same query as AgentGrid). */
+const GRID_NARROW = 899
 /** At or below this width the project rail (T22) shows icons only. */
 const COMPACT_RAIL = 1439
 
@@ -45,8 +48,22 @@ function TeamViewContent() {
   const oneDock = useMaxWidth(ONE_DOCK)
   const compactRail = useMaxWidth(COMPACT_RAIL)
   const w = usePanelWidths()
+  // T37: the timeline reports whether it is open; collapsed, its room goes to the console, and the grid default fits
+  // up to 3 compact (2 comfortable) card rows.
+  const [timelineOpen, setTimelineOpen] = useState(true)
+  const gridNarrow = useMaxWidth(GRID_NARROW)
+  const [density, setDensity] = useState(readDensity)
+  useEffect(() => {
+    const on = () => setDensity(readDensity())
+    window.addEventListener(DENSITY_EVENT, on)
+    return () => window.removeEventListener(DENSITY_EVENT, on)
+  }, [])
+  const agentCount = useConsoleStore((s) => s.team.agents.length)
   // Wide layout: columns fill the viewport, so panes are measured; otherwise the page scrolls.
-  const hh = usePanelHeights(!narrow)
+  const hh = usePanelHeights(!narrow, {
+    timelineOpen,
+    gridWant: gridWantHeight(agentCount, gridNarrow ? 'compact' : density)
+  })
   const leftCollapsed = useLayoutStore((s) => s.leftCollapsed)
   const rightCollapsed = useLayoutStore((s) => s.rightCollapsed)
   const toggleLeft = useLayoutStore((s) => s.toggleLeft)
@@ -348,8 +365,8 @@ function TeamViewContent() {
                   defaultValue={hh.def('grid')}
                   onChange={(v) => hh.set('grid', v)}
                 />
-                <div className="ac-pane ac-pane--fill ac-pane--timeline">
-                  <Timeline defaultCollapsed={hh.centerHeight < TIMELINE_OPEN_MIN_H} />
+                <div className="ac-pane ac-pane--fill ac-pane--timeline" data-open={timelineOpen ? 'true' : 'false'}>
+                  <Timeline defaultCollapsed={hh.centerHeight < TIMELINE_OPEN_MIN_H} onOpenChange={setTimelineOpen} />
                 </div>
                 <Splitter
                   label="Resize lead console"
@@ -361,7 +378,11 @@ function TeamViewContent() {
                   defaultValue={hh.def('console')}
                   onChange={(v) => hh.set('console', v)}
                 />
-                <div id="ac-pane-console" className="ac-pane ac-pane--fixed" style={{ height: hv.console }}>
+                <div
+                  id="ac-pane-console"
+                  className={timelineOpen ? 'ac-pane ac-pane--fixed' : 'ac-pane ac-pane--fill ac-pane--console-fill'}
+                  {...(timelineOpen ? { style: { height: hv.console } } : {})}
+                >
                   <LeadConsole />
                 </div>
               </>

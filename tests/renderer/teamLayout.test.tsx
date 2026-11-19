@@ -89,45 +89,46 @@ describe('TeamView horizontal splitters', () => {
 
   it('uses the documented defaults and mins', () => {
     render(<TeamView />) // no ResizeObserver in jsdom: container = window.innerHeight (1000)
-    // T32 U5: grid = 40 % of the column, console takes what the grid and a 150 px timeline leave, mins 96 / 220
-    expect(now(grid())).toBe(400)
+    // T37: the grid default fits 2 comfortable card rows of the demo team (44 + 2 * 128), capped at 40 % of the column;
+    // the console takes what the grid and a 150 px timeline leave, mins 96 / 300
+    expect(now(grid())).toBe(300)
     expect(grid()).toHaveAttribute('aria-valuemin', '96')
-    expect(now(cons())).toBe(438)
-    expect(cons()).toHaveAttribute('aria-valuemin', '220')
+    expect(now(cons())).toBe(538)
+    expect(cons()).toHaveAttribute('aria-valuemin', '300')
     expect(now(wt())).toBe(500)
     expect(wt()).toHaveAttribute('aria-valuemin', '80')
     expect(now(insp())).toBe(260)
     expect(insp()).toHaveAttribute('aria-valuemin', '120')
-    expect(document.getElementById('ac-pane-grid')!.style.height).toBe('400px')
+    expect(document.getElementById('ac-pane-grid')!.style.height).toBe('300px')
   })
 
   it('keyboard: arrows, Shift, Home/End, Enter and double-click reset', () => {
     render(<TeamView />)
     fireEvent.keyDown(grid(), { key: 'ArrowDown' })
-    expect(now(grid())).toBe(416)
+    expect(now(grid())).toBe(316)
     fireEvent.keyDown(grid(), { key: 'ArrowUp', shiftKey: true })
-    expect(now(grid())).toBe(352)
+    expect(now(grid())).toBe(252)
     fireEvent.keyDown(grid(), { key: 'Home' })
     expect(now(grid())).toBe(96)
     fireEvent.keyDown(grid(), { key: 'ArrowUp' })
     expect(now(grid())).toBe(96)
     fireEvent.keyDown(grid(), { key: 'Enter' })
-    expect(now(grid())).toBe(400)
+    expect(now(grid())).toBe(300)
     fireEvent.keyDown(grid(), { key: 'End' })
     // growing the grid pushes the console down to its minimum
-    expect(now(grid())).toBe(1000 - 12 - 60 - 220)
-    expect(now(cons())).toBe(220)
+    expect(now(grid())).toBe(1000 - 12 - 60 - 300)
+    expect(now(cons())).toBe(300)
     fireEvent.doubleClick(grid())
-    expect(now(grid())).toBe(400)
+    expect(now(grid())).toBe(300)
     fireEvent.keyDown(cons(), { key: 'Enter' })
-    expect(now(cons())).toBe(438)
+    expect(now(cons())).toBe(538)
 
     // the console handle sits above its pane: ArrowUp grows it
     fireEvent.keyDown(cons(), { key: 'ArrowUp' })
-    expect(now(cons())).toBe(454)
+    expect(now(cons())).toBe(554)
     fireEvent.keyDown(cons(), { key: 'ArrowDown', shiftKey: true })
-    expect(now(cons())).toBe(390)
-    expect(document.getElementById('ac-pane-console')!.style.height).toBe('390px')
+    expect(now(cons())).toBe(490)
+    expect(document.getElementById('ac-pane-console')!.style.height).toBe('490px')
 
     fireEvent.keyDown(insp(), { key: 'ArrowDown' })
     expect(now(insp())).toBe(276)
@@ -140,13 +141,13 @@ describe('TeamView horizontal splitters', () => {
     fireEvent.pointerDown(grid(), { clientY: 500, button: 0, pointerId: 1 })
     expect(document.body.style.userSelect).toBe('none')
     fireEvent.pointerMove(grid(), { clientY: 440, pointerId: 1 })
-    expect(now(grid())).toBe(340)
+    expect(now(grid())).toBe(240)
     fireEvent.pointerUp(grid(), { pointerId: 1 })
     expect(document.body.style.userSelect).toBe('')
 
     fireEvent.pointerDown(cons(), { clientY: 700, button: 0, pointerId: 2 })
     fireEvent.pointerMove(cons(), { clientY: 650, pointerId: 2 })
-    expect(now(cons())).toBe(488)
+    expect(now(cons())).toBe(588)
     fireEvent.pointerUp(cons(), { pointerId: 2 })
   })
 
@@ -155,19 +156,19 @@ describe('TeamView horizontal splitters', () => {
     fireEvent.keyDown(grid(), { key: 'ArrowDown', shiftKey: true })
     fireEvent.keyDown(insp(), { key: 'ArrowDown' })
     const stored = JSON.parse(window.localStorage.getItem(KEY)!)
-    expect(stored).toEqual({ grid: 464, inspectorTop: 276 })
+    expect(stored).toEqual({ grid: 364, inspectorTop: 276 })
     unmount()
     render(<TeamView />)
-    expect(now(grid())).toBe(464)
+    expect(now(grid())).toBe(364)
     expect(now(insp())).toBe(276)
-    expect(now(cons())).toBe(438)
+    expect(now(cons())).toBe(538)
   })
 
   it.each(['not json', 'null', '[]', '{"grid":"x","console":null}'])('falls back to defaults for %s', (raw) => {
     window.localStorage.setItem(KEY, raw)
     render(<TeamView />)
-    expect(now(grid())).toBe(400)
-    expect(now(cons())).toBe(438)
+    expect(now(grid())).toBe(300)
+    expect(now(cons())).toBe(538)
   })
 
   it('survives a throwing storage', () => {
@@ -179,7 +180,7 @@ describe('TeamView horizontal splitters', () => {
     })
     render(<TeamView />)
     fireEvent.keyDown(grid(), { key: 'ArrowDown' })
-    expect(now(grid())).toBe(416)
+    expect(now(grid())).toBe(316)
   })
 
   it('clamps to the measured container so the other panes keep their minimums', () => {
@@ -203,15 +204,15 @@ describe('TeamView horizontal splitters', () => {
     // center panel 500: room = 500 - 12 - 60 = 428; console <= 428 - 96, grid keeps its min
     expect(now(cons())).toBe(332)
     expect(now(grid())).toBe(96)
-    expect(grid()).toHaveAttribute('aria-valuemax', '208')
+    expect(grid()).toHaveAttribute('aria-valuemax', '128')
     // left 400: worktrees <= 400 - 6 - 80
     expect(now(wt())).toBe(314)
     // right 400: inspector top <= 400 - 6 - 120
     expect(now(insp())).toBe(274)
     fireEvent.keyDown(cons(), { key: 'Home' })
-    expect(now(cons())).toBe(220)
+    expect(now(cons())).toBe(300)
     fireEvent.keyDown(grid(), { key: 'End' })
-    expect(now(grid())).toBe(208)
+    expect(now(grid())).toBe(128)
   })
 })
 
