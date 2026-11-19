@@ -5,14 +5,14 @@
   "description": "Agent Console",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
+    "dev": "node scripts/electron-vite.mjs dev",
+    "build": "node scripts/electron-vite.mjs build && node scripts/check-bundle.mjs",
+    "preview": "node scripts/electron-vite.mjs preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "node scripts/vitest.mjs run",
     "test:watch": "node scripts/vitest.mjs",
     "rebuild:pty": "electron-rebuild -f -w node-pty",
-    "package:win": "electron-vite build && electron-builder --win"
+    "package:win": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@fontsource/inter": "5.3.0",

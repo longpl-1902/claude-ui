@@ -21,11 +21,13 @@
   "include": [
     "electron.vite.config.ts",
     "vitest.config.mts",
+    "scripts/**/*.ts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
     "tests/main/**/*",
     "tests/shared/**/*",
-    "tests/sanity.test.ts"
+    "tests/sanity.test.ts",
+    "tests/bundleCheck.test.ts"
   ]
 }

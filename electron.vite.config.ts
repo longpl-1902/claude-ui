@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { devCspPlugin } from './scripts/devCsp'
 
 const alias = {
   '@shared': resolve(__dirname, 'src/shared'),
@@ -22,8 +23,9 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
-    resolve: { alias },
-    plugins: [react()],
+    // dedupe: one React however the cwd is spelled (see scripts/electron-vite.mjs).
+    resolve: { alias, dedupe: ['react', 'react-dom'] },
+    plugins: [react(), devCspPlugin()],
     build: {
       rollupOptions: {
         input: resolve(__dirname, 'src/renderer/index.html')
