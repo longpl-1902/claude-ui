@@ -47,7 +47,10 @@ import type {
   TeamSnapshot,
   ThemeSource,
   ThemeState,
-  UsageToday
+  UsageToday,
+  WindowInfo,
+  WindowOpenRequest,
+  WindowOpenResult
 } from './types'
 
 export const IPC = {
@@ -151,6 +154,18 @@ export const THEME_IPC = {
   get: 'theme:get', // invoke -> ThemeState
   setSource: 'theme:set-source', // invoke (ThemeSource) -> ThemeState
   changed: 'theme:changed' // main -> renderer push (ThemeState)
+} as const
+
+/**
+ * Window channels (T34). Like THEME_IPC the main process registers these itself (src/main/windows/windowManager.ts),
+ * because they need the calling window, so they stay out of the generic invoke-handler table.
+ */
+export const WINDOW_IPC = {
+  open: 'window:open', // invoke (WindowOpenRequest) -> WindowOpenResult
+  list: 'window:list', // invoke -> WindowInfo[]
+  focus: 'window:focus', // invoke (id: number) -> OkResult
+  close: 'window:close', // invoke -> OkResult (closes the CALLING window when it is a secondary one)
+  changed: 'window:changed' // main -> renderer push (WindowInfo[])
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]
@@ -455,6 +470,14 @@ export interface ConsoleApi {
     get(): Promise<ThemeState>
     setSource(source: ThemeSource): Promise<ThemeState>
     onChanged(cb: (s: ThemeState) => void): () => void
+  }
+  windows?: {
+    open(req: WindowOpenRequest): Promise<WindowOpenResult>
+    list(): Promise<WindowInfo[]>
+    focus(id: number): Promise<OkResult>
+    /** Closes the calling window if it is a secondary one; the main window is never closed this way. */
+    close(): Promise<OkResult>
+    onChanged(cb: (list: WindowInfo[]) => void): () => void
   }
   app: { getVersion(): Promise<string>; pickFolder(): Promise<string | null>; getDefaultCwd(): Promise<string>; openExternal(url: string): Promise<OkResult> }
 }

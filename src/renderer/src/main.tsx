@@ -10,8 +10,13 @@ import './styles/tokens.css'
 import './styles/global.css'
 import App from './App'
 import { bootTheme } from './theme/useThemeStore'
+import { getWindowSpec } from './windowActions'
+import { guardSecondaryStorage } from './windowKinds'
 
 bootTheme()
+const spec = getWindowSpec()
+document.documentElement.dataset['windowKind'] = spec.kind
+if (spec.kind !== 'main') guardSecondaryStorage()
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

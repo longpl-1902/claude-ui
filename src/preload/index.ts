@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, THEME_IPC } from '@shared/ipc'
+import { IPC, THEME_IPC, WINDOW_IPC } from '@shared/ipc'
 import type { ConsoleApi, InvokeChannel, IpcInvokeMap } from '@shared/ipc'
 import type {
   AccountsSnapshot,
@@ -16,7 +16,8 @@ import type {
   SignInStatus,
   TeamSnapshot,
   ThemeState,
-  UsageToday
+  UsageToday,
+  WindowInfo
 } from '@shared/types'
 
 function invoke<C extends InvokeChannel>(
@@ -156,6 +157,13 @@ const api: ConsoleApi = {
     get: () => ipcRenderer.invoke(THEME_IPC.get) as Promise<ThemeState>,
     setSource: (source) => ipcRenderer.invoke(THEME_IPC.setSource, source) as Promise<ThemeState>,
     onChanged: (cb) => on<ThemeState>(THEME_IPC.changed, cb)
+  },
+  windows: {
+    open: (req) => ipcRenderer.invoke(WINDOW_IPC.open, req),
+    list: () => ipcRenderer.invoke(WINDOW_IPC.list),
+    focus: (id) => ipcRenderer.invoke(WINDOW_IPC.focus, id),
+    close: () => ipcRenderer.invoke(WINDOW_IPC.close),
+    onChanged: (cb) => on<WindowInfo[]>(WINDOW_IPC.changed, cb)
   },
   app: {
     getVersion: () => invoke(IPC.appGetVersion),

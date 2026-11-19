@@ -3,6 +3,8 @@ import { shortenPathsInText } from '@shared/displayPath'
 import { useConsoleStore } from '../../store/useConsoleStore'
 import { selectControlForSession, selectDraftControl, useControlStore } from '../../store/useControlStore'
 import { useMaxWidth } from '../../store/useLayoutStore'
+import { useWindowsStore } from '../../store/useWindowsStore'
+import { chatSpecForCurrent, getWindowSpec } from '../../windowActions'
 import { classifyLine } from '../team/LeadConsole'
 import { PermissionCard } from '../team/PermissionCard'
 import { ControlComposer } from '../team/Composer'
@@ -117,6 +119,19 @@ export function ChatView(): JSX.Element {
             <code>{team.sessionId.slice(0, 8)}</code>
             <CopyButton className="ac-copy--always" text={team.sessionId} label="session id" />
           </span>
+        )}
+        {team.sessionId && !demo && getWindowSpec().kind !== 'chat' && (
+          <button
+            type="button"
+            className="ac-chat__popout"
+            title="Open this chat in its own window (Ctrl+Shift+N)"
+            onClick={() => {
+              const spec = chatSpecForCurrent()
+              if (spec) void useWindowsStore.getState().open(spec)
+            }}
+          >
+            Open in new window
+          </button>
         )}
       </header>
       <div className="ac-chat__logwrap">
