@@ -86,6 +86,76 @@ function editFromInput(name: string, input: Obj): ToolUseRec['edit'] | undefined
   }
 }
 
+const idStr = (v: unknown): string | undefined =>
+  typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : undefined
+const cap = (v: unknown): string | undefined => (typeof v === 'string' ? truncate(v, 200) : undefined)
+const capList = (v: unknown): string[] | undefined =>
+  Array.isArray(v) ? v.slice(0, 100).flatMap((x) => { const s = idStr(x); return s === undefined ? [] : [truncate(s, 200)] }) : undefined
+
+function taskFromInput(name: string, input: Obj): ToolUseRec['task'] | undefined {
+  switch (name) {
+    case 'TaskCreate': {
+      const subject = cap(input.subject)
+      if (subject === undefined) return undefined
+      const t: { op: 'create'; subject: string; description?: string } = { op: 'create', subject }
+      const d = cap(input.description)
+      if (d !== undefined) t.description = d
+      return t
+    }
+    case 'TaskUpdate': {
+      const taskId = idStr(input.taskId)
+      if (taskId === undefined) return undefined
+      const t: { op: 'update'; taskId: string; status?: string; subject?: string; owner?: string; addBlockedBy?: string[] } = { op: 'update', taskId }
+      const status = cap(input.status)
+      if (status !== undefined) t.status = status
+      const subject = cap(input.subject)
+      if (subject !== undefined) t.subject = subject
+      const owner = cap(input.owner)
+      if (owner !== undefined) t.owner = owner
+      const ab = capList(input.addBlockedBy)
+      if (ab !== undefined) t.addBlockedBy = ab
+      return t
+    }
+    case 'TaskList':
+      return { op: 'list' }
+    case 'TodoWrite': {
+      if (!Array.isArray(input.todos)) return undefined
+      const todos: { content: string; status: string }[] = []
+      for (const e of input.todos.slice(0, 100)) {
+        if (!isObj(e)) continue
+        const content = cap(e.content)
+        const status = cap(e.status)
+        if (content !== undefined && status !== undefined) todos.push({ content, status })
+      }
+      return { op: 'todo', todos }
+    }
+    default:
+      return undefined
+  }
+}
+
+function taskFromResult(tur: Obj): ToolResultRec['task'] | undefined {
+  const out: NonNullable<ToolResultRec['task']> = {}
+  if (isObj(tur.task)) {
+    const id = idStr(tur.task.id)
+    if (id !== undefined) out.createdId = id
+  }
+  if (Array.isArray(tur.tasks)) {
+    const list: NonNullable<NonNullable<ToolResultRec['task']>['list']> = []
+    for (const e of tur.tasks.slice(0, 100)) {
+      if (!isObj(e)) continue
+      const id = idStr(e.id)
+      if (id === undefined) continue
+      const item: (typeof list)[number] = { id, subject: cap(e.subject) ?? '', status: cap(e.status) ?? '', blockedBy: capList(e.blockedBy) ?? [] }
+      const owner = cap(e.owner)
+      if (owner !== undefined) item.owner = owner
+      list.push(item)
+    }
+    out.list = list
+  }
+  return out.createdId !== undefined || out.list !== undefined ? out : undefined
+}
+
 function parseToolUse(b: Obj): ToolUseRec | null {
   const id = str(b.id)
   const name = str(b.name)
@@ -98,6 +168,8 @@ function parseToolUse(b: Obj): ToolUseRec | null {
   if (cmd !== undefined) rec.command = cmd
   const edit = editFromInput(name, input)
   if (edit) rec.edit = edit
+  const task = taskFromInput(name, input)
+  if (task) rec.task = task
   if (name === 'Agent') {
     const agent: NonNullable<ToolUseRec['agent']> = {}
     const d = str(input.description)
@@ -269,6 +341,8 @@ function parseToolResults(o: Obj, blocks: Obj[], env: Env): TranscriptRecord {
         rec.agentResult = ar
       }
       if (typeof turHere.success === 'boolean') rec.sendOk = turHere.success
+      const task = taskFromResult(turHere)
+      if (task) rec.task = task
     }
     results.push(rec)
   })

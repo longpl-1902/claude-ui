@@ -16,6 +16,12 @@ export interface ToolUseRec {
   send?: { to: string; text: string; summary?: string }
   /** Line counts from the tool input (Write/Edit/MultiEdit/NotebookEdit); sub-agent results carry no toolUseResult. */
   edit?: { added: number; removed: number; kind: 'create' | 'update' | 'unknown' }
+  /** TaskCreate / TaskUpdate / TaskList / TodoWrite inputs (strings max 200, arrays max 100). */
+  task?:
+    | { op: 'create'; subject: string; description?: string }
+    | { op: 'update'; taskId: string; status?: string; subject?: string; owner?: string; addBlockedBy?: string[] }
+    | { op: 'list' }
+    | { op: 'todo'; todos: { content: string; status: string }[] }
 }
 export interface FileChange {
   path: string
@@ -38,6 +44,8 @@ export interface ToolResultRec {
   agentResult?: { agentId: string; status: string; totalTokens?: number; text?: string }
   /** SendMessage toolUseResult.success */
   sendOk?: boolean
+  /** TaskCreate result id (toolUseResult.task.id) / TaskList result (toolUseResult.tasks). */
+  task?: { createdId?: string; list?: { id: string; subject: string; status: string; owner?: string; blockedBy: string[] }[] }
 }
 interface Base {
   uuid: string
