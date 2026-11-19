@@ -7,6 +7,7 @@ import (
 	"github.com/longpl-1902/claude-ui/internal/core"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -26,6 +27,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.screen == ScreenPicker {
+		return m.handlePicker(key)
+	}
+
 	switch m.mode {
 	case ModeInsert:
 		return m.handleInsert(key, msg)
@@ -36,6 +41,34 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	default:
 		return m.handleNormal(key, msg)
 	}
+}
+
+func (m Model) handlePicker(key string) (Model, tea.Cmd) {
+	switch key {
+	case "j", "down":
+		if m.pickerCursor < len(m.pickerAccounts)-1 {
+			m.pickerCursor++
+		}
+	case "k", "up":
+		if m.pickerCursor > 0 {
+			m.pickerCursor--
+		}
+	case "q":
+		return m, tea.Quit
+	case "enter":
+		if m.pickerCursor < 0 || m.pickerCursor >= len(m.pickerAccounts) {
+			return m, nil
+		}
+		a := m.pickerAccounts[m.pickerCursor]
+		m.acct = a
+		if a.Color != "" {
+			m.accent = lipgloss.Color(a.Color)
+		}
+		m.screen = ScreenMain
+		// TODO: tell the backend about the account change (ActionSwitchAccount).
+		return m, m.backend.Do(core.Action{Kind: core.ActionRefresh})
+	}
+	return m, nil
 }
 
 func (m Model) handleNormal(key string, msg tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -516,6 +549,14 @@ func (m Model) executeCommand(cmd string) (Model, tea.Cmd) {
 	case "account":
 		if len(parts) > 1 {
 			return m, m.backend.Do(core.Action{Kind: core.ActionSwitchAccount, ID: parts[1]})
+		}
+		m.pickerAccounts = m.backend.Accounts()
+		m.pickerCursor = 0
+		for i, a := range m.pickerAccounts {
+			if a.ID == m.acct.ID {
+				m.pickerCursor = i
+				break
+			}
 		}
 		m.screen = ScreenPicker
 		return m, nil

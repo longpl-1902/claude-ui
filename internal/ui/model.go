@@ -104,6 +104,10 @@ type Model struct {
 	needsOther int
 	tokToday   int64
 
+	// Account picker
+	pickerCursor   int
+	pickerAccounts []core.Account
+
 	// Key sequence buffer
 	keyBuf  string
 	keyTime time.Time
@@ -126,7 +130,7 @@ func NewModel(b Backend) Model {
 	}
 	accent := lipgloss.Color(accentStr)
 
-	return Model{
+	m := Model{
 		backend:      b,
 		mode:         ModeNormal,
 		focus:        FocusSessions,
@@ -139,6 +143,18 @@ func NewModel(b Backend) Model {
 		accent:       accent,
 		mdStyles:     mdlite.DefaultStyles(),
 	}
+
+	if accts := b.Accounts(); len(accts) > 1 {
+		m.screen = ScreenPicker
+		m.pickerAccounts = accts
+		for i, a := range accts {
+			if a.ID == acct.ID {
+				m.pickerCursor = i
+				break
+			}
+		}
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -189,7 +205,7 @@ func (m Model) View() tea.View {
 
 	var content string
 	if m.screen == ScreenPicker {
-		content = "Account picker (TODO)"
+		content = m.viewPicker(m.width, m.height)
 	} else if m.overlay != "" {
 		content = m.viewOverlay(m.viewMain())
 	} else {
@@ -234,6 +250,56 @@ func (m Model) viewMain() string {
 	prompt := m.viewPrompt(w)
 
 	return body + "\n" + status + "\n" + prompt
+}
+
+func (m Model) viewPicker(w, h int) string {
+	title := lipgloss.NewStyle().Bold(true).Render("Select account")
+	hint := lipgloss.NewStyle().Faint(true).Render("j/k move · Enter select · q quit")
+
+	var lines []string
+	lines = append(lines, title, "")
+	for i, a := range m.pickerAccounts {
+		accent := m.accent
+		if a.Color != "" {
+			accent = lipgloss.Color(a.Color)
+		}
+		selected := i == m.pickerCursor
+
+		cursor := "  "
+		if selected {
+			cursor = "▸ "
+		}
+		signed := lipgloss.NewStyle().Faint(true).Render("○")
+		if a.SignedIn {
+			signed = lipgloss.NewStyle().Foreground(lipgloss.Color("#98C379")).Render("●")
+		}
+
+		nameStyle := lipgloss.NewStyle().Foreground(accent)
+		if selected {
+			nameStyle = nameStyle.Bold(true)
+		}
+		line := cursor + signed + " " + nameStyle.Render(a.Name)
+		var extra []string
+		if a.Email != "" {
+			extra = append(extra, a.Email)
+		}
+		if a.Org != "" {
+			extra = append(extra, a.Org)
+		}
+		if len(extra) > 0 {
+			line += "  " + lipgloss.NewStyle().Faint(true).Render(strings.Join(extra, " · "))
+		}
+		lines = append(lines, line)
+	}
+	lines = append(lines, "", hint)
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.accent).
+		Padding(1, 3).
+		Render(strings.Join(lines, "\n"))
+
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 
 func (m Model) viewSessions(w, h int) string {
