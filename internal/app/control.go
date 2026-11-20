@@ -327,7 +327,7 @@ func (s *Store) planSend(key core.SessionKey, text string) (sendPlan, tea.Msg) {
 	s.refreshLive(acct, nil)
 	where := ss.summary.CtlWhere
 	if where == "" {
-		got, info, err := acquireLock(s.dirs.Locks, sid, acct.ID)
+		got, info, err := AcquireLock(s.dirs.Locks, sid, acct.ID)
 		if err != nil {
 			return sendPlan{}, core.ErrMsg{Text: "could not lock session: " + err.Error()}
 		}
@@ -364,7 +364,7 @@ func (s *Store) failSend(p sendPlan) {
 	if remove {
 		delete(s.controlSessions, keyID(p.cs.key))
 		if p.cs.locked != "" {
-			_ = releaseLock(s.dirs.Locks, p.cs.locked)
+			_ = ReleaseLock(s.dirs.Locks, p.cs.locked)
 			p.cs.locked = ""
 		}
 		if p.freshRow != "" {
@@ -460,7 +460,7 @@ func (s *Store) doStop(a core.Action) tea.Msg {
 	s.mu.Lock()
 	delete(s.controlSessions, keyID(cs.key))
 	if cs.locked != "" {
-		_ = releaseLock(s.dirs.Locks, cs.locked)
+		_ = ReleaseLock(s.dirs.Locks, cs.locked)
 		cs.locked = ""
 	}
 	if ss := s.sessions[keyID(cs.key)]; ss != nil {
@@ -767,7 +767,7 @@ func (s *Store) adoptSessionID(cs *controlledSession, id string) {
 	}
 	s.controlSessions[id] = cs
 
-	got, _, err := acquireLock(s.dirs.Locks, id, cs.account.ID)
+	got, _, err := AcquireLock(s.dirs.Locks, id, cs.account.ID)
 	switch {
 	case err != nil:
 		s.addNoticeLocked(cs, "could not lock session: "+err.Error())
@@ -881,7 +881,7 @@ func (s *Store) Close() {
 	s.mu.Lock()
 	for _, cs := range list {
 		if cs.locked != "" {
-			_ = releaseLock(s.dirs.Locks, cs.locked)
+			_ = ReleaseLock(s.dirs.Locks, cs.locked)
 			cs.locked = ""
 		}
 	}

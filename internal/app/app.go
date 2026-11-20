@@ -26,7 +26,7 @@ type Options struct {
 	Dirs          statefile.AppDirs
 	ClaudePath    string
 	Env           []string
-	Spawner       control.Spawner
+	Spawner       ctlSpawner
 	NewController newControllerFunc
 	LaunchDir     string
 	Home          string
@@ -152,8 +152,9 @@ func (s *Store) Account() core.Account {
 
 func (s *Store) Accounts() []core.Account {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]core.Account{}, s.accounts...)
+	list := append([]core.Account{}, s.accounts...)
+	s.mu.Unlock()
+	return s.withAlwaysUse(list)
 }
 
 func (s *Store) Sessions(all bool) []core.SessionSummary {
@@ -465,7 +466,7 @@ func (s *Store) UsageToday() int64 {
 
 func (s *Store) Do(a core.Action) tea.Cmd {
 	if a.Kind == core.ActionSignIn {
-		return signInHook(s, a)
+		return s.signInCmd(a)
 	}
 	return func() tea.Msg {
 		switch a.Kind {
@@ -490,7 +491,7 @@ func (s *Store) Do(a core.Action) tea.Cmd {
 		case core.ActionMcp:
 			return s.doDetails(a, control.ReqMcpStatus, "mcp")
 		case core.ActionSwitchAccount:
-			return switchAccountHook(s, a)
+			return s.doSwitchAccount(a)
 		case core.ActionRefresh:
 			s.snapshotPIDs()
 			s.mu.Lock()
@@ -527,7 +528,7 @@ func (s *Store) SetNotify(fn func()) {
 
 // scanSessions rescans every account (mu held).
 func (s *Store) scanSessions() {
-	locks := listLocks(s.dirs.Locks)
+	locks := ListLocks(s.dirs.Locks)
 	for _, acct := range s.accounts {
 		s.scanTranscripts(acct)
 		s.refreshLive(acct, locks)

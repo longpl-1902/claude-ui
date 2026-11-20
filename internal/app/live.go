@@ -61,7 +61,7 @@ func otherACWhere(info LockInfo) string {
 // case the lock directory is read.
 func (s *Store) refreshLive(acct core.Account, locks map[string]LockInfo) {
 	if locks == nil {
-		locks = listLocks(s.dirs.Locks)
+		locks = ListLocks(s.dirs.Locks)
 	}
 
 	// 1. reset everything we do not control
