@@ -1,0 +1,8 @@
+# Init with the session id, then ignore stdin EOF forever.
+expect {"type":"control_request","body":{"type":"initialize"}}
+reply {}
+expect {"type":"user"}
+emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}","model":"claude-test"}}
+expect {"type":"control_request","body":{"type":"mcp_status"}}
+reply {}
+hang

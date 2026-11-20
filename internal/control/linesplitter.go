@@ -14,12 +14,14 @@ type LineSplitter struct {
 	end     int
 	dropped int
 	done    bool
+	limit   int // longest accepted line; tests lower it
 }
 
 func NewLineSplitter(r io.Reader) *LineSplitter {
 	return &LineSplitter{
-		r:   r,
-		buf: make([]byte, readChunkSize),
+		r:     r,
+		buf:   make([]byte, readChunkSize),
+		limit: maxLineSize,
 	}
 }
 
@@ -42,14 +44,14 @@ func (s *LineSplitter) Next() ([]byte, error) {
 			}
 
 			s.start = next
-			if len(line) > maxLineSize {
+			if len(line) > s.limit {
 				s.dropped++
 				continue
 			}
 			return line, nil
 		}
 
-		if s.end-s.start > maxLineSize {
+		if s.end-s.start > s.limit {
 			s.start = s.end
 			s.dropped++
 			continue
@@ -62,7 +64,7 @@ func (s *LineSplitter) Next() ([]byte, error) {
 				if len(line) > 0 && line[len(line)-1] == '\r' {
 					line = line[:len(line)-1]
 				}
-				if len(line) > maxLineSize {
+				if len(line) > s.limit {
 					s.dropped++
 					return nil, io.EOF
 				}

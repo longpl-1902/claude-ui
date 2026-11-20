@@ -82,9 +82,13 @@ func TestLineSplitter_PartialAtEOF(t *testing.T) {
 }
 
 func TestLineSplitter_OverLongDrop(t *testing.T) {
-	long := strings.Repeat("x", maxLineSize+100)
+	// A small limit keeps the test fast; the drop logic does not depend on
+	// the production value.
+	const limit = 3*readChunkSize + 10
+	long := strings.Repeat("x", limit+100)
 	r := strings.NewReader(long + "\nshort\n")
 	s := NewLineSplitter(r)
+	s.limit = limit
 
 	var lines []string
 	for {

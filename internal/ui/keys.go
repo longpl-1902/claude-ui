@@ -13,6 +13,11 @@ import (
 func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
+	// The start-up picker owns every key, Ctrl+C included (quit).
+	if m.screen == ScreenPicker {
+		return m.handlePicker(key)
+	}
+
 	// Global: Ctrl+C
 	if key == "ctrl+c" {
 		if m.busy() {
@@ -25,10 +30,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.flash = ":q to quit"
 		m.flashAt = time.Now()
 		return m, nil
-	}
-
-	if m.screen == ScreenPicker {
-		return m.handlePicker(key)
 	}
 
 	switch m.mode {
