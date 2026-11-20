@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -8,20 +9,22 @@ import (
 )
 
 type Launch struct {
-	ClaudePath string
-	ConfigDir  string
-	Mode       string
-	Model      string
-	Effort     string
-	SessionID  string
-	Fork       bool
-	ResumeAt   string
-	Cwd        string
+	ClaudePath  string
+	ConfigDir   string
+	Mode        string
+	Model       string
+	Effort      string
+	OutputStyle string
+	SessionID   string
+	Fork        bool
+	ResumeAt    string
+	Cwd         string
 }
 
 var (
 	modelRe   = regexp.MustCompile(`^[A-Za-z0-9._\[\]-]{1,64}$`)
 	sessionRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	styleRe   = regexp.MustCompile(`^[A-Za-z0-9 _.-]{1,64}$`)
 	modeSet   = map[string]bool{
 		"default":     true,
 		"acceptEdits": true,
@@ -33,6 +36,8 @@ var (
 		"low":    true,
 		"medium": true,
 		"high":   true,
+		"xhigh":  true,
+		"max":    true,
 	}
 
 	dangerousFlags = []string{
@@ -77,6 +82,14 @@ func BuildArgs(l Launch) ([]string, error) {
 			return nil, fmt.Errorf("invalid effort: %q", l.Effort)
 		}
 		args = append(args, "--effort", l.Effort)
+	}
+
+	if l.OutputStyle != "" {
+		if !styleRe.MatchString(l.OutputStyle) {
+			return nil, fmt.Errorf("invalid output style: %q", l.OutputStyle)
+		}
+		b, _ := json.Marshal(map[string]string{"outputStyle": l.OutputStyle})
+		args = append(args, "--settings", string(b))
 	}
 
 	if l.SessionID != "" {

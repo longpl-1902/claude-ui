@@ -1,7 +1,7 @@
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
-emit {"type":"control_request","subtype":"set_foo","request_id":"u1"}
-expect {"type":"control_response","request_id":"u1","body":{"behavior":"unsupported"}}
+emit {"type":"control_request","request_id":"u1","request":{"subtype":"set_foo"}}
+expect {"type":"control_response","response":{"subtype":"error","request_id":"u1","error":"unsupported: set_foo"}}
 emit {"type":"result","stop_reason":"end_turn"}
 exit 0

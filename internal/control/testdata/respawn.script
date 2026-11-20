@@ -1,8 +1,8 @@
 # Used for both spawns: handshake, init, one result, exit.
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
-emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}"}}
+emit {"type":"system","subtype":"init","session_id":"{{session}}"}
 emit {"type":"result","stop_reason":"end_turn"}
 sleep 50
 exit 0

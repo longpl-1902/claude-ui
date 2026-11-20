@@ -1,7 +1,7 @@
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
-emit {"type":"control_request","subtype":"can_use_tool","request_id":"r1","tool":{"toolName":"Bash","input":{"command":"ls"}}}
+emit {"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}
 sleep 100
 emit {"type":"control_cancel_request","request_id":"r1"}
 wait-eof

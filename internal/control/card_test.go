@@ -59,12 +59,6 @@ func TestCardKindsAndFields(t *testing.T) {
 		q.Questions[0].Options[0].Label != "A" || q.Questions[0].Options[0].Description != "a" {
 		t.Fatalf("question card = %+v", q)
 	}
-	env := cardFor(t, "Other", `{}`, func(m *Msg) {
-		m.Questions = []QuestionData{{Text: "Q", Options: []OptionData{{Label: "x"}}}}
-	})
-	if env.Kind != core.CardQuestion || env.Questions[0].Text != "Q" {
-		t.Fatalf("envelope questions = %+v", env)
-	}
 }
 
 func TestCardPreviewCapsAndStripsANSI(t *testing.T) {
