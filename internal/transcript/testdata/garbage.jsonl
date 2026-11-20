@@ -1,0 +1,9 @@
+this is not json
+{"no_uuid": true, "timestamp": "2026-01-01T00:00:00Z"}
+{"uuid": "", "timestamp": "2026-01-01T00:00:00Z", "type": "assistant"}
+{"uuid": "aaa", "timestamp": "not-a-date", "type": "assistant"}
+{invalid json here
+{"uuid": "bbb", "timestamp": "2026-01-01T00:00:00Z", "type": "assistant", "message": null}
+{"uuid": "ccc", "timestamp": "2026-01-01T00:00:00Z", "type": "assistant", "message": {"content": []}}
+
+{"uuid": "ddd", "timestamp": "2026-01-01T00:00:00Z", "type": "unknown_type", "message": {}}

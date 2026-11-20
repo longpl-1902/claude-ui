@@ -1,0 +1,12 @@
+expect {"type":"control_request","body":{"type":"initialize"}}
+reply {}
+expect {"type":"user"}
+emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}"}}
+expect {"type":"control_request","body":{"type":"mcp_status"}}
+reply {"servers":[]}
+expect {"type":"control_request","body":{"type":"rename_session","title":"x"}}
+reply {"ok":true}
+expect {"type":"control_request","body":{"type":"set_model","model":"sonnet"}}
+reply {}
+expect {"type":"control_request","body":{"type":"get_context_usage"}}
+wait-eof

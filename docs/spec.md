@@ -175,6 +175,50 @@ INSERT
 | `:q`, `:q!` | quit (confirm if any controlled session is busy; `:q!` skips it). Quitting stops our children. |
 | `:help` | same as `?` |
 
+### 2.5 Binding UX rules
+
+These rules override the draft spec where they conflict (from the owner's latest feedback).
+
+1. **Start-up.** `ac` opens an account picker listing detected config dirs with email/org
+   (from `.claude.json` only), "not signed in" state, and preselects the last-used account.
+   `j/k` and `Enter` confirm. Skipped when only one account exists, with `--account`, or
+   with "always use". After the picker, the app lands on the main screen in INSERT mode
+   (cursor already in the prompt line).
+
+2. **No explicit resume/fork in normal use.**
+   - No session selected + `Enter`: start a new session in the project of the launch dir.
+   - Session selected + `Enter`: continue (resume) it.
+   - If the selected session is live in another process (VS Code, another `ac`, a terminal
+     `claude`), **auto-fork** and send into the fork. Show one inline line:
+     "forked from <short id> because it is running in <where>". Never ask.
+   - Keep `:fork` as a rare explicit command. Drop `:resume` from daily use.
+
+3. **Needs-you is one key away.** The status line shows the count. `Tab` / `]n` / `[n`
+   jumps to the next blocked item. `a`/`d` allow or deny; `1`-`9` pick an answer.
+
+4. **Keymap tiers.**
+   - Daily: single keys in NORMAL (`j/k`, `Enter`, `i`, `Esc`, `Tab`, `a`, `d`, `1`-`9`,
+     `/`, `y`, `gf`, `o`, `?`, `q`).
+   - Rare: `:` commands (`:new`, `:account`, `:model`, `:mode`, `:diff`, `:fork`, `:stop`,
+     `:interrupt`, `:q`).
+   - `Ctrl+C` or `Esc Esc` interrupts the running turn.
+   - Multi-line prompt: Shift+Enter where the terminal reports it, Alt+Enter as fallback.
+
+5. **Keystroke count table.**
+
+| Flow | Keys | Count |
+|---|---|---|
+| Open ac, send first prompt | `Enter` (pick session), type text, `Enter` | 2 + typing |
+| Answer a pending permission | `]n` (jump), `a` (allow) | 2 |
+| Switch to another project's session | `j`/`k` (navigate), `Enter` | 2-N + 1 |
+| Start a new session in another project | `:new <dir>` `Enter` | ~8 + path |
+| Switch account | `:account` `Enter` | 9 |
+
+6. **Simple UI.** Session list grouped by git project on the left. Conversation on the
+   right with tool calls collapsed to one line and expandable. Permission and question cards
+   inline at the end. One status line, then the prompt line. No dashboards, grids, themes
+   or panels beyond that.
+
 ## 3. Architecture
 
 ### 3.1 Packages

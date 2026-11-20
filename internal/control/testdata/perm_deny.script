@@ -1,0 +1,15 @@
+expect {"type":"control_request","body":{"type":"initialize"}}
+reply {}
+expect {"type":"user"}
+emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}"}}
+expect {"type":"control_request","body":{"type":"mcp_status"}}
+reply {}
+emit {"type":"control_request","subtype":"can_use_tool","request_id":"d1","tool":{"toolName":"Write","input":{"file_path":"C:/Users/u/a.txt"}}}
+expect {"type":"control_response","request_id":"d1","body":{"behavior":"deny","message":"Denied by user"}}
+emit {"type":"control_request","subtype":"can_use_tool","request_id":"d2","tool":{"toolName":"Write","input":{"file_path":"C:/Users/u/b.txt"}}}
+expect {"type":"control_response","request_id":"d2","body":{"behavior":"deny","message":"not now"}}
+emit {"type":"control_request","subtype":"can_use_tool","request_id":"d3","tool":{"toolName":"ExitPlanMode","input":{"plan":"step 1"}}}
+expect {"type":"control_response","request_id":"d3","body":{"behavior":"deny","message":"User rejected the plan"}}
+emit {"type":"control_request","subtype":"can_use_tool","request_id":"d4","tool":{"toolName":"ExitPlanMode","input":{"plan":"step 2"}}}
+expect {"type":"control_response","request_id":"d4","body":{"behavior":"allow","updatedInput":{"plan":"step 2"}}}
+exit 0

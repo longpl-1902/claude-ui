@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test ./...
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o ac.exe ./cmd/ac
+      - name: Checksum
+        run: |
+          $hash = (Get-FileHash ac.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  ac.exe" | Out-File -Encoding utf8 ac.exe.sha256
+        shell: pwsh
+      - name: Release
+        run: gh release create "${{ github.ref_name }}" ac.exe ac.exe.sha256 --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

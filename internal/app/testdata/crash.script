@@ -1,0 +1,9 @@
+# Init, then die with a message on stderr.
+expect {"type":"control_request","body":{"type":"initialize"}}
+reply {}
+expect {"type":"user"}
+emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}","model":"claude-test"}}
+expect {"type":"control_request","body":{"type":"mcp_status"}}
+reply {}
+stderr boom: bad thing
+exit 2

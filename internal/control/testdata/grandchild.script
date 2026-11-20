@@ -1,0 +1,5 @@
+expect {"type":"control_request","body":{"type":"initialize"}}
+reply {}
+expect {"type":"user"}
+grandchild
+hang
