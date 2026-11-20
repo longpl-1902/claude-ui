@@ -1,5 +1,3 @@
-//go:build t13
-
 package app
 
 import "github.com/longpl-1902/claude-ui/internal/control"

@@ -1,0 +1,5 @@
+expect {"type":"control_request","body":{"type":"initialize"}}
+reply {}
+expect {"type":"user"}
+stderr boom: bad thing
+exit 2
