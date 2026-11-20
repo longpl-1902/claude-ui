@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/longpl-1902/claude-ui/internal/accounts"
 	"github.com/longpl-1902/claude-ui/internal/app"
@@ -69,23 +70,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	var active core.Account
-	if showPicker || startID == "" {
-		active = allAccounts[0]
-	} else {
-		for _, a := range allAccounts {
-			if string(a.ID) == startID {
-				active = a
-				break
-			}
-		}
-		if active.ID == "" {
-			active = allAccounts[0]
+	// Preselect the start-up account even when the picker shows, so the
+	// picker opens on the last-used account.
+	active := allAccounts[0]
+	for _, a := range allAccounts {
+		if startID != "" && strings.EqualFold(string(a.ID), startID) {
+			active = a
+			break
 		}
 	}
 
 	store := app.New(active, allAccounts, cfg)
-	model := ui.NewModel(store)
+	defer store.Close()
+	model := ui.NewModel(store, ui.Options{ShowPicker: showPicker})
 
 	p := tea.NewProgram(model)
 
@@ -93,13 +90,13 @@ func main() {
 		p.Send(core.ChangedMsg{})
 	})
 
+	// The store persists the last-used account when one is selected; nothing
+	// is written here at exit (it would clobber other running instances).
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		store.Close()
 		os.Exit(1)
 	}
-
-	state.LastAccount = string(active.ID)
-	_ = statefile.WriteJSONAtomic(filepath.Join(dirs.Config, "state.json"), state)
 }
 
 func loadConfig(configDir string) (accounts.Config, error) {

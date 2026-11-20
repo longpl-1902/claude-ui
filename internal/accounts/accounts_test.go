@@ -139,6 +139,56 @@ func TestChooseStartup(t *testing.T) {
 			wantID:   ".claude",
 		},
 		{
+			name: "flag beats prefs and state",
+			flag: "personal",
+			cfg: Config{
+				Accounts: []Profile{
+					{ID: "work", Name: "work", ConfigDir: "/c/work"},
+					{ID: "personal", Name: "personal", ConfigDir: "/c/personal"},
+				},
+				Prefs: Prefs{AlwaysUseAccount: "work"},
+			},
+			state:  State{AlwaysUse: "work", LastAccount: "work"},
+			wantID: "personal",
+		},
+		{
+			name: "prefs beats state always use",
+			cfg: Config{
+				Accounts: []Profile{
+					{ID: "work", Name: "work", ConfigDir: "/c/work"},
+					{ID: "personal", Name: "personal", ConfigDir: "/c/personal"},
+				},
+				Prefs: Prefs{AlwaysUseAccount: "personal"},
+			},
+			state:  State{AlwaysUse: "work"},
+			wantID: "personal",
+		},
+		{
+			name: "state always use",
+			cfg: Config{Accounts: []Profile{
+				{ID: "work", Name: "work", ConfigDir: "/c/work"},
+				{ID: "personal", Name: "personal", ConfigDir: "/c/personal"},
+			}},
+			state:  State{AlwaysUse: "personal", LastAccount: "work"},
+			wantID: "personal",
+		},
+		{
+			name: "state always use no longer exists",
+			cfg: Config{Accounts: []Profile{
+				{ID: "work", Name: "work", ConfigDir: "/c/work"},
+				{ID: "personal", Name: "personal", ConfigDir: "/c/personal"},
+			}},
+			state:      State{AlwaysUse: "gone", LastAccount: "personal"},
+			wantID:     "personal",
+			wantPicker: true,
+		},
+		{
+			name:   "single account ignores stale state",
+			cfg:    Config{Accounts: []Profile{{ID: "work", Name: "work", ConfigDir: "/c/work"}}},
+			state:  State{AlwaysUse: "gone", LastAccount: "gone"},
+			wantID: "work",
+		},
+		{
 			name: "multiple, show picker",
 			cfg: Config{Accounts: []Profile{
 				{ID: "work", Name: "work", ConfigDir: "/c/work"},
