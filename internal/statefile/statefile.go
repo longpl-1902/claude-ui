@@ -109,32 +109,23 @@ func ReadJSON[T any](path string, v *T) error {
 	return json.Unmarshal(data, v)
 }
 
+// Update performs a read-modify-write of path while holding an exclusive
+// cross-process lock on a sidecar "<path>.lock" file. The lock file is left in
+// place so all writers always lock the same inode.
 func Update[T any](path string, fn func(*T) error) error {
 	lockPath := path + ".lock"
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0755); err != nil {
 		return err
 	}
-
-	for i := range 10 {
-		lf, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-		if err == nil {
-			fmt.Fprintf(lf, `{"pid":%d,"ts":%d}`, os.Getpid(), time.Now().UnixMilli())
-			lf.Close()
-			break
-		}
-		if i == 9 {
-			removeStaleLock(lockPath)
-			lf2, err2 := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-			if err2 != nil {
-				return fmt.Errorf("cannot acquire lock %s: %w", lockPath, err)
-			}
-			fmt.Fprintf(lf2, `{"pid":%d,"ts":%d}`, os.Getpid(), time.Now().UnixMilli())
-			lf2.Close()
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
+	lf, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return err
 	}
-	defer os.Remove(lockPath)
+	defer lf.Close()
+	if err := lockFile(lf); err != nil {
+		return fmt.Errorf("cannot acquire lock %s: %w", lockPath, err)
+	}
+	defer unlockFile(lf)
 
 	var val T
 	_ = ReadJSON(path, &val)
@@ -142,14 +133,4 @@ func Update[T any](path string, fn func(*T) error) error {
 		return err
 	}
 	return WriteJSONAtomic(path, &val)
-}
-
-func removeStaleLock(lockPath string) {
-	fi, err := os.Stat(lockPath)
-	if err != nil {
-		return
-	}
-	if time.Since(fi.ModTime()) > 10*time.Second {
-		os.Remove(lockPath)
-	}
 }
