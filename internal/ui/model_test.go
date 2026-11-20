@@ -48,7 +48,6 @@ func TestInsert_AltEnterNewlineAndHeightCap(t *testing.T) {
 }
 
 func TestInsert_LongPromptStaysInsideTerminal(t *testing.T) {
-	t.Skip("BUG: internal/ui/model.go viewPrompt renders every prompt line; promptHeight caps at 8 so the screen grows past the terminal height (44 lines at 30 rows)")
 	h := newHarness(t, newFakeBackend(), Options{}, 100, 30)
 	for i := 0; i < 20; i++ {
 		h.press("alt+enter")
@@ -59,7 +58,6 @@ func TestInsert_LongPromptStaysInsideTerminal(t *testing.T) {
 }
 
 func TestOverlay_FitsTerminalHeight(t *testing.T) {
-	t.Skip("BUG: internal/ui/model.go viewOverlay appends the overlay below the full layout, so the screen is taller than the terminal (15 lines at 10 rows)")
 	h := newHarness(t, newFakeBackend(), Options{}, 40, 10)
 	h.feed(core.InfoMsg{Title: "ctx", Lines: []string{"a"}})
 	if n := len(strings.Split(h.plain(), "\n")); n > 10 {

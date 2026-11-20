@@ -507,7 +507,16 @@ func (m Model) viewPrompt(w int) string {
 	if m.mode == ModeInsert {
 		style = style.Foreground(m.accent)
 	}
-	return style.Render(prefix) + m.promptText
+	lines := strings.Split(m.promptText, "\n")
+	if n := m.promptHeight(); len(lines) > n {
+		lines = lines[len(lines)-n:]
+		for i := range lines {
+			lines[i] = "  " + lines[i]
+		}
+		return strings.Join(lines, "\n")
+	}
+	lines[0] = style.Render(prefix) + lines[0]
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) promptHeight() int {
@@ -611,7 +620,33 @@ func (m Model) tick() tea.Cmd {
 }
 
 func (m Model) viewOverlay(base string) string {
-	return base + "\n" + m.overlay
+	h, w := m.height, m.width
+	rows := strings.Split(base, "\n")
+	for len(rows) < h {
+		rows = append(rows, "")
+	}
+	rows = rows[:h]
+
+	content := strings.Split(m.overlay, "\n")
+	if maxLines := h - 2; len(content) > maxLines {
+		content = content[:max(maxLines, 0)]
+	}
+	for i, l := range content {
+		content[i] = ansi.Truncate(l, max(w-4, 1), "…")
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(0, 1).
+		MaxWidth(w).
+		Render(strings.Join(content, "\n"))
+	boxRows := strings.Split(box, "\n")
+	if len(boxRows) > h {
+		boxRows = boxRows[:h]
+	}
+	placed := strings.Split(lipgloss.Place(w, len(boxRows), lipgloss.Center, lipgloss.Center, strings.Join(boxRows, "\n")), "\n")
+	top := (h - len(placed)) / 2
+	copy(rows[top:], placed)
+	return strings.Join(rows, "\n")
 }
 
 type sessionGroup struct {
