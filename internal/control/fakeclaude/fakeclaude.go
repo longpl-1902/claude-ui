@@ -36,7 +36,7 @@ func MaybeRun() {
 	}
 	if script == HangScript {
 		logLine(map[string]any{"hang_pid": os.Getpid()})
-		select {}
+		sleepForever()
 	}
 	os.Exit(run(script))
 }
@@ -158,7 +158,7 @@ func run(path string) int {
 			go func() { // keep draining stdin so the parent never blocks
 				_, _ = io.Copy(io.Discard, f.in)
 			}()
-			select {}
+			sleepForever()
 		case "grandchild":
 			c := exec.Command(os.Args[0])
 			c.Env = append(os.Environ(), EnvScript+"="+HangScript)
@@ -211,5 +211,13 @@ func subset(want, got any) bool {
 		return true
 	default:
 		return want == got
+	}
+}
+
+// sleepForever blocks without tripping Go's all-goroutines-asleep detector,
+// which would otherwise kill the fake as soon as nothing else is running.
+func sleepForever() {
+	for {
+		time.Sleep(time.Hour)
 	}
 }
