@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/longpl-1902/claude-ui/internal/core"
 
@@ -14,14 +15,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 
 	// Global: Ctrl+C
 	if key == "ctrl+c" {
+		if m.busy() {
+			return m, m.backend.Do(core.Action{Kind: core.ActionInterrupt, Key: m.logKey})
+		}
 		if m.mode == ModeInsert || m.mode == ModeCommand || m.mode == ModeSearch {
 			m.mode = ModeNormal
 			return m, nil
 		}
-		if !m.logKey.IsZero() && m.logView.Ctl != nil && m.logView.Ctl.State == "busy" {
-			return m, m.backend.Do(core.Action{Kind: core.ActionInterrupt, Key: m.logKey})
-		}
-		m.flash = "Press :q to quit"
+		m.flash = ":q to quit"
 		m.flashAt = time.Now()
 		return m, nil
 	}
@@ -75,15 +76,15 @@ func (m Model) handleNormal(key string, msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = ModeNormal
+		if m.busy() && !m.escTime.IsZero() && time.Since(m.escTime) < time.Second {
+			m.escTime = time.Time{}
+			return m, m.backend.Do(core.Action{Kind: core.ActionInterrupt, Key: m.logKey})
+		}
+		m.escTime = time.Now()
 		return m, nil
 
 	case "tab":
-		if m.focus == FocusSessions {
-			m.focus = FocusLog
-		} else {
-			m.focus = FocusSessions
-		}
-		return m, nil
+		return m.jumpAttention(1)
 
 	case "enter":
 		return m.handleEnter()
@@ -184,11 +185,18 @@ func (m Model) handleInsert(key string, msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch key {
 	case "escape", "esc":
 		m.mode = ModeNormal
+		m.escTime = time.Now()
 		return m, nil
 
 	case "enter":
 		if m.promptText == "" {
 			return m, nil
+		}
+		if card, ok := m.oldestQuestion(); ok {
+			// Free text answers the current question ("other").
+			text := m.promptText
+			m.promptText = ""
+			return m.recordAnswer(card, text)
 		}
 		text := m.promptText
 		m.promptText = ""
@@ -200,7 +208,7 @@ func (m Model) handleInsert(key string, msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			Text: text,
 		})
 
-	case "alt+enter", "ctrl+j":
+	case "shift+enter", "alt+enter", "ctrl+j":
 		m.promptText += "\n"
 		return m, nil
 
@@ -226,17 +234,15 @@ func (m Model) handleInsert(key string, msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case "backspace":
-		if len(m.promptText) > 0 {
-			m.promptText = m.promptText[:len(m.promptText)-1]
-		}
+		m.promptText = dropLastRune(m.promptText)
 		return m, nil
 
 	default:
 		text := tea.Key(msg).Text
 		if text != "" {
 			m.promptText += text
-		} else if len(key) == 1 && key[0] >= 32 {
-			m.promptText += key
+		} else {
+			m.promptText += printable(key)
 		}
 		return m, nil
 	}
@@ -256,17 +262,15 @@ func (m Model) handleCommand(key string) (Model, tea.Cmd) {
 		return m.executeCommand(cmd)
 
 	case "backspace":
-		if len(m.cmdText) > 0 {
-			m.cmdText = m.cmdText[:len(m.cmdText)-1]
+		if m.cmdText != "" {
+			m.cmdText = dropLastRune(m.cmdText)
 		} else {
 			m.mode = ModeNormal
 		}
 		return m, nil
 
 	default:
-		if len(key) == 1 && key[0] >= 32 {
-			m.cmdText += key
-		}
+		m.cmdText += printable(key)
 		return m, nil
 	}
 }
@@ -283,21 +287,33 @@ func (m Model) handleSearch(key string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "backspace":
-		if len(m.searchText) > 0 {
-			m.searchText = m.searchText[:len(m.searchText)-1]
-		}
+		m.searchText = dropLastRune(m.searchText)
 		return m, nil
 
 	default:
-		if len(key) == 1 && key[0] >= 32 {
-			m.searchText += key
-		}
+		m.searchText += printable(key)
 		return m, nil
 	}
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
-	if m.focus == FocusSessions && len(m.sessions) > 0 {
+	// Multi-select question: Enter confirms the current question.
+	if card, ok := m.oldestQuestion(); ok {
+		q := m.currentQuestion(card)
+		if q.Multi {
+			return m.confirmMulti(card)
+		}
+	}
+
+	if len(m.sessions) == 0 && m.focus == FocusSessions {
+		m.logKey = core.SessionKey{}
+		m.logView = core.SessionView{}
+		m.logItems = nil
+		m.mode = ModeInsert
+		return m, nil
+	}
+
+	if m.focus == FocusSessions {
 		groups := m.groupSessions()
 		row := 0
 		for _, g := range groups {
@@ -308,21 +324,19 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			if !m.sessFolds[g.key] {
 				for _, s := range g.sessions {
 					if row == m.sessCursor {
+						// Opening never forks; the backend forks on send.
 						m.logKey = s.Key
 						m.logFollow = true
 						m.focus = FocusLog
 						m.mode = ModeInsert
-						// Auto-resume/fork logic
-						if s.Ctl.Kind == CtlElsewhereHere(s) {
-							// Fork if live elsewhere
-							return m, m.backend.Do(core.Action{Kind: core.ActionFork, Key: s.Key})
-						}
+						m.resetQuestion()
 						return m.refresh(), nil
 					}
 					row++
 				}
 			}
 		}
+		return m, nil
 	}
 
 	if m.focus == FocusLog {
@@ -332,22 +346,113 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func CtlElsewhereHere(s core.SessionSummary) core.CtlKind {
-	if s.Ctl.Kind == core.CtlElsewhere || s.Ctl.Kind == core.CtlOtherAC {
-		return s.Ctl.Kind
+// dropLastRune removes the final rune of s (not the final byte).
+func dropLastRune(s string) string {
+	if s == "" {
+		return s
 	}
-	return core.CtlNone
+	_, n := utf8.DecodeLastRuneInString(s)
+	return s[:len(s)-n]
+}
+
+// printable returns key when it is one printable rune (space included).
+func printable(key string) string {
+	if key == "space" {
+		return " "
+	}
+	if utf8.RuneCountInString(key) == 1 {
+		r, _ := utf8.DecodeRuneInString(key)
+		if r >= 32 && r != 127 {
+			return key
+		}
+	}
+	return ""
+}
+
+func sameKey(a, b core.SessionKey) bool {
+	if a.SessionID != "" && b.SessionID != "" {
+		return a.SessionID == b.SessionID
+	}
+	if a.DraftID != "" && b.DraftID != "" {
+		return a.DraftID == b.DraftID
+	}
+	return false
+}
+
+// resetQuestion drops partial question progress.
+func (m *Model) resetQuestion() {
+	m.qReq = ""
+	m.qIdx = 0
+	m.qSel = nil
+	m.qAns = nil
+}
+
+// restoreReturn goes back to where the user was before a needs-you jump.
+func (m *Model) restoreReturn() {
+	if !m.hasReturn {
+		return
+	}
+	m.logKey = m.returnKey
+	m.focus = m.returnFocus
+	m.mode = m.returnMode
+	m.hasReturn = false
+	m.resetQuestion()
+	if m.logKey.IsZero() {
+		m.logView = core.SessionView{}
+		m.logItems = nil
+	}
+}
+
+func (m Model) oldestCard() (core.Card, bool) {
+	if len(m.logView.Cards) == 0 {
+		return core.Card{}, false
+	}
+	return m.logView.Cards[0], true
+}
+
+func (m Model) oldestQuestion() (core.Card, bool) {
+	card, ok := m.oldestCard()
+	if !ok || !card.IsQuestion() || card.IsPlan() {
+		return core.Card{}, false
+	}
+	return card, true
+}
+
+func (m *Model) syncQuestion(card core.Card) {
+	if card.RequestID != m.qReq {
+		m.resetQuestion()
+		m.qReq = card.RequestID
+	}
+	if m.qIdx >= len(card.Questions) {
+		m.qIdx = 0
+	}
+}
+
+func (m Model) currentQuestion(card core.Card) core.Question {
+	idx := 0
+	if card.RequestID == m.qReq && m.qIdx < len(card.Questions) {
+		idx = m.qIdx
+	}
+	return card.Questions[idx]
+}
+
+// answered sends the action and returns focus to where the user was.
+func (m Model) answered(a core.Action) (Model, tea.Cmd) {
+	cmd := m.backend.Do(a)
+	m.resetQuestion()
+	m.restoreReturn()
+	return m.refresh(), cmd
 }
 
 func (m Model) handleAllow(forSession bool) (Model, tea.Cmd) {
-	if len(m.logView.Cards) == 0 {
+	card, ok := m.oldestCard()
+	if !ok || !card.IsPermission() {
 		return m, nil
 	}
-	card := m.logView.Cards[len(m.logView.Cards)-1]
-	if !card.IsPermission() {
+	if forSession && (!card.CanAllowSession || card.IsPlan()) {
 		return m, nil
 	}
-	return m, m.backend.Do(core.Action{
+	return m.answered(core.Action{
 		Kind:       core.ActionAnswer,
 		Key:        m.logKey,
 		RequestID:  card.RequestID,
@@ -357,11 +462,11 @@ func (m Model) handleAllow(forSession bool) (Model, tea.Cmd) {
 }
 
 func (m Model) handleDeny(message string) (Model, tea.Cmd) {
-	if len(m.logView.Cards) == 0 {
+	card, ok := m.oldestCard()
+	if !ok {
 		return m, nil
 	}
-	card := m.logView.Cards[len(m.logView.Cards)-1]
-	return m, m.backend.Do(core.Action{
+	return m.answered(core.Action{
 		Kind:      core.ActionAnswer,
 		Key:       m.logKey,
 		RequestID: card.RequestID,
@@ -371,25 +476,76 @@ func (m Model) handleDeny(message string) (Model, tea.Cmd) {
 }
 
 func (m Model) handleOptionPick(n int) (Model, tea.Cmd) {
-	if len(m.logView.Cards) == 0 {
+	card, ok := m.oldestCard()
+	if !ok {
 		return m, nil
 	}
-	card := m.logView.Cards[len(m.logView.Cards)-1]
-	if !card.IsQuestion() || len(card.Questions) == 0 {
+	if card.IsPlan() {
+		if n == 1 {
+			return m.handleAllow(false)
+		}
 		return m, nil
 	}
-	q := card.Questions[0]
+	if !card.IsQuestion() {
+		return m, nil
+	}
+	m.syncQuestion(card)
+	q := card.Questions[m.qIdx]
 	if n < 1 || n > len(q.Options) {
 		return m, nil
 	}
-	opt := q.Options[n-1]
-	answers := map[string]string{q.Text: opt.Label}
-	return m, m.backend.Do(core.Action{
+	if q.Multi {
+		sel := make(map[int]bool, len(m.qSel)+1)
+		for k, v := range m.qSel {
+			sel[k] = v
+		}
+		sel[n-1] = !sel[n-1]
+		m.qSel = sel
+		return m, nil
+	}
+	return m.recordAnswer(card, q.Options[n-1].Label)
+}
+
+// confirmMulti commits the multi-select toggles of the current question.
+func (m Model) confirmMulti(card core.Card) (Model, tea.Cmd) {
+	m.syncQuestion(card)
+	q := card.Questions[m.qIdx]
+	var labels []string
+	for i, o := range q.Options {
+		if m.qSel[i] {
+			labels = append(labels, o.Label)
+		}
+	}
+	if len(labels) == 0 {
+		m.flash = "pick at least one option"
+		m.flashAt = time.Now()
+		return m, nil
+	}
+	return m.recordAnswer(card, strings.Join(labels, ", "))
+}
+
+// recordAnswer stores the answer for the current question, advances, and sends
+// ActionAnswer once every question has one.
+func (m Model) recordAnswer(card core.Card, label string) (Model, tea.Cmd) {
+	m.syncQuestion(card)
+	q := card.Questions[m.qIdx]
+	ans := make(map[string]string, len(m.qAns)+1)
+	for k, v := range m.qAns {
+		ans[k] = v
+	}
+	ans[q.Text] = label
+	m.qAns = ans
+	m.qSel = nil
+	m.qIdx++
+	if m.qIdx < len(card.Questions) {
+		return m, nil
+	}
+	return m.answered(core.Action{
 		Kind:      core.ActionAnswer,
 		Key:       m.logKey,
 		RequestID: card.RequestID,
 		Allow:     true,
-		Answers:   answers,
+		Answers:   ans,
 	})
 }
 
@@ -455,19 +611,44 @@ func (m Model) toggleExpand() (Model, tea.Cmd) {
 }
 
 func (m Model) jumpAttention(dir int) (Model, tea.Cmd) {
-	_, _, items := m.backend.Attention()
+	_, _, all := m.backend.Attention()
+	var items []core.Attention
+	for _, att := range all {
+		if att.Severity == core.SeverityBlocked {
+			items = append(items, att)
+		}
+	}
 	if len(items) == 0 {
 		return m, nil
 	}
-	// Find first blocked item
-	for _, att := range items {
-		if att.Severity == core.SeverityBlocked {
-			m.logKey = att.Key
-			m.logFollow = true
-			return m.refresh(), nil
+	cur := -1
+	for i, att := range items {
+		if sameKey(att.Key, m.logKey) {
+			cur = i
+			break
 		}
 	}
-	return m, nil
+	var next int
+	switch {
+	case cur < 0 && dir > 0:
+		next = 0
+	case cur < 0:
+		next = len(items) - 1
+	default:
+		next = ((cur+dir)%len(items) + len(items)) % len(items)
+	}
+	if !m.hasReturn {
+		m.hasReturn = true
+		m.returnKey = m.logKey
+		m.returnFocus = m.focus
+		m.returnMode = m.mode
+	}
+	m.logKey = items[next].Key
+	m.logFollow = true
+	m.focus = FocusLog
+	m.mode = ModeNormal
+	m.resetQuestion()
+	return m.refresh(), nil
 }
 
 func (m Model) executeCommand(cmd string) (Model, tea.Cmd) {
@@ -550,13 +731,14 @@ func helpText() string {
 
  NORMAL mode
   j/k        move cursor
-  Enter      open/resume session (INSERT)
+  Enter      open session (INSERT); Enter confirms multi-select
   i/I        INSERT mode (I clears)
-  Tab        switch pane
-  ]n/[n      next/prev needs-you item
-  a/A        allow (A = for session)
-  d          deny
-  1-9        pick option
+  Tab, ]n/[n next/prev needs-you item
+  Ctrl+w w   switch pane (Ctrl+w h/l)
+  a/A        allow / approve plan (A = for session)
+  d          deny / reject plan
+  1-9        pick option (multi-select toggles)
+  Ctrl+C     interrupt running turn (Esc Esc too)
   /          search
   :          command line
   ?          this help
@@ -564,12 +746,12 @@ func helpText() string {
 
  INSERT mode
   Enter       send prompt
-  Alt+Enter   newline
+  Shift/Alt+Enter  newline
   Esc         back to NORMAL
 
  Commands
   :new [dir]   new session
-  :fork        fork selected session
+  :fork        fork selected session (explicit)
   :stop        stop controlled session
   :model M     set model
   :mode M      set permission mode

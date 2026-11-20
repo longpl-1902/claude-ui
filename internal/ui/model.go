@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/longpl-1902/claude-ui/internal/core"
 	"github.com/longpl-1902/claude-ui/internal/mdlite"
 
@@ -111,6 +112,21 @@ type Model struct {
 	keyBuf  string
 	keyTime time.Time
 
+	// Needs-you jump: where to go back to after answering.
+	hasReturn   bool
+	returnKey   core.SessionKey
+	returnFocus Focus
+	returnMode  Mode
+
+	// Question card progress (oldest card only).
+	qReq string            // request id the progress belongs to
+	qIdx int               // current question index
+	qSel map[int]bool      // multi-select toggles for the current question
+	qAns map[string]string // answers collected so far, by question text
+
+	// Esc Esc detection.
+	escTime time.Time
+
 	// Styles
 	mdStyles mdlite.Styles
 	accent   color.Color
@@ -139,9 +155,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		if m.flash != "" && time.Since(m.flashAt) > 5*time.Second {
+			m.flash = ""
+		}
+		if m.busy() || m.anyRunning() {
+			m.refresh()
+		}
 		return m, m.tick()
 
 	case core.ChangedMsg:
+		return m.refresh(), nil
+
+	case core.OpenMsg:
+		m.logKey = msg.Key
+		m.focus = FocusLog
+		m.logFollow = true
+		m.resetQuestion()
 		return m.refresh(), nil
 
 	case core.ErrMsg:
@@ -305,6 +334,9 @@ func (m Model) viewLog(w, h int) string {
 	if m.logView.Summary.Blocked {
 		header += "· needs you "
 	}
+	if where := m.logView.Summary.CtlWhere; where != "" && m.logView.Summary.Ctl.Kind != core.CtlMine && m.logView.Summary.Ctl.Kind != core.CtlNone {
+		header += "· read-only — running in " + where + "; typing forks it "
+	}
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(m.accent)
 	lines = append(lines, truncPad(headerStyle.Render(header), w))
 
@@ -319,8 +351,8 @@ func (m Model) viewLog(w, h int) string {
 		contentLines = append(contentLines, typed)
 	}
 
-	for _, card := range m.logView.Cards {
-		contentLines = append(contentLines, m.renderCard(card, w-4)...)
+	for i, card := range m.logView.Cards {
+		contentLines = append(contentLines, m.renderCard(card, w-4, i == 0)...)
 	}
 
 	start := len(contentLines) - contentH
@@ -350,30 +382,55 @@ func (m Model) viewLog(w, h int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) renderCard(card core.Card, w int) []string {
+func (m Model) renderCard(card core.Card, w int, oldest bool) []string {
 	var lines []string
 	border := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#FFA500")).
 		Width(w)
 
-	if card.IsPermission() {
-		header := fmt.Sprintf("Permission: %s", card.DisplayName)
-		lines = append(lines, header)
+	switch {
+	case card.IsPlan():
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Plan"))
+		if card.Preview != "" {
+			lines = append(lines, mdlite.Render(card.Preview, max(w-4, 10), m.mdStyles)...)
+		}
+		lines = append(lines, "a approve · d reject")
+	case card.IsPermission():
+		lines = append(lines, fmt.Sprintf("Permission: %s", card.DisplayName))
 		if card.Preview != "" {
 			lines = append(lines, card.Preview)
 		}
 		if card.Description != "" {
 			lines = append(lines, card.Description)
 		}
-		lines = append(lines, "a allow · A allow for session · d deny")
-	} else {
-		for _, q := range card.Questions {
-			lines = append(lines, q.Header+": "+q.Text)
-			for i, opt := range q.Options {
-				lines = append(lines, fmt.Sprintf("  %d. %s", i+1, opt.Label))
-			}
+		footer := "a allow · d deny"
+		if card.CanAllowSession {
+			footer = "a allow · A allow for session · d deny"
 		}
+		lines = append(lines, footer)
+	default:
+		qi := 0
+		if oldest && card.RequestID == m.qReq {
+			qi = m.qIdx
+		}
+		if qi >= len(card.Questions) {
+			qi = len(card.Questions) - 1
+		}
+		q := card.Questions[qi]
+		lines = append(lines, fmt.Sprintf("q %d/%d", qi+1, len(card.Questions)))
+		lines = append(lines, q.Header+": "+q.Text)
+		for i, opt := range q.Options {
+			mark := ""
+			if q.Multi {
+				mark = "[ ] "
+				if oldest && m.qSel[i] {
+					mark = "[x] "
+				}
+			}
+			lines = append(lines, fmt.Sprintf("  %d. %s%s", i+1, mark, opt.Label))
+		}
+		lines = append(lines, "1-9 pick · Enter confirm · type + Enter = other")
 	}
 
 	rendered := border.Render(strings.Join(lines, "\n"))
@@ -381,14 +438,17 @@ func (m Model) renderCard(card core.Card, w int) []string {
 }
 
 func (m Model) viewStatus(w int) string {
+	bg := lipgloss.Color("#333333")
 	style := lipgloss.NewStyle().
-		Background(lipgloss.Color("#333333")).
+		Background(bg).
 		Foreground(lipgloss.Color("#CCCCCC")).
 		Width(w)
+	acctStyle := lipgloss.NewStyle().Background(bg).Foreground(m.accent).Bold(true)
+	sep := " │ "
 
 	parts := []string{
 		" " + m.mode.String(),
-		m.acct.Name,
+		acctStyle.Render(m.acct.Name),
 	}
 
 	if m.acct.Email != "" {
@@ -416,12 +476,17 @@ func (m Model) viewStatus(w int) string {
 		if ctl.CtxPct > 0 {
 			info += fmt.Sprintf(" · ctx %.0f%%", ctl.CtxPct*100)
 		}
-		parts = append(parts, info)
+		if info != "" {
+			parts = append(parts, info)
+		}
+		if ctl.State != "" {
+			parts = append(parts, "ctl: "+ctl.State)
+		}
 	}
 
 	parts = append(parts, "? help")
 
-	return style.Render(strings.Join(parts, " │ "))
+	return style.Render(strings.Join(parts, sep))
 }
 
 func (m Model) viewPrompt(w int) string {
@@ -435,6 +500,9 @@ func (m Model) viewPrompt(w int) string {
 		return prefix + m.searchText
 	}
 
+	if m.flash != "" && m.mode == ModeNormal && m.promptText == "" {
+		return lipgloss.NewStyle().Faint(true).Render(m.flash)
+	}
 	style := lipgloss.NewStyle()
 	if m.mode == ModeInsert {
 		style = style.Foreground(m.accent)
@@ -459,6 +527,9 @@ func (m *Model) refresh() Model {
 	if !m.logKey.IsZero() {
 		view, ok := m.backend.View(m.logKey, "")
 		if ok {
+			if id := view.Summary.Key.SessionID; id != "" && id != m.logKey.SessionID {
+				m.logKey = view.Summary.Key // draft -> real id
+			}
 			m.logView = view
 			m.logItems = m.renderItems(view.Items, m.width-2)
 		}
@@ -512,8 +583,13 @@ func (m Model) renderItems(items []core.Item, w int) []logItem {
 				rendered = append(rendered, line)
 			}
 		case core.ItemNotice:
-			style := lipgloss.NewStyle().Faint(true)
-			rendered = append(rendered, style.Render("ℹ "+it.Text))
+			if strings.HasPrefix(it.Text, "↳") {
+				style := lipgloss.NewStyle().Foreground(m.accent)
+				rendered = append(rendered, style.Render(firstLine(it.Text)))
+			} else {
+				style := lipgloss.NewStyle().Faint(true)
+				rendered = append(rendered, style.Render("ℹ "+it.Text))
+			}
 		case core.ItemInterrupted:
 			style := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5C07B"))
 			rendered = append(rendered, style.Render("⚡ "+it.Text))
@@ -587,34 +663,75 @@ func statusGlyph(s core.Status) string {
 }
 
 func statusBadge(s core.SessionSummary) string {
+	var parts []string
+	switch s.Ctl.Kind {
+	case core.CtlMine:
+		parts = append(parts, "ac•")
+	case core.CtlOtherAC:
+		parts = append(parts, fmt.Sprintf("ac:%d", s.Ctl.PID))
+	case core.CtlElsewhere:
+		if s.Source == core.SourceVSCode {
+			parts = append(parts, "vs")
+		} else {
+			parts = append(parts, "cli")
+		}
+	}
 	if s.Blocked {
-		return "!"
+		parts = append(parts, "!")
+	} else {
+		switch s.Status {
+		case core.StatusRunning:
+			parts = append(parts, "run")
+		case core.StatusWaiting:
+			parts = append(parts, "idle")
+		}
 	}
-	switch s.Status {
-	case core.StatusRunning:
-		return "run"
-	case core.StatusWaiting:
-		return "idle"
-	case core.StatusDone:
-		return ""
-	default:
-		return ""
-	}
+	return strings.Join(parts, " ")
 }
 
+// truncPad cuts s to w terminal cells (ANSI and wide-rune safe) and pads with
+// spaces up to w.
 func truncPad(s string, w int) string {
-	sw := lipgloss.Width(s)
+	if w <= 0 {
+		return ""
+	}
+	sw := ansi.StringWidth(s)
 	if sw > w {
-		return s[:w]
+		s = ansi.Truncate(s, w, "…")
+		sw = ansi.StringWidth(s)
 	}
 	if sw < w {
-		return s + strings.Repeat(" ", w-sw)
+		s += strings.Repeat(" ", w-sw)
 	}
 	return s
 }
 
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// busy reports whether the open session's child process is working.
+func (m Model) busy() bool {
+	if m.logKey.IsZero() || m.logView.Ctl == nil {
+		return false
+	}
+	return m.logView.Ctl.State == "busy" || m.logView.Ctl.State == "starting"
+}
+
+func (m Model) anyRunning() bool {
+	for _, s := range m.sessions {
+		if s.Status == core.StatusRunning {
+			return true
+		}
+	}
+	return false
+}
+
 func centerText(s string, w int) string {
-	sw := lipgloss.Width(s)
+	sw := ansi.StringWidth(s)
 	if sw >= w {
 		return s
 	}
