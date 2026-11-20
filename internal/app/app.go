@@ -1,12 +1,12 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/longpl-1902/claude-ui/internal/accounts"
@@ -20,63 +20,128 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// Options configures a Store. Zero values get sensible defaults in
+// NewWithOptions; tests inject NewController to avoid any real process.
+type Options struct {
+	Dirs          statefile.AppDirs
+	ClaudePath    string
+	Env           []string
+	Spawner       control.Spawner
+	NewController newControllerFunc
+	LaunchDir     string
+	Home          string
+	Now           func() time.Time
+	NotifyDelay   time.Duration
+}
+
 type Store struct {
 	mu       sync.Mutex
 	account  core.Account
 	accounts []core.Account
 	cfg      accounts.Config
 	dirs     statefile.AppDirs
+	opts     Options
+	home     string
 
-	sessions map[string]*sessionState // sessionID -> state
+	sessions map[string]*sessionState // session id (or draft id) -> state
 	projects map[string]*gitx.Project // projectKey -> project
 	resolver *gitx.Resolver
 	notify   func()
+	tailer   *transcript.Tailer
 
 	controlSessions map[string]*controlledSession
+	alias           map[string]string // draft id -> session id
 	claudePath      string
+	pids            map[int]bool // pids of our own children (snapshot, see snapshotPIDs)
+	forkSeq         int
+	noteSeq         int
+	notifyPending   atomic.Bool
 }
 
 type sessionState struct {
 	summary  core.SessionSummary
-	view     *core.SessionView
 	records  []transcript.Record
-	tailer   *transcript.Tailer
+	items    []core.Item
+	itemsOK  bool
+	skipped  bool // older history was not loaded (very large transcript)
 	filePath string
-	lastRead time.Time
 }
 
-type controlledSession struct {
-	key    core.SessionKey
-	state  control.State
-	events chan control.Event
-}
-
+// New builds a Store with production defaults.
 func New(acct core.Account, allAccounts []core.Account, cfg accounts.Config) *Store {
-	dirs := statefile.GetDirs()
-	claudePath := cfg.Prefs.ClaudePath
-	if claudePath == "" {
-		p, err := control.ResolveClaude("", os.Environ(), os.Getenv("HOME"), fileExists)
-		if err == nil {
-			claudePath = p
+	home, _ := os.UserHomeDir()
+	o := Options{
+		Dirs: statefile.GetDirs(),
+		Env:  os.Environ(),
+		Home: home,
+	}
+	o.ClaudePath = cfg.Prefs.ClaudePath
+	if o.ClaudePath == "" {
+		if p, err := control.ResolveClaude("", o.Env, home, fileExists); err == nil {
+			o.ClaudePath = p
 		}
+	}
+	o.LaunchDir, _ = os.Getwd()
+	return NewWithOptions(acct, allAccounts, cfg, o)
+}
+
+func NewWithOptions(acct core.Account, allAccounts []core.Account, cfg accounts.Config, o Options) *Store {
+	if o.Dirs.Config == "" && o.Dirs.Local == "" && o.Dirs.Locks == "" {
+		o.Dirs = statefile.GetDirs()
+	}
+	if o.ClaudePath == "" {
+		o.ClaudePath = cfg.Prefs.ClaudePath
+	}
+	if o.Home == "" {
+		o.Home, _ = os.UserHomeDir()
+	}
+	if o.LaunchDir == "" {
+		o.LaunchDir, _ = os.Getwd()
+	}
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	if o.NotifyDelay <= 0 {
+		o.NotifyDelay = 50 * time.Millisecond
+	}
+	if o.NewController == nil && defaultNewController != nil {
+		o.NewController = defaultNewController(o)
 	}
 
 	return &Store{
 		account:         acct,
-		accounts:        allAccounts,
+		accounts:        append([]core.Account{}, allAccounts...),
 		cfg:             cfg,
-		dirs:            dirs,
+		dirs:            o.Dirs,
+		opts:            o,
+		home:            o.Home,
 		sessions:        make(map[string]*sessionState),
 		projects:        make(map[string]*gitx.Project),
 		resolver:        gitx.NewResolver(),
+		tailer:          transcript.NewTailer(fsReader{}),
 		controlSessions: make(map[string]*controlledSession),
-		claudePath:      claudePath,
+		alias:           make(map[string]string),
+		pids:            make(map[int]bool),
+		claudePath:      o.ClaudePath,
 	}
 }
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func (s *Store) now() time.Time { return s.opts.Now() }
+
+// fsReader adapts safefs to transcript.ByteReader.
+type fsReader struct{}
+
+func (fsReader) Stat(path string) (int64, time.Time, bool, error) {
+	return safefs.StatForTailer(path)
+}
+
+func (fsReader) ReadRange(path string, start, end int64) ([]byte, error) {
+	return safefs.ReadRange(path, start, end)
 }
 
 func (s *Store) Account() core.Account {
@@ -92,6 +157,7 @@ func (s *Store) Accounts() []core.Account {
 }
 
 func (s *Store) Sessions(all bool) []core.SessionSummary {
+	s.snapshotPIDs()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -106,42 +172,156 @@ func (s *Store) Sessions(all bool) []core.SessionSummary {
 	}
 
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].LastActivity.After(result[j].LastActivity)
+		if !result[i].LastActivity.Equal(result[j].LastActivity) {
+			return result[i].LastActivity.After(result[j].LastActivity)
+		}
+		return keyID(result[i].Key) < keyID(result[j].Key)
 	})
 
 	return result
+}
+
+// ensureLoaded reads any new complete transcript lines of ss (mu held).
+func (s *Store) ensureLoaded(ss *sessionState) {
+	if ss.filePath == "" {
+		return
+	}
+	tr, err := s.tailer.Read(ss.filePath)
+	if err != nil {
+		return
+	}
+	changed := false
+	if tr.Reset {
+		ss.records = nil
+		ss.skipped = false
+		changed = true
+	}
+	if tr.Skipped > 0 {
+		ss.skipped = true
+		changed = true
+	}
+	for _, line := range tr.Lines {
+		line = trimCR(line)
+		if transcript.ShouldSkipRaw(line) {
+			continue
+		}
+		rec, ok := transcript.ParseLine(line)
+		if !ok {
+			continue
+		}
+		ss.records = append(ss.records, rec)
+		changed = true
+	}
+	if changed || !ss.itemsOK {
+		ss.items = buildItems(ss.records)
+		if ss.skipped {
+			ss.items = append([]core.Item{{
+				ID: "older-skipped", Kind: core.ItemNotice, Text: "older history not loaded",
+			}}, ss.items...)
+		}
+		ss.itemsOK = true
+	}
+}
+
+func trimCR(b []byte) []byte {
+	if n := len(b); n > 0 && b[n-1] == '\r' {
+		return b[:n-1]
+	}
+	return b
 }
 
 func (s *Store) View(key core.SessionKey, agentID string) (core.SessionView, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ss, ok := s.sessions[key.SessionID]
+	id := s.resolve(key)
+	ss, ok := s.sessions[id]
 	if !ok {
 		return core.SessionView{}, false
 	}
+	s.ensureLoaded(ss)
 
-	if ss.view != nil {
-		return *ss.view, true
+	view := core.SessionView{Summary: ss.summary}
+	cs := s.controlSessions[id]
+	if cs == nil {
+		view.Items = append([]core.Item(nil), ss.items...)
+		return view, true
 	}
 
-	// Build a basic view from the transcript
-	view := core.SessionView{
-		Summary: ss.summary,
-	}
-
-	for _, rec := range ss.records {
-		items := recordToItems(rec)
-		view.Items = append(view.Items, items...)
-	}
-
-	// Check for pending cards from controlled session
-	if cs, ok := s.controlSessions[key.SessionID]; ok {
-		_ = cs // TODO: merge controlled session cards
-	}
-
-	ss.view = &view
+	view.Items = mergeOverlay(ss.items, cs)
+	view.Typing = cs.typing
+	view.Thinking = cs.thinking
+	view.Cards = append([]core.Card(nil), cs.cards...)
+	info := cs.info
+	info.Commands = append([]string(nil), info.Commands...)
+	info.Models = append([]string(nil), info.Models...)
+	view.Ctl = &info
 	return view, true
+}
+
+// mergeOverlay merges the store-owned notices and the optimistic echo into
+// the transcript items by time. Notices go before a transcript item with the
+// same time. The echo is dropped once the transcript contains the prompt.
+func mergeOverlay(items []core.Item, cs *controlledSession) []core.Item {
+	if cs.echo != nil {
+		for _, it := range items {
+			if it.Kind == core.ItemPrompt && it.Text == cs.echo.Text &&
+				!it.Time.Before(cs.echo.Time.Add(-2*time.Second)) {
+				cs.echo = nil
+				break
+			}
+		}
+	}
+	extra := make([]core.Item, 0, len(cs.notices)+1)
+	extra = append(extra, cs.notices...)
+	if cs.echo != nil {
+		extra = append(extra, *cs.echo)
+	}
+	sort.SliceStable(extra, func(i, j int) bool { return extra[i].Time.Before(extra[j].Time) })
+
+	out := make([]core.Item, 0, len(items)+len(extra))
+	e := 0
+	for _, it := range items {
+		for e < len(extra) && !extra[e].Time.After(it.Time) {
+			out = append(out, extra[e])
+			e++
+		}
+		out = append(out, it)
+	}
+	out = append(out, extra[e:]...)
+	return out
+}
+
+// buildItems converts records to items, merging every tool result into the
+// item of its tool use (by UseID) instead of emitting a second item.
+func buildItems(records []transcript.Record) []core.Item {
+	var items []core.Item
+	byUse := make(map[string]int)
+	for _, rec := range records {
+		for _, it := range recordToItems(rec) {
+			if it.Kind != core.ItemTool || it.Tool == nil || it.Tool.UseID == "" {
+				items = append(items, it)
+				continue
+			}
+			idx, seen := byUse[it.Tool.UseID]
+			if !seen {
+				byUse[it.Tool.UseID] = len(items)
+				items = append(items, it)
+				continue
+			}
+			prev := items[idx].Tool
+			if it.Tool.Name != "" { // a second use record: keep the first
+				continue
+			}
+			prev.Result = it.Tool.Result
+			prev.Failed = it.Tool.Failed
+			prev.Interrupted = it.Tool.Interrupted
+			prev.Added = it.Tool.Added
+			prev.Removed = it.Tool.Removed
+			prev.Open = false
+		}
+	}
+	return items
 }
 
 func recordToItems(rec transcript.Record) []core.Item {
@@ -171,11 +351,12 @@ func recordToItems(rec transcript.Record) []core.Item {
 				Kind: core.ItemTool,
 				Time: rec.Timestamp,
 				Tool: &core.ToolItem{
-					UseID:  tu.UseID,
-					Name:   tu.Name,
-					Target: tu.Target,
-					Input:  tu.InputPreview,
-					Open:   true,
+					UseID:    tu.UseID,
+					Name:     tu.Name,
+					Target:   tu.Target,
+					FilePath: tu.FilePath,
+					Input:    tu.InputPreview,
+					Open:     true,
 				},
 			})
 		}
@@ -186,12 +367,13 @@ func recordToItems(rec transcript.Record) []core.Item {
 				Kind: core.ItemTool,
 				Time: rec.Timestamp,
 				Tool: &core.ToolItem{
-					UseID:   tr.UseID,
-					Result:  tr.Text,
-					Failed:  tr.IsError,
-					Open:    false,
-					Added:   tr.Added,
-					Removed: tr.Removed,
+					UseID:       tr.UseID,
+					Result:      tr.Text,
+					Failed:      tr.IsError,
+					Interrupted: tr.Interrupted,
+					Open:        false,
+					Added:       tr.Added,
+					Removed:     tr.Removed,
 				},
 			})
 		}
@@ -219,23 +401,45 @@ func (s *Store) Attention() (mine, others int, items []core.Attention) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, ss := range s.sessions {
-		if ss.summary.Blocked {
-			att := core.Attention{
-				Key:      ss.summary.Key,
-				Kind:     "blocked",
-				Detail:   ss.summary.Reason,
-				Severity: core.SeverityBlocked,
-			}
-			items = append(items, att)
-			if ss.summary.Key.Account == s.account.ID {
-				mine++
-			} else {
-				others++
-			}
+	for id, ss := range s.sessions {
+		if !ss.summary.Blocked {
+			continue
+		}
+		att := core.Attention{
+			Key:      ss.summary.Key,
+			Kind:     "waiting",
+			Detail:   ss.summary.Reason,
+			Severity: core.SeverityBlocked,
+		}
+		if cs := s.controlSessions[id]; cs != nil && len(cs.cards) > 0 {
+			att.Kind = cardKindName(cs.cards[0])
+			att.Since = cs.cards[0].Since
+		}
+		items = append(items, att)
+		if ss.summary.Key.Account == s.account.ID {
+			mine++
+		} else {
+			others++
 		}
 	}
+	sort.Slice(items, func(i, j int) bool {
+		if !items[i].Since.Equal(items[j].Since) {
+			return items[i].Since.Before(items[j].Since)
+		}
+		return keyID(items[i].Key) < keyID(items[j].Key)
+	})
 	return
+}
+
+func cardKindName(c core.Card) string {
+	switch {
+	case c.IsPlan():
+		return "plan"
+	case c.IsQuestion():
+		return "question"
+	default:
+		return "permission"
+	}
 }
 
 func (s *Store) UsageToday() int64 {
@@ -260,6 +464,9 @@ func (s *Store) UsageToday() int64 {
 }
 
 func (s *Store) Do(a core.Action) tea.Cmd {
+	if a.Kind == core.ActionSignIn {
+		return signInHook(s, a)
+	}
 	return func() tea.Msg {
 		switch a.Kind {
 		case core.ActionSend:
@@ -274,7 +481,18 @@ func (s *Store) Do(a core.Action) tea.Cmd {
 			return s.doNewDraft(a)
 		case core.ActionFork:
 			return s.doFork(a)
+		case core.ActionSetModel:
+			return s.doSetModel(a)
+		case core.ActionSetMode:
+			return s.doSetMode(a)
+		case core.ActionCtx:
+			return s.doDetails(a, control.ReqGetContextUsage, "context")
+		case core.ActionMcp:
+			return s.doDetails(a, control.ReqMcpStatus, "mcp")
+		case core.ActionSwitchAccount:
+			return switchAccountHook(s, a)
 		case core.ActionRefresh:
+			s.snapshotPIDs()
 			s.mu.Lock()
 			s.scanSessions()
 			s.mu.Unlock()
@@ -285,64 +503,11 @@ func (s *Store) Do(a core.Action) tea.Cmd {
 	}
 }
 
-func (s *Store) doSend(a core.Action) tea.Msg {
-	// TODO: implement controlled session send
-	return core.ChangedMsg{}
-}
-
-func (s *Store) doAnswer(a core.Action) tea.Msg {
-	// TODO: implement answer via control protocol
-	return core.ChangedMsg{}
-}
-
-func (s *Store) doInterrupt(a core.Action) tea.Msg {
-	// TODO: send interrupt to controlled session
-	return core.ChangedMsg{}
-}
-
-func (s *Store) doStop(a core.Action) tea.Msg {
-	// TODO: stop controlled session
-	return core.ChangedMsg{}
-}
-
-func (s *Store) doNewDraft(a core.Action) tea.Msg {
-	dir := a.Dir
-	if dir == "" {
-		dir, _ = os.Getwd()
-	}
-	draftID := fmt.Sprintf("draft-%d", time.Now().UnixNano())
-	key := core.SessionKey{
-		Account: s.account.ID,
-		DraftID: draftID,
-	}
-	proj := s.resolver.Provisional(dir)
-
-	s.mu.Lock()
-	s.sessions[draftID] = &sessionState{
-		summary: core.SessionSummary{
-			Key:          key,
-			Title:        "(new session)",
-			ProjectKey:   proj.Key,
-			ProjectName:  proj.Name,
-			ProjectRoot:  proj.Root,
-			Cwd:          dir,
-			Status:       core.StatusWaiting,
-			Ctl:          core.Ctl{Kind: core.CtlMine},
-			LastActivity: time.Now(),
-		},
-	}
-	s.mu.Unlock()
-	return core.ChangedMsg{}
-}
-
-func (s *Store) doFork(a core.Action) tea.Msg {
-	// TODO: fork via control protocol
-	return core.ChangedMsg{}
-}
-
 func (s *Store) Completions(kind string, prefix string) []string {
 	switch kind {
 	case "account":
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		var names []string
 		for _, a := range s.accounts {
 			if strings.HasPrefix(strings.ToLower(a.Name), strings.ToLower(prefix)) {
@@ -360,13 +525,18 @@ func (s *Store) SetNotify(fn func()) {
 	s.notify = fn
 }
 
+// scanSessions rescans every account (mu held).
 func (s *Store) scanSessions() {
+	locks := listLocks(s.dirs.Locks)
 	for _, acct := range s.accounts {
-		s.scanAccountSessions(acct)
+		s.scanTranscripts(acct)
+		s.refreshLive(acct, locks)
 	}
 }
 
-func (s *Store) scanAccountSessions(acct core.Account) {
+// scanTranscripts discovers new transcript files of acct and refreshes the
+// activity time of known ones (mu held).
+func (s *Store) scanTranscripts(acct core.Account) {
 	projectsDir := filepath.Join(acct.ConfigDir, "projects")
 	entries, err := safefs.ReadDir(projectsDir)
 	if err != nil {
@@ -377,7 +547,7 @@ func (s *Store) scanAccountSessions(acct core.Account) {
 	if listDays <= 0 {
 		listDays = 7
 	}
-	cutoff := time.Now().AddDate(0, 0, -listDays)
+	cutoff := s.now().AddDate(0, 0, -listDays)
 
 	for _, projEntry := range entries {
 		if !projEntry.IsDir() {
@@ -398,13 +568,16 @@ func (s *Store) scanAccountSessions(acct core.Account) {
 			if err != nil {
 				continue
 			}
-			if info.ModTime().Before(cutoff) {
-				continue
-			}
 
 			sessionID := strings.TrimSuffix(f.Name(), ".jsonl")
 
-			if _, exists := s.sessions[sessionID]; exists {
+			if known, exists := s.sessions[sessionID]; exists {
+				if info.ModTime().After(known.summary.LastActivity) {
+					known.summary.LastActivity = info.ModTime()
+				}
+				continue
+			}
+			if info.ModTime().Before(cutoff) {
 				continue
 			}
 
@@ -425,48 +598,6 @@ func (s *Store) scanAccountSessions(acct core.Account) {
 				},
 				filePath: fpath,
 			}
-		}
-	}
-
-	// Check registry for live sessions
-	sessDir := filepath.Join(acct.ConfigDir, "sessions")
-	regEntries, err := safefs.ReadDir(sessDir)
-	if err != nil {
-		return
-	}
-	for _, re := range regEntries {
-		if !strings.HasSuffix(re.Name(), ".json") || strings.HasSuffix(re.Name(), ".key") {
-			continue
-		}
-		name := re.Name()
-		pidStr := strings.TrimSuffix(name, ".json")
-		isDigits := true
-		for _, c := range pidStr {
-			if c < '0' || c > '9' {
-				isDigits = false
-				break
-			}
-		}
-		if !isDigits {
-			continue
-		}
-
-		data, err := safefs.ReadFile(filepath.Join(sessDir, name))
-		if err != nil {
-			continue
-		}
-		entry, ok := transcript.ParseRegistryEntry(data)
-		if !ok {
-			continue
-		}
-
-		if ss, exists := s.sessions[entry.SessionID]; exists {
-			ss.summary.Status = registryStatus(entry.Status)
-			ss.summary.Source = core.SourceFromString(entry.Entrypoint)
-			if entry.Name != "" {
-				ss.summary.Title = entry.Name
-			}
-			ss.summary.Ctl = core.Ctl{Kind: core.CtlElsewhere, PID: entry.PID}
 		}
 	}
 }
@@ -504,53 +635,4 @@ func (s *Store) scanSessionMeta(path string) transcript.Meta {
 	}
 
 	return transcript.ScanMeta(head, tail)
-}
-
-func (s *Store) LoadSession(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	ss, ok := s.sessions[sessionID]
-	if !ok || ss.filePath == "" {
-		return
-	}
-
-	data, err := safefs.ReadFile(ss.filePath)
-	if err != nil {
-		return
-	}
-
-	var records []transcript.Record
-	for _, line := range splitLines(data) {
-		if transcript.ShouldSkipRaw(line) {
-			continue
-		}
-		rec, ok := transcript.ParseLine(line)
-		if ok {
-			records = append(records, rec)
-		}
-	}
-
-	ss.records = records
-	ss.view = nil
-	ss.lastRead = time.Now()
-}
-
-func splitLines(data []byte) [][]byte {
-	var lines [][]byte
-	start := 0
-	for i := 0; i < len(data); i++ {
-		if data[i] == '\n' {
-			line := data[start:i]
-			if len(line) > 0 && line[len(line)-1] == '\r' {
-				line = line[:len(line)-1]
-			}
-			lines = append(lines, line)
-			start = i + 1
-		}
-	}
-	if start < len(data) {
-		lines = append(lines, data[start:])
-	}
-	return lines
 }
