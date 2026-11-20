@@ -13,6 +13,7 @@ type Account struct {
 	Email     string
 	Org       string
 	SignedIn  bool
+	AlwaysUse bool
 }
 
 type SessionKey struct {
@@ -125,6 +126,7 @@ type SessionSummary struct {
 	Model        string
 	Blocked      bool
 	Idle         bool
+	CtlWhere     string
 }
 
 type ItemKind int
@@ -172,7 +174,16 @@ type AgentItem struct {
 	Tokens    int64
 }
 
+type CardKind int
+
+const (
+	CardPermission CardKind = iota
+	CardQuestion
+	CardPlan
+)
+
 type Card struct {
+	Kind            CardKind
 	RequestID       string
 	ToolName        string
 	DisplayName     string
@@ -187,6 +198,7 @@ type Card struct {
 
 func (c Card) IsPermission() bool { return len(c.Questions) == 0 }
 func (c Card) IsQuestion() bool   { return len(c.Questions) > 0 }
+func (c Card) IsPlan() bool       { return c.Kind == CardPlan }
 
 type Question struct {
 	Text    string
@@ -270,6 +282,7 @@ type Action struct {
 	ID         string
 }
 
+type OpenMsg struct{ Key SessionKey }
 type ChangedMsg struct{}
 type ErrMsg struct{ Text string }
 type InfoMsg struct {
