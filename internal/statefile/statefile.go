@@ -2,11 +2,13 @@ package statefile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -43,40 +45,62 @@ func WriteJSONAtomic(path string, v any) error {
 
 	tmp := fmt.Sprintf("%s.tmp-%d-%d", path, os.Getpid(), rand.IntN(1000000))
 
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-
-	f, err := os.Open(tmp)
-	if err != nil {
+	if err := WriteFileSync(tmp, data); err != nil {
 		os.Remove(tmp)
 		return err
 	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	f.Close()
 
-	for i := range 5 {
+	for i := range 10 {
 		err = os.Rename(tmp, path)
 		if err == nil {
 			return nil
 		}
-		time.Sleep(time.Duration(10*(i+1)) * time.Millisecond)
+		if !isTransientFSError(err) && i >= 2 {
+			break
+		}
+		time.Sleep(time.Duration(5*(i+1)) * time.Millisecond)
 	}
 
 	os.Remove(tmp)
 	return fmt.Errorf("atomic write failed after retries: %w", err)
 }
 
-func ReadJSON[T any](path string, v *T) error {
-	data, err := os.ReadFile(path)
+// WriteFileSync creates path exclusively, writes data, fsyncs and closes it on
+// one write-capable handle (Windows FlushFileBuffers needs write access).
+func WriteFileSync(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return err
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// isTransientFSError reports Windows sharing errors (access denied / sharing
+// violation) that occur while another handle briefly holds the file. The
+// numeric values are compared so this compiles on every platform.
+func isTransientFSError(err error) bool {
+	return errors.Is(err, syscall.Errno(5)) || errors.Is(err, syscall.Errno(32))
+}
+
+func ReadJSON[T any](path string, v *T) error {
+	var data []byte
+	var err error
+	for i := range 10 {
+		data, err = os.ReadFile(path)
+		if err == nil || runtime.GOOS != "windows" || !isTransientFSError(err) {
+			break
 		}
+		time.Sleep(time.Duration(5*(i+1)) * time.Millisecond)
+	}
+	if err != nil {
 		return err
 	}
 	if len(data) == 0 {

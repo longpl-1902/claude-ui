@@ -1,6 +1,7 @@
 package control
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -31,13 +32,15 @@ func TestResolveClaude_OverrideCmdRefused(t *testing.T) {
 }
 
 func TestResolveClaude_HomeFallback(t *testing.T) {
-	p, err := ResolveClaude("", nil, "/home/u", func(s string) bool {
-		return s == "/home/u/.local/bin/claude.exe"
+	home := t.TempDir()
+	want := filepath.Join(home, ".local", "bin", "claude.exe")
+	p, err := ResolveClaude("", nil, home, func(s string) bool {
+		return s == want
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p != "/home/u/.local/bin/claude.exe" {
+	if p != want {
 		t.Errorf("path = %q", p)
 	}
 }

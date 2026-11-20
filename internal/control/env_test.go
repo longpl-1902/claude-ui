@@ -1,11 +1,13 @@
 package control
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestChildEnv_StripsVars(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), ".claude")
 	base := []string{
 		"PATH=/usr/bin",
 		"HOME=/home/u",
@@ -20,7 +22,7 @@ func TestChildEnv_StripsVars(t *testing.T) {
 		"CLAUDE_CODE_QUESTION_PREVIEW_FORMAT=json",
 		"OTHER_VAR=keep",
 	}
-	out, err := ChildEnv(base, "/home/u/.claude")
+	out, err := ChildEnv(base, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +42,7 @@ func TestChildEnv_StripsVars(t *testing.T) {
 		}
 	}
 
-	if env["CLAUDE_CONFIG_DIR"] != "/home/u/.claude" {
+	if env["CLAUDE_CONFIG_DIR"] != cfg {
 		t.Errorf("CLAUDE_CONFIG_DIR = %q", env["CLAUDE_CONFIG_DIR"])
 	}
 	if env["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] != "1" {
@@ -55,8 +57,9 @@ func TestChildEnv_StripsVars(t *testing.T) {
 }
 
 func TestChildEnv_SetsTerm(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), ".claude")
 	base := []string{"PATH=/usr/bin"}
-	out, err := ChildEnv(base, "/home/u/.claude")
+	out, err := ChildEnv(base, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +73,9 @@ func TestChildEnv_SetsTerm(t *testing.T) {
 }
 
 func TestChildEnv_PreservesTerm(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), ".claude")
 	base := []string{"PATH=/usr/bin", "TERM=screen-256color", "COLORTERM=24bit"}
-	out, err := ChildEnv(base, "/home/u/.claude")
+	out, err := ChildEnv(base, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +96,13 @@ func TestChildEnv_RelativePath(t *testing.T) {
 }
 
 func TestChildEnv_CaseInsensitiveStrip(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), ".claude")
 	base := []string{
 		"Claude_Config_Dir=/old",
 		"electron_run_as_node=1",
 		"Claude_PID=999",
 	}
-	out, err := ChildEnv(base, "/home/u/.claude")
+	out, err := ChildEnv(base, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

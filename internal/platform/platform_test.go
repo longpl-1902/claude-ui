@@ -1,11 +1,17 @@
 package platform
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestBuildWTCommand(t *testing.T) {
+	// Absolute on the host OS: validation uses filepath.IsAbs.
+	root := "/home/u"
+	if runtime.GOOS == "windows" {
+		root = "C:/Users/u"
+	}
 	tests := []struct {
 		name    string
 		o       WTOpen
@@ -15,10 +21,10 @@ func TestBuildWTCommand(t *testing.T) {
 		{
 			name: "valid",
 			o: WTOpen{
-				Cwd:        "/home/u/work",
+				Cwd:        root + "/work",
 				Title:      "test session",
-				ConfigDir:  "/home/u/.claude",
-				ClaudePath: "/usr/bin/claude",
+				ConfigDir:  root + "/.claude",
+				ClaudePath: root + "/bin/claude",
 				SessionID:  "11111111-aaaa-4bbb-8ccc-000000000001",
 			},
 		},
@@ -27,8 +33,8 @@ func TestBuildWTCommand(t *testing.T) {
 			o: WTOpen{
 				Cwd:        "relative/path",
 				Title:      "test",
-				ConfigDir:  "/home/u/.claude",
-				ClaudePath: "/usr/bin/claude",
+				ConfigDir:  root + "/.claude",
+				ClaudePath: root + "/bin/claude",
 				SessionID:  "11111111-aaaa-4bbb-8ccc-000000000001",
 			},
 			wantErr: true,
@@ -36,10 +42,10 @@ func TestBuildWTCommand(t *testing.T) {
 		{
 			name: "relative configDir",
 			o: WTOpen{
-				Cwd:        "/home/u/work",
+				Cwd:        root + "/work",
 				Title:      "test",
 				ConfigDir:  "relative/.claude",
-				ClaudePath: "/usr/bin/claude",
+				ClaudePath: root + "/bin/claude",
 				SessionID:  "11111111-aaaa-4bbb-8ccc-000000000001",
 			},
 			wantErr: true,
@@ -47,10 +53,10 @@ func TestBuildWTCommand(t *testing.T) {
 		{
 			name: "bad session id",
 			o: WTOpen{
-				Cwd:        "/home/u/work",
+				Cwd:        root + "/work",
 				Title:      "test",
-				ConfigDir:  "/home/u/.claude",
-				ClaudePath: "/usr/bin/claude",
+				ConfigDir:  root + "/.claude",
+				ClaudePath: root + "/bin/claude",
 				SessionID:  "not-a-uuid",
 			},
 			wantErr: true,
@@ -58,10 +64,10 @@ func TestBuildWTCommand(t *testing.T) {
 		{
 			name: "quotes in title",
 			o: WTOpen{
-				Cwd:        "/home/u/work",
+				Cwd:        root + "/work",
 				Title:      `test "quoted"`,
-				ConfigDir:  "/home/u/.claude",
-				ClaudePath: "/usr/bin/claude",
+				ConfigDir:  root + "/.claude",
+				ClaudePath: root + "/bin/claude",
 				SessionID:  "11111111-aaaa-4bbb-8ccc-000000000001",
 			},
 			wantErr: true,

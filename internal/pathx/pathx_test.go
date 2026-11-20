@@ -1,14 +1,17 @@
 package pathx
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestExpandHome(t *testing.T) {
 	tests := []struct {
 		path, home, want string
 	}{
 		{"~", "/home/u", "/home/u"},
-		{"~/docs", "/home/u", "/home/u/docs"},
-		{"~\\docs", "/home/u", "/home/u/docs"},
+		{"~/docs", "/home/u", filepath.Join("/home/u", "docs")},
+		{"~\\docs", "/home/u", filepath.Join("/home/u", "docs")},
 		{"/abs/path", "/home/u", "/abs/path"},
 		{"rel/path", "/home/u", "rel/path"},
 		{"~", "", ""},

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/longpl-1902/claude-ui/internal/core"
+	"github.com/longpl-1902/claude-ui/internal/statefile"
 )
 
 // LockInfo represents a session lock held by an ac instance.
@@ -55,7 +56,8 @@ func createLockExclusive(path string, info LockInfo) error {
 		return err
 	}
 	tmp := fmt.Sprintf("%s.tmp-%d-%d", path, os.Getpid(), rand.IntN(1000000))
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := statefile.WriteFileSync(tmp, data); err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	defer os.Remove(tmp)

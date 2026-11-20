@@ -3,6 +3,7 @@ package accounts
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -78,18 +79,24 @@ func TestDetect(t *testing.T) {
 func TestDetectVSCode(t *testing.T) {
 	home := t.TempDir()
 
+	// Detect looks under appDataDir on Windows and ~/.config elsewhere.
+	appData := ""
 	vsDir := filepath.Join(home, ".config", "Code", "User")
+	if runtime.GOOS == "windows" {
+		appData = filepath.Join(home, "AppData", "Roaming")
+		vsDir = filepath.Join(appData, "Code", "User")
+	}
 	os.MkdirAll(vsDir, 0755)
 	os.WriteFile(filepath.Join(vsDir, "settings.json"), []byte(`{
 		// VS Code settings
 		"claudeCode.environmentVariables": {
-			"CLAUDE_CONFIG_DIR": "`+filepath.Join(home, ".claude-vs")+`"
+			"CLAUDE_CONFIG_DIR": "`+filepath.ToSlash(filepath.Join(home, ".claude-vs"))+`"
 		},
 	}`), 0644)
 
 	os.MkdirAll(filepath.Join(home, ".claude-vs"), 0755)
 
-	detected := Detect(home, nil, "")
+	detected := Detect(home, nil, appData)
 	found := false
 	for _, d := range detected {
 		if d.Source == "vscode" {
