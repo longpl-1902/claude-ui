@@ -325,3 +325,88 @@ func TestRender_CleanLayoutWithoutOverlay(t *testing.T) {
 		}
 	}
 }
+
+func twoSessions() *fakeBackend {
+	be := newFakeBackend()
+	be.addSession(sess("s-a", "alpha"))
+	be.addSession(sess("s-b", "beta"))
+	return be
+}
+
+func TestPaneSwitch_HLAndArrows(t *testing.T) {
+	h := newHarness(t, twoSessions(), Options{}, 120, 30)
+	h.open(keyOf("s-a")).press("esc")
+	h.press("l")
+	if h.m.focus != FocusLog {
+		t.Fatalf("focus = %v after l", h.m.focus)
+	}
+	h.press("h")
+	if h.m.focus != FocusSessions {
+		t.Fatalf("focus = %v after h", h.m.focus)
+	}
+	h.press("right")
+	if h.m.focus != FocusLog {
+		t.Fatalf("focus = %v after right", h.m.focus)
+	}
+	h.press("left")
+	if h.m.focus != FocusSessions {
+		t.Fatalf("focus = %v after left", h.m.focus)
+	}
+}
+
+func TestEsc_FromLogGoesToListOnOpenSession(t *testing.T) {
+	h := newHarness(t, twoSessions(), Options{}, 120, 30)
+	h.open(keyOf("s-b")).press("esc") // INSERT -> NORMAL
+	if h.m.focus != FocusLog {
+		t.Fatalf("INSERT Esc moved focus: %v", h.m.focus)
+	}
+	h.press("esc")
+	if h.m.focus != FocusSessions {
+		t.Fatalf("focus = %v", h.m.focus)
+	}
+	// rows: header, alpha, beta -> beta is row 2
+	if h.m.sessCursor != 2 {
+		t.Fatalf("cursor = %d, want 2", h.m.sessCursor)
+	}
+}
+
+func TestFocusList_UnfoldsOpenGroup(t *testing.T) {
+	h := newHarness(t, twoSessions(), Options{}, 120, 30)
+	h.open(keyOf("s-b")).press("esc")
+	for _, g := range h.m.groupSessions() {
+		h.m.sessFolds[g.key] = true
+	}
+	h.press("h")
+	if h.m.sessCursor != 2 || h.m.sessFolds[h.m.groupSessions()[0].key] {
+		t.Fatalf("cursor=%d folds=%v", h.m.sessCursor, h.m.sessFolds)
+	}
+}
+
+func TestEscEsc_BusyInterruptsKeepsFocus(t *testing.T) {
+	be := busyBackend()
+	h := newHarness(t, be, Options{}, 120, 30)
+	h.open(keyOf("s-busy")).press("esc", "esc")
+	if n := len(be.recorded(core.ActionInterrupt)); n != 1 {
+		t.Fatalf("interrupts = %d", n)
+	}
+	if h.m.focus != FocusLog {
+		t.Fatalf("focus = %v, want log", h.m.focus)
+	}
+}
+
+func TestKeyHint_ChangesWithState(t *testing.T) {
+	h := newHarness(t, twoSessions(), Options{}, 120, 30)
+	h.open(keyOf("s-a"))
+	h.mustContain("Enter send · Esc normal")
+	h.press("esc")
+	h.mustContain("Esc list · i type · Tab next")
+	h.press("h")
+	h.mustContain("j/k move · Enter open · ? help")
+	if n := len(strings.Split(h.plain(), "\n")); n != 30 {
+		t.Fatalf("screen height = %d, want 30", n)
+	}
+	narrow := newHarness(t, twoSessions(), Options{}, 80, 20)
+	if n := len(strings.Split(narrow.plain(), "\n")); n != 20 {
+		t.Fatalf("narrow height = %d", n)
+	}
+}
