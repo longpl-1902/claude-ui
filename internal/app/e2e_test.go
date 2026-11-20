@@ -270,7 +270,7 @@ func (fl fakeLog) hasFrame(typ, bodyType string) bool {
 		if bodyType == "" {
 			return true
 		}
-		if b, ok := f["body"].(map[string]any); ok && b["type"] == bodyType {
+		if b, ok := f["request"].(map[string]any); ok && b["subtype"] == bodyType {
 			return true
 		}
 	}

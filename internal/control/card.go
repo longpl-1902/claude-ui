@@ -29,8 +29,8 @@ func CardFromMsg(m Msg, now time.Time) core.Card {
 		c.DisplayName = m.ToolName
 	}
 
-	qs := m.Questions
-	if len(qs) == 0 && len(m.Input) > 0 {
+	var qs []QuestionData
+	if len(m.Input) > 0 {
 		var in struct {
 			Questions []QuestionData `json:"questions"`
 		}
@@ -47,7 +47,7 @@ func CardFromMsg(m Msg, now time.Time) core.Card {
 	}
 
 	switch {
-	case m.ToolName == "AskUserQuestion" || len(m.Questions) > 0:
+	case m.ToolName == "AskUserQuestion":
 		c.Kind = core.CardQuestion
 	case m.ToolName == "ExitPlanMode":
 		c.Kind = core.CardPlan

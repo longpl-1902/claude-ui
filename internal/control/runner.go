@@ -456,8 +456,7 @@ func (s *Session) handleLine(r *run, line []byte) {
 	var pk rawPeek
 	_ = json.Unmarshal(line, &pk)
 
-	if pk.Type == "control_cancel_request" ||
-		(pk.Type == "control_request" && (pk.Subtype == "cancel" || pk.Subtype == "cancel_request")) {
+	if pk.Type == "control_cancel_request" {
 		s.mu.Lock()
 		if s.cur == r {
 			s.removeCardLocked(pk.RequestID)
@@ -487,9 +486,6 @@ func (s *Session) handleLine(r *run, line []byte) {
 		}
 		s.info.Version = m.Version
 		s.info.Commands = m.Commands
-		if len(m.Models) > 0 {
-			s.info.Models = m.Models
-		}
 		s.emitLocked(Event{Kind: EvInit, SessionID: m.SessionID, Model: m.Model, Version: m.Version, Commands: m.Commands})
 		// Allowed by R-19: the user already sent a prompt to get here.
 		out = append(out, s.internalReqLocked(ReqMcpStatus))
@@ -552,9 +548,8 @@ func (s *Session) handleLine(r *run, line []byte) {
 		s.emitLocked(Event{Kind: EvPermission, Card: &c, RequestID: m.RequestID})
 
 	case MsgControlRequest:
-		sub := pk.Subtype
-		out = append(out, EncodeUnsupported(m.RequestID))
-		s.noticeLocked("unsupported control request %q answered", sub)
+		out = append(out, EncodeUnsupported(m.RequestID, m.ReqSubtype))
+		s.noticeLocked("unsupported control request %q answered", m.ReqSubtype)
 
 	case MsgControlResponse:
 		s.settleLocked(m)
@@ -598,7 +593,11 @@ func (s *Session) settleLocked(m Msg) {
 	id := m.CorrelationID
 	if w, ok := s.waiters[id]; ok {
 		delete(s.waiters, id)
-		w <- reqResult{body: m.ResponseBody}
+		if m.OK {
+			w <- reqResult{body: m.ResponseBody}
+		} else {
+			w <- reqResult{err: fmt.Errorf("control request failed: %s", m.Error)}
+		}
 		return
 	}
 	kind, ok := s.internal[id]
@@ -606,6 +605,10 @@ func (s *Session) settleLocked(m Msg) {
 		return
 	}
 	delete(s.internal, id)
+	if !m.OK {
+		s.noticeLocked("%s failed: %s", kind, m.Error)
+		return
+	}
 	switch kind {
 	case ReqGetContextUsage:
 		if v, ok := parseCtxPct(m.ResponseBody); ok {

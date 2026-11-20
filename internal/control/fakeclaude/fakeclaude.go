@@ -67,6 +67,29 @@ type fake struct {
 	lastReq string
 }
 
+// validateFrame mimics the real CLI's input validation: a control_request
+// without a "request" object, or a user turn without a message object, makes
+// the process exit 1 (this is what the invented protocol hit on Windows).
+func validateFrame(m map[string]any) {
+	switch m["type"] {
+	case "control_request":
+		if _, ok := m["request"].(map[string]any); !ok {
+			fmt.Fprintln(os.Stderr, "Error: Missing request on control_request")
+			os.Exit(1)
+		}
+	case "user":
+		if _, ok := m["message"].(map[string]any); !ok {
+			fmt.Fprintln(os.Stderr, "Error: Missing message on user frame")
+			os.Exit(1)
+		}
+	case "control_response":
+		if _, ok := m["response"].(map[string]any); !ok {
+			fmt.Fprintln(os.Stderr, "Error: Missing response on control_response")
+			os.Exit(1)
+		}
+	}
+}
+
 // readFrame returns the next stdin line (logged); io.EOF at end of input.
 func (f *fake) readFrame() (map[string]any, error) {
 	for {
@@ -78,6 +101,7 @@ func (f *fake) readFrame() (map[string]any, error) {
 				m = map[string]any{"_raw": string(line)}
 			}
 			logLine(map[string]any{"frame": m})
+			validateFrame(m)
 			if id, ok := m["request_id"].(string); ok {
 				f.lastReq = id
 			}
@@ -137,7 +161,12 @@ func run(path string) int {
 				fmt.Fprintf(os.Stderr, "fakeclaude: line %d: bad reply json: %v\n", n+1, err)
 				return 4
 			}
-			b, _ := json.Marshal(map[string]any{"type": "control_response", "request_id": f.lastReq, "body": body})
+			b, _ := json.Marshal(map[string]any{"type": "control_response", "response": map[string]any{
+				"subtype": "success", "request_id": f.lastReq, "response": body}})
+			_, _ = out.Write(append(b, '\n'))
+		case "reply-error":
+			b, _ := json.Marshal(map[string]any{"type": "control_response", "response": map[string]any{
+				"subtype": "error", "request_id": f.lastReq, "error": arg}})
 			_, _ = out.Write(append(b, '\n'))
 		case "emit":
 			arg = strings.ReplaceAll(arg, "{{session}}", SessionUUID)

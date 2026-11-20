@@ -1,8 +1,8 @@
 # Same as hang_a, with the fork id.
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
-emit {"type":"system","subtype":"init","message":{"sessionId":"{{fork}}","model":"claude-test"}}
-expect {"type":"control_request","body":{"type":"mcp_status"}}
+emit {"type":"system","subtype":"init","session_id":"{{fork}}","model":"claude-test"}
+expect {"type":"control_request","request":{"subtype":"mcp_status"}}
 reply {}
 hang

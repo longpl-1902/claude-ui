@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -232,11 +233,11 @@ func TestSendHandshakeAndTurn(t *testing.T) {
 	if len(fr) < 2 {
 		t.Fatalf("frames = %v", fr)
 	}
-	body0, _ := fr[0]["body"].(map[string]any)
-	if fr[0]["type"] != "control_request" || body0["type"] != "initialize" {
+	req0, _ := fr[0]["request"].(map[string]any)
+	if fr[0]["type"] != "control_request" || req0["subtype"] != "initialize" {
 		t.Fatalf("first frame = %v", fr[0])
 	}
-	if fr[1]["type"] != "user" || fr[1]["message"] != "hello" {
+	if fr[1]["type"] != "user" || fmt.Sprint(fr[1]["message"]) != "map[content:hello role:user]" {
 		t.Fatalf("second frame = %v", fr[1])
 	}
 
@@ -308,8 +309,9 @@ func TestAllowAndAllowForSession(t *testing.T) {
 	}
 	// r1 (not for session) must not carry updatedPermissions.
 	for _, f := range h.frames() {
-		if f["request_id"] == "r1" {
-			body := f["body"].(map[string]any)
+		resp, _ := f["response"].(map[string]any)
+		if resp != nil && resp["request_id"] == "r1" {
+			body := resp["response"].(map[string]any)
 			if _, has := body["updatedPermissions"]; has {
 				t.Fatal("r1 carried session rules")
 			}

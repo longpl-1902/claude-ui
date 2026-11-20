@@ -1,11 +1,11 @@
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
-emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}","model":"claude-test"}}
-expect {"type":"control_request","body":{"type":"mcp_status"}}
+emit {"type":"system","subtype":"init","session_id":"{{session}}","model":"claude-test"}
+expect {"type":"control_request","request":{"subtype":"mcp_status"}}
 reply {}
-emit {"type":"control_request","subtype":"can_use_tool","request_id":"r1","tool":{"toolName":"Bash","displayName":"Bash","input":{"command":"ls"},"description":"list files"},"suggestions":[{"type":"addRules","behavior":"allow","destination":"localSettings","rules":[{"toolName":"Bash"}]},{"type":"bogus"}],"can_allow_session":true}
-expect {"type":"control_response","request_id":"r1","body":{"behavior":"allow","updatedInput":{"command":"ls"}}}
-emit {"type":"control_request","subtype":"can_use_tool","request_id":"r2","tool":{"toolName":"Bash","displayName":"Bash","input":{"command":"pwd"}},"suggestions":[{"type":"addRules","behavior":"allow","destination":"localSettings","rules":[{"toolName":"Bash"}]},{"type":"bogus"}],"can_allow_session":true}
-expect {"type":"control_response","request_id":"r2","body":{"behavior":"allow","updatedInput":{"command":"pwd"},"updatedPermissions":[{"type":"addRules","destination":"session"}]}}
+emit {"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"ls"},"description":"list files","permission_suggestions":[{"type":"addRules","behavior":"allow","destination":"localSettings","rules":[{"toolName":"Bash"}]},{"type":"bogus"}]}}
+expect {"type":"control_response","response":{"subtype":"success","request_id":"r1","response":{"behavior":"allow","updatedInput":{"command":"ls"}}}}
+emit {"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"pwd"},"permission_suggestions":[{"type":"addRules","behavior":"allow","destination":"localSettings","rules":[{"toolName":"Bash"}]},{"type":"bogus"}]}}
+expect {"type":"control_response","response":{"subtype":"success","request_id":"r2","response":{"behavior":"allow","updatedInput":{"command":"pwd"},"updatedPermissions":[{"type":"addRules","destination":"session"}]}}}
 emit {"type":"result","stop_reason":"end_turn"}

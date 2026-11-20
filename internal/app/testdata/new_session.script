@@ -1,15 +1,15 @@
 # One full turn. The sleep keeps the streamed text visible long enough to see.
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {"commands":[{"name":"help"}],"models":[{"value":"sonnet"}]}
-expect {"type":"user","message":"hello"}
-emit {"type":"system","subtype":"init","message":{"sessionId":"{{session}}","model":"claude-test","claude_code_version":"9.9.9","tools":[{"name":"Bash"}]}}
-expect {"type":"control_request","body":{"type":"mcp_status"}}
+expect {"type":"user","message":{"role":"user","content":"hello"}}
+emit {"type":"system","subtype":"init","session_id":"{{session}}","model":"claude-test","claude_code_version":"9.9.9","slash_commands":["Bash"]}
+expect {"type":"control_request","request":{"subtype":"mcp_status"}}
 reply {"servers":[]}
 emit {"type":"stream_event","event":{"type":"message_start"}}
 emit {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hel"}}}
 emit {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"lo"}}}
 sleep 300
 emit {"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}
-emit {"type":"result","cost_usd":0.5,"stop_reason":"end_turn"}
-expect {"type":"control_request","body":{"type":"get_context_usage"}}
+emit {"type":"result","stop_reason":"end_turn","total_cost_usd":0.5}
+expect {"type":"control_request","request":{"subtype":"get_context_usage"}}
 reply {"percentage":25}

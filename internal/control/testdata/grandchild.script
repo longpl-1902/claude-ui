@@ -1,4 +1,4 @@
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
 grandchild

@@ -84,8 +84,8 @@ func TestProcExposesPidAndWait(t *testing.T) {
 	if p.Pid() <= 0 {
 		t.Fatal("no pid")
 	}
-	_, _ = p.Stdin().Write([]byte(`{"type":"control_request","request_id":"a","body":{"type":"initialize"}}` + "\n"))
-	_, _ = p.Stdin().Write([]byte(`{"type":"user","message":"x"}` + "\n"))
+	_, _ = p.Stdin().Write([]byte(`{"type":"control_request","request_id":"a","request":{"subtype":"initialize"}}` + "\n"))
+	_, _ = p.Stdin().Write([]byte(`{"type":"user","message":{"role":"user","content":"x"}}` + "\n"))
 	code, _ := p.Wait()
 	if code != 2 {
 		t.Fatalf("code = %d, want 2", code)

@@ -1,6 +1,6 @@
 # Stays busy (no init, no result) until the interrupt request arrives.
-expect {"type":"control_request","body":{"type":"initialize"}}
+expect {"type":"control_request","request":{"subtype":"initialize"}}
 reply {}
 expect {"type":"user"}
-expect {"type":"control_request","body":{"type":"interrupt"}}
+expect {"type":"control_request","request":{"subtype":"interrupt"}}
 emit {"type":"result","stop_reason":"interrupted"}

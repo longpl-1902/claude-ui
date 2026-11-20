@@ -167,7 +167,7 @@ func TestBuildArgs_InvalidMode(t *testing.T) {
 }
 
 func TestBuildArgs_InvalidEffort(t *testing.T) {
-	_, err := BuildArgs(Launch{Effort: "max"})
+	_, err := BuildArgs(Launch{Effort: "ultra"})
 	if err == nil {
 		t.Fatal("expected error for invalid effort")
 	}
