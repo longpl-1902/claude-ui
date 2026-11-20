@@ -2,6 +2,8 @@ package control
 
 import (
 	"encoding/json"
+	"errors"
+	"time"
 
 	"github.com/longpl-1902/claude-ui/internal/core"
 )
@@ -67,4 +69,46 @@ type Event struct {
 	Code      int
 	Error     string
 	Info      json.RawMessage
+}
+
+// Errors returned by Session.
+var (
+	ErrNotBusy        = errors.New("session is not running a turn")
+	ErrNotLive        = errors.New("session is not live")
+	ErrUnknownRequest = errors.New("unknown request id")
+	ErrClosed         = errors.New("session is closed")
+)
+
+// Deps are the injectable dependencies of a Session. Zero values use defaults.
+type Deps struct {
+	Spawner        Spawner
+	BaseEnv        []string
+	Now            func() time.Time
+	StopGrace      time.Duration
+	RequestTimeout time.Duration
+	BatchWindow    time.Duration
+}
+
+// Answer is the user's decision on a pending permission, question or plan card.
+type Answer struct {
+	Allow      bool
+	ForSession bool
+	Message    string
+	Answers    map[string]string
+}
+
+// Info is a snapshot of a session.
+type Info struct {
+	State     State
+	SessionID string
+	Model     string
+	Mode      string
+	Version   string
+	Commands  []string
+	Models    []string
+	CostUSD   float64
+	CtxPct    float64
+	PID       int
+	Error     string
+	Spawns    int
 }
