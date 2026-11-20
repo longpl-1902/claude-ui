@@ -215,6 +215,8 @@ type Prefs struct {
 type State struct {
 	LastAccount   string `json:"lastAccount"`
 	LastAccountAt int64  `json:"lastAccountAt"`
+	// AlwaysUse is the account remembered as "always use" (set from the picker).
+	AlwaysUse string `json:"alwaysUse,omitempty"`
 }
 
 func MatchFolder(rules []Rule, folder, home string) (string, bool) {
@@ -260,10 +262,19 @@ func ChooseStartup(flagAccount string, cfg Config, state State, detected []Detec
 		}
 	}
 
+	if state.AlwaysUse != "" {
+		for _, a := range allAccounts {
+			if a.ID == state.AlwaysUse {
+				return a.ID, false, nil
+			}
+		}
+	}
+
 	if len(allAccounts) == 1 {
 		return allAccounts[0].ID, false, nil
 	}
 
+	// Picker, preselecting the last used account.
 	return state.LastAccount, true, nil
 }
 
