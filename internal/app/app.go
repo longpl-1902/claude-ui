@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -47,7 +48,10 @@ type Store struct {
 	projects map[string]*gitx.Project // projectKey -> project
 	resolver *gitx.Resolver
 	notify   func()
-	tailer   *transcript.Tailer
+
+	emptyScans map[string]scanSig // transcripts with no user prompt yet, by path
+	resolving  map[string]bool    // cwds a git lookup is running for
+	tailer     *transcript.Tailer
 
 	controlSessions map[string]*controlledSession
 	alias           map[string]string // draft id -> session id
@@ -575,6 +579,12 @@ func (s *Store) scanTranscripts(acct core.Account) {
 			if known, exists := s.sessions[sessionID]; exists {
 				if info.ModTime().After(known.summary.LastActivity) {
 					known.summary.LastActivity = info.ModTime()
+					// A better title (ai/custom) usually lands after the first prompt.
+					if _, mine := s.controlSessions[sessionID]; !mine && known.filePath == fpath {
+						if m := s.scanSessionMeta(fpath, info.Size()); m.TitleKind != "" {
+							known.summary.Title = m.Title
+						}
+					}
 				}
 				continue
 			}
@@ -582,8 +592,25 @@ func (s *Store) scanTranscripts(acct core.Account) {
 				continue
 			}
 
-			meta := s.scanSessionMeta(fpath)
-			proj := s.resolver.Provisional(meta.Cwd)
+			sig := scanSig{mtime: info.ModTime(), size: info.Size()}
+			if prev, ok := s.emptyScans[fpath]; ok && prev == sig {
+				continue
+			}
+			meta := s.scanSessionMeta(fpath, info.Size())
+			if !meta.HasPrompt {
+				// Only snapshots or meta lines so far: not a session yet.
+				if s.emptyScans == nil {
+					s.emptyScans = map[string]scanSig{}
+				}
+				s.emptyScans[fpath] = sig
+				continue
+			}
+			delete(s.emptyScans, fpath)
+			proj := s.projectFor(meta.Cwd, projEntry.Name())
+			last := meta.LastTs
+			if last.IsZero() {
+				last = info.ModTime()
+			}
 
 			s.sessions[sessionID] = &sessionState{
 				summary: core.SessionSummary{
@@ -595,7 +622,7 @@ func (s *Store) scanTranscripts(acct core.Account) {
 					Cwd:          meta.Cwd,
 					Status:       core.StatusDone,
 					Source:       core.SourceFromString(meta.Entrypoint),
-					LastActivity: meta.LastTs,
+					LastActivity: last,
 				},
 				filePath: fpath,
 			}
@@ -616,24 +643,85 @@ func registryStatus(s string) core.Status {
 	}
 }
 
-func (s *Store) scanSessionMeta(path string) transcript.Meta {
-	data, err := safefs.ReadFile(path)
+// scanSig identifies a transcript version, so a file with nothing to list is
+// not re-read until it changes.
+type scanSig struct {
+	mtime time.Time
+	size  int64
+}
+
+const (
+	metaHeadBytes = 1 << 20   // a pasted prompt or snapshot can make line 1 huge
+	metaTailBytes = 256 << 10 // latest titles live near the end
+)
+
+func (s *Store) scanSessionMeta(path string, size int64) transcript.Meta {
+	headEnd := size
+	if headEnd > metaHeadBytes {
+		headEnd = metaHeadBytes
+	}
+	head, err := safefs.ReadRange(path, 0, headEnd)
 	if err != nil {
 		return transcript.Meta{}
 	}
-
-	// Read first 64KiB and last 256KiB
-	const headSize = 64 * 1024
-	const tailSize = 256 * 1024
-
-	head := data
-	if len(head) > headSize {
-		head = head[:headSize]
+	var tail []byte
+	if size > headEnd {
+		start := size - metaTailBytes
+		if start < headEnd {
+			start = headEnd
+		}
+		tail, _ = safefs.ReadRange(path, start, size)
 	}
-	tail := data
-	if len(data) > tailSize {
-		tail = data[len(data)-tailSize:]
-	}
-
 	return transcript.ScanMeta(head, tail)
+}
+
+// projectFor groups a session by its cwd's git root (once git has answered;
+// until then by the cwd itself). Without a cwd the project is inferred from
+// the encoded project directory name and keyed "dir:" so it never merges
+// with a real path.
+func (s *Store) projectFor(cwd, projectDir string) gitx.Project {
+	if cwd == "" {
+		return projectFromDir(projectDir)
+	}
+	if p, ok := s.resolver.Cached(cwd); ok {
+		return p
+	}
+	if !s.resolving[cwd] {
+		if s.resolving == nil {
+			s.resolving = map[string]bool{}
+		}
+		s.resolving[cwd] = true
+		go s.resolveProject(cwd)
+	}
+	return s.resolver.Provisional(cwd)
+}
+
+func (s *Store) resolveProject(cwd string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	p := s.resolver.Resolve(ctx, cwd)
+	s.mu.Lock()
+	delete(s.resolving, cwd)
+	for _, ss := range s.sessions {
+		if ss.summary.Cwd == cwd {
+			ss.summary.ProjectKey, ss.summary.ProjectName, ss.summary.ProjectRoot = p.Key, p.Name, p.Root
+		}
+	}
+	s.mu.Unlock()
+	s.kick()
+}
+
+// projectFromDir is the last resort when a transcript never named its cwd.
+// Claude encodes a path by turning every non-alphanumeric rune into "-", which
+// cannot be reversed; the last segment is the best readable name.
+func projectFromDir(dir string) gitx.Project {
+	trimmed := strings.TrimRight(dir, "-")
+	name := trimmed
+	if i := strings.LastIndex(trimmed, "-"); i >= 0 {
+		name = trimmed[i+1:]
+	}
+	if name == "" {
+		name = dir
+	}
+	return gitx.Project{Key: "dir:" + strings.ToLower(dir), Name: name}
 }

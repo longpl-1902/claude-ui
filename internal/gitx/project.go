@@ -38,7 +38,7 @@ func (r *Resolver) Provisional(cwd string) Project {
 	if ok {
 		return e.project
 	}
-	name := filepath.Base(cwd)
+	name := baseName(cwd)
 	return Project{Key: key, Name: name, Root: cwd, Git: false}
 }
 
@@ -76,7 +76,7 @@ func resolveGit(ctx context.Context, cwd string) Project {
 	cmd := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	out, err := cmd.Output()
 	if err != nil {
-		name := filepath.Base(cwd)
+		name := baseName(cwd)
 		return Project{Key: normalizeKey(cwd), Name: name, Root: cwd, Git: false}
 	}
 
@@ -90,16 +90,29 @@ func resolveGit(ctx context.Context, cwd string) Project {
 		root = filepath.Dir(gitDir)
 	}
 
-	name := filepath.Base(root)
+	name := baseName(root)
 	return Project{Key: normalizeKey(root), Name: name, Root: root, Git: true}
 }
 
 func normalizeKey(path string) string {
-	p := filepath.ToSlash(path)
+	p := strings.ReplaceAll(filepath.ToSlash(path), "\\", "/")
 	p = strings.ToLower(p)
 	for strings.Contains(p, "//") {
 		p = strings.ReplaceAll(p, "//", "/")
 	}
 	p = strings.TrimRight(p, "/")
+	return p
+}
+
+// baseName is the last element of p, splitting on both separators so a
+// Windows path reads right wherever it is parsed.
+func baseName(p string) string {
+	p = strings.TrimRight(strings.ReplaceAll(p, "\\", "/"), "/")
+	if i := strings.LastIndex(p, "/"); i >= 0 && i < len(p)-1 {
+		return p[i+1:]
+	}
+	if p == "" {
+		return "."
+	}
 	return p
 }
