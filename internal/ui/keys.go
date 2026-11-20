@@ -77,11 +77,22 @@ func (m Model) handleNormal(key string, msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = ModeNormal
-		if m.busy() && !m.escTime.IsZero() && time.Since(m.escTime) < time.Second {
+		if m.busy() && !m.escTime.IsZero() && time.Since(m.escTime) < escEscWindow {
 			m.escTime = time.Time{}
 			return m, m.backend.Do(core.Action{Kind: core.ActionInterrupt, Key: m.logKey})
 		}
+		if m.focus == FocusLog && !m.busy() {
+			m.escTime = time.Time{}
+			return m.focusSessions(), nil
+		}
 		m.escTime = time.Now()
+		return m, nil
+
+	case "h", "left":
+		return m.focusSessions(), nil
+
+	case "l", "right":
+		m.focus = FocusLog
 		return m, nil
 
 	case "tab":
@@ -159,14 +170,12 @@ func (m Model) handleSequence(seq string) (Model, tea.Cmd) {
 	case "ctrl+ww":
 		if m.focus == FocusSessions {
 			m.focus = FocusLog
-		} else {
-			m.focus = FocusSessions
+			return m, nil
 		}
-		return m, nil
+		return m.focusSessions(), nil
 
 	case "ctrl+wh":
-		m.focus = FocusSessions
-		return m, nil
+		return m.focusSessions(), nil
 
 	case "ctrl+wl":
 		m.focus = FocusLog
@@ -570,6 +579,43 @@ func (m Model) moveCursor(delta int) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// escEscWindow is how close two Esc presses must be to count as an interrupt.
+const escEscWindow = 500 * time.Millisecond
+
+// focusSessions moves focus to the session list with the cursor on the open
+// session, unfolding its project group if needed.
+func (m Model) focusSessions() Model {
+	m.focus = FocusSessions
+	if m.logKey.IsZero() {
+		return m
+	}
+	for _, g := range m.groupSessions() {
+		for _, s := range g.sessions {
+			if sameKey(s.Key, m.logKey) {
+				delete(m.sessFolds, g.key)
+				row := 0
+				for _, g2 := range m.groupSessions() {
+					row++
+					if g2.key == g.key {
+						for _, s2 := range g2.sessions {
+							if sameKey(s2.Key, m.logKey) {
+								m.sessCursor = row
+								return m
+							}
+							row++
+						}
+					}
+					if !m.sessFolds[g2.key] {
+						row += len(g2.sessions)
+					}
+				}
+				return m
+			}
+		}
+	}
+	return m
+}
+
 func (m Model) sessRowCount() int {
 	groups := m.groupSessions()
 	count := 0
@@ -735,7 +781,8 @@ func helpText() string {
   Enter      open session (INSERT); Enter confirms multi-select
   i/I        INSERT mode (I clears)
   Tab, ]n/[n next/prev needs-you item
-  Ctrl+w w   switch pane (Ctrl+w h/l)
+  h/l, Left/Right  focus session list / log (Ctrl+w h/l/w too)
+  Esc        log -> session list (busy: Esc Esc interrupts)
   a/A        allow / approve plan (A = for session)
   d          deny / reject plan
   1-9        pick option (multi-select toggles)

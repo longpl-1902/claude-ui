@@ -156,6 +156,8 @@ var keyNames = map[string]tea.Key{
 	"backspace": {Code: tea.KeyBackspace},
 	"up":        {Code: tea.KeyUp},
 	"down":      {Code: tea.KeyDown},
+	"left":      {Code: tea.KeyLeft},
+	"right":     {Code: tea.KeyRight},
 	"space":     {Code: ' ', Text: " "},
 	"ctrl+c":    {Code: 'c', Mod: tea.ModCtrl},
 	"ctrl+w":    {Code: 'w', Mod: tea.ModCtrl},

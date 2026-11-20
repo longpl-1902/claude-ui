@@ -38,8 +38,11 @@ Otherwise, ac opens the main screen directly with the cursor in the prompt line.
 | `j` / `k` | Move cursor up/down |
 | `Enter` | Open/resume session (switches to INSERT) |
 | `i` / `I` | Enter INSERT mode (`I` clears prompt first) |
-| `Esc` | Back to NORMAL; close overlay |
-| `Tab` | Switch focus between sessions and log panes |
+| `h` / `Left` | Focus the session list (cursor on the open session) |
+| `l` / `Right` | Focus the log pane |
+| `Esc` | Log pane: back to session list (while busy, `Esc Esc` interrupts instead); closes overlay |
+| `Ctrl+W h/l/w` | Focus list / log / toggle |
+| `Tab` | Jump to next needs-you item |
 | `]n` / `[n` | Jump to next/previous needs-you item |
 | `a` / `A` | Allow permission (`A` = allow for session) |
 | `d` | Deny permission |

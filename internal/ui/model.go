@@ -299,14 +299,36 @@ func (m Model) viewSessions(w, h int) string {
 		}
 	}
 
-	for len(lines) < h {
+	body := h
+	if h >= 2 {
+		body = h - 1
+	}
+	for len(lines) < body {
 		lines = append(lines, strings.Repeat(" ", w))
 	}
-	if len(lines) > h {
-		lines = lines[:h]
+	if len(lines) > body {
+		lines = lines[:body]
+	}
+	if h >= 2 {
+		hint := lipgloss.NewStyle().Faint(true).Render(m.keyHint())
+		lines = append(lines, truncPad(hint, w))
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// keyHint is the one-line key reminder shown under the session list.
+func (m Model) keyHint() string {
+	switch {
+	case m.mode == ModeInsert:
+		return "Enter send · Esc normal"
+	case m.focus == FocusSessions:
+		return "j/k move · Enter open · ? help"
+	case m.busy():
+		return "Esc Esc stop · h list · i type"
+	default:
+		return "Esc list · i type · Tab next"
+	}
 }
 
 func (m Model) viewLog(w, h int) string {
